@@ -53,6 +53,7 @@ fun MainScreen(
     onOpenFavorites: () -> Unit,
     onOpenVideos: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (permissions.access == MediaAccess.NONE) {
@@ -105,6 +106,7 @@ fun MainScreen(
                     onOpenFavorites = onOpenFavorites,
                     onOpenVideos = onOpenVideos,
                     onOpenSettings = onOpenSettings,
+                    onOpenAccount = onOpenAccount,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )

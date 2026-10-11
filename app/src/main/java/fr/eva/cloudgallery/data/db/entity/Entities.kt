@@ -10,8 +10,9 @@ import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 
 /**
- * Média logique. Les colonnes `hasLocal`, `hasCloud`, `hasOffline` et `primaryUri` sont
- * dénormalisées depuis `media_source` pour que la grille n'ait aucune jointure à faire.
+ * Média logique. Les colonnes `hasLocal`, `hasCloud`, `hasOffline`, `primaryUri`, `cloudItemId`
+ * et `cloudCTag` sont dénormalisées depuis `media_source` (sources visibles uniquement) pour que
+ * la grille n'ait aucune jointure à faire.
  */
 @Entity(
     tableName = "media",
@@ -42,6 +43,10 @@ data class MediaEntity(
     val hasOffline: Boolean,
     /** Empreinte de contenu (ex. SHA-1/QuickXorHash) lorsqu'elle est connue. Sert au dédoublonnage. */
     val contentHash: String? = null,
+    /** Identifiant de l'élément OneDrive visible (miniatures Graph), null sans source OneDrive. */
+    val cloudItemId: String? = null,
+    /** cTag de cet élément OneDrive : change avec le contenu (clé de cache des miniatures). */
+    val cloudCTag: String? = null,
 )
 
 @Entity(
@@ -186,7 +191,29 @@ data class DownloadTaskEntity(
     val error: String? = null,
 )
 
-/** Curseur de synchronisation par fournisseur ("mediastore", "onedrive"). */
+/**
+ * Dossier OneDrive connu (tous les dossiers du lecteur, renvoyés par la requête delta). Sert au
+ * nom et au chemin des albums OneDrive et au masquage du contenu d'un dossier supprimé.
+ */
+@Entity(
+    tableName = "cloud_folder",
+    indices = [Index(value = ["parentId"])],
+)
+data class CloudFolderEntity(
+    /** Identifiant d'élément OneDrive du dossier. */
+    @PrimaryKey val itemId: String,
+    /** Dossier parent (null pour la racine ou si inconnu). */
+    val parentId: String?,
+    val name: String,
+    /** Racine du lecteur (facette `root`). */
+    val isRoot: Boolean,
+    val updatedAt: Long,
+)
+
+/**
+ * Curseur de synchronisation par fournisseur ("mediastore", "onedrive"). Pour OneDrive :
+ * `cursor` = deltaLink, `version` = « <drive.id>|<version de $select> » (voir OneDriveLogic).
+ */
 @Entity(tableName = "sync_cursor")
 data class SyncCursorEntity(
     @PrimaryKey val provider: String,
@@ -234,6 +261,8 @@ data class MediaRow(
     val hasCloud: Boolean,
     val hasOffline: Boolean,
     @ColumnInfo(name = "isFavorite") val isFavorite: Boolean,
+    val cloudItemId: String?,
+    val cloudCTag: String?,
 )
 
 /** Ligne de liste d'albums avec statistiques et couverture. */
@@ -251,5 +280,7 @@ data class AlbumRow(
     val coverUri: String?,
     val coverType: MediaType?,
     val coverDateModified: Long?,
+    val coverCloudItemId: String?,
+    val coverCloudCTag: String?,
     val latestDate: Long?,
 )

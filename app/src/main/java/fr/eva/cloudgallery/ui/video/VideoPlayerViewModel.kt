@@ -181,7 +181,8 @@ class VideoPlayerViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     title = details.displayName,
-                    uri = details.uri,
+                    // « Ouvrir avec » : uniquement pour un fichier local (jamais un élément OneDrive).
+                    uri = details.localSource?.uri,
                     mimeType = details.mimeType,
                     durationMs = details.durationMs.coerceAtLeast(0L),
                     aspectRatio = it.aspectRatio ?: ratio,

@@ -27,6 +27,8 @@ data class MediaSummary(
     val hasLocal: Boolean,
     val hasCloud: Boolean,
     val hasOffline: Boolean,
+    /** Miniature OneDrive (élément OneDrive visible), null sans source OneDrive. */
+    val cloudThumb: CloudThumbRef? = null,
 )
 
 /** Une source physique d'un média (fichier MediaStore, élément OneDrive, copie hors ligne). */
@@ -59,6 +61,8 @@ data class MediaDetails(
     val uri: Uri?,
     val isFavorite: Boolean,
     val sources: List<MediaSourceInfo>,
+    /** Miniature OneDrive (élément OneDrive visible), null sans source OneDrive. */
+    val cloudThumb: CloudThumbRef? = null,
 ) {
     val hasLocal: Boolean get() = sources.any { it.kind == SourceKind.LOCAL }
     val hasCloud: Boolean get() = sources.any { it.kind == SourceKind.ONEDRIVE }

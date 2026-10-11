@@ -4,13 +4,15 @@ Galerie photo/vidéo Android pour usage personnel. Elle reprend l'ergonomie de S
 (One UI 8) et doit, à terme, réunir dans une même bibliothèque les médias de l'appareil et ceux de
 OneDrive.
 
-> **État actuel : phases 1 et 2 (galerie locale).** L'application indexe les médias de l'appareil
-> (MediaStore), les affiche, les organise et les lit. **OneDrive, le cache distant, les
-> téléchargements hors ligne et la synchronisation en arrière-plan ne sont pas implémentés.** Les
-> sections qui en parlent décrivent la conception prévue et portent la mention
-> « Prévu (phases 3-5), non implémenté ».
+> **État actuel : phases 1 à 3.** L'application indexe les médias de l'appareil (MediaStore), les
+> affiche, les organise et les lit (phases 1-2). La phase 3 ajoute **OneDrive en lecture seule** :
+> connexion d'un compte Microsoft personnel (MSAL), inventaire de tout le OneDrive par la requête
+> delta de Microsoft Graph, albums OneDrive, miniatures et aperçu dans la visionneuse. **Le
+> téléchargement des originaux, la lecture vidéo en streaming, le hors ligne, le cache géré et la
+> synchronisation en arrière-plan ne sont pas implémentés** (phases 4-5) : les sections qui en
+> parlent portent la mention « Prévu, non implémenté ».
 
-- Package : `fr.eva.cloudgallery`, version `0.2.0` (versionCode 1)
+- Package : `fr.eva.cloudgallery`, version `0.3.0` (versionCode 3)
 - `minSdk 36` (Android 16), `targetSdk 37`, `compileSdk 37`
 - Appareil cible : Samsung Galaxy S22 sous One UI 8 / Android 16, bibliothèque de 10 000 à 100 000 médias
 
@@ -23,7 +25,7 @@ OneDrive.
 3. [Dépendances](#dépendances)
 4. [Permissions Android](#permissions-android)
 5. [Indexation locale](#indexation-locale)
-6. [Synchronisation OneDrive et gestion du cache (prévu)](#synchronisation-onedrive-et-gestion-du-cache)
+6. [Synchronisation OneDrive et gestion du cache](#synchronisation-onedrive-et-gestion-du-cache)
 7. [Configuration Microsoft Entra et paramétrage MSAL (phase 3)](#configuration-microsoft-entra-et-paramétrage-msal)
 8. [Compilation](#compilation)
 9. [Installation sur Samsung Galaxy S22](#installation-sur-samsung-galaxy-s22)
@@ -34,7 +36,7 @@ OneDrive.
 
 ## Présentation
 
-Fonctions disponibles (phases 1 et 2, médias locaux uniquement) :
+Fonctions disponibles (phases 1 et 2 pour les médias locaux, phase 3 pour OneDrive) :
 
 - **Onglets Photos / Albums / Menu**, avec une barre d'onglets inspirée de One UI.
 - **Grille Photos** paginée, triée par date de prise de vue (`dateTaken DESC, id DESC`). Cinq niveaux
@@ -57,7 +59,16 @@ Fonctions disponibles (phases 1 et 2, médias locaux uniquement) :
 - **Ouverture depuis d'autres applications** : intent `VIEW` pour `image/*` et `video/*`, catégorie
   `APP_GALLERY`. Un fichier qui n'est pas dans l'index (FileProvider, accès partiel…) s'affiche en
   lecture seule.
-- **Paramètres** : thème (système / clair / sombre), affichage de la durée des vidéos, lecture
+- **OneDrive (lecture seule)** : écran « Compte OneDrive » (Menu et Paramètres) pour se connecter
+  avec un compte Microsoft personnel, voir le profil et le quota, synchroniser et se déconnecter.
+  Chaque dossier OneDrive contenant des photos ou vidéos devient un **album OneDrive** (badge nuage).
+  Les cellules affichent les miniatures Microsoft Graph, avec un badge nuage pour un élément présent
+  uniquement sur OneDrive ; la visionneuse en montre un grand aperçu. Réglage **« Afficher les
+  éléments OneDrive dans Photos »** (désactivé par défaut, voir
+  [Synchronisation OneDrive](#synchronisation-onedrive-et-gestion-du-cache)). Aucune action ne
+  modifie OneDrive.
+- **Paramètres** : compte OneDrive et état de sa synchronisation (si ce build est configuré pour
+  OneDrive), thème (système / clair / sombre), affichage de la durée des vidéos, lecture
   automatique, corbeille Android, confirmation avant suppression, état de l'indexation, réindexation
   complète.
 - Interface en **français** (par défaut) et en **anglais** (`values-en`).
@@ -67,6 +78,9 @@ système. La suppression passe toujours par `MediaStore.createTrashRequest` (cor
 récupérable 30 jours, option par défaut) ou par `MediaStore.createDeleteRequest`, et Android affiche
 alors sa propre boîte de confirmation. La rotation demande l'autorisation d'écriture avec
 `MediaStore.createWriteRequest`. L'indexeur ne modifie que la base Room, jamais les fichiers.
+OneDrive est lu en lecture seule (scope `Files.Read`) : aucun fichier OneDrive n'est créé, modifié
+ou supprimé, et un élément présent uniquement sur OneDrive n'est jamais proposé au partage, à la
+copie ni à la suppression.
 
 ---
 
@@ -77,20 +91,28 @@ alors sa propre boîte de confirmation. La rotation demande l'autorisation d'éc
 ```
 fr.eva.cloudgallery
 ├── ui/          Compose + ViewModels (Hilt), navigation typée (kotlinx.serialization)
-│   ├── main/        écran à onglets, MediaSyncCoordinator (déclenchement de l'indexation)
+│   ├── main/        écran à onglets, MediaSyncCoordinator (indexation locale et synchro OneDrive)
+│   ├── account/     écran « Compte OneDrive » (connexion, profil, synchronisation, déconnexion)
 │   ├── photos/      onglet Photos          ├── albums/   onglet Albums, grilles d'album
 │   ├── grid/        grille paginée, zoom, sélection, séparateurs jour/mois
 │   ├── viewer/      visionneuse, zoom, EXIF, rognage, filmstrip, image externe
 │   ├── video/       lecteur Media3 et ses commandes
 │   ├── menu/ settings/ permissions/ navigation/ components/ (composants One UI) theme/ image/ util/
-├── domain/      modèles (Media, Album, MediaContext, Settings) + interfaces de dépôts
+├── domain/      modèles (Media, Album, MediaContext, Settings, Cloud) + interfaces de dépôts
 │   └── repository/Repositories.kt   MediaRepository, AlbumRepository, FavoritesRepository,
 │                                    LocalMediaIndexer, LocalMediaWriter, SettingsRepository,
-│                                    PlaybackPositionRepository
+│                                    PlaybackPositionRepository, CloudAccountRepository,
+│                                    CloudMediaSyncer, CloudTokenProvider
 ├── data/
 │   ├── db/          Room : AppDatabase, entités, DAO
 │   ├── local/       MediaStoreIndexer (MediaStore -> Room), MediaStoreWriter (écritures avec
 │   │                confirmation), MediaStoreLogic (logique pure, testée en JVM)
+│   ├── cloud/       OneDrive : CloudFeature (build configuré ou non), CloudSessionCoordinator
+│   │   │            (session vue par l'UI), CloudDataPurger (retrait des données OneDrive)
+│   │   ├── auth/    MSAL : MsalClientProvider, MsalAuthService (état du compte, jetons), CloudAuthLogic
+│   │   ├── graph/   Microsoft Graph : GraphHttpClient (OkHttp, 401/429/410), GraphApi, DTO
+│   │   ├── sync/    OneDriveSyncer (delta), CloudSyncWriter (Room), OneDriveLogic (logique pure)
+│   │   └── thumb/   miniatures Graph pour Coil : CloudThumbnailFetcher/Keyer, CloudThumbnailCache
 │   ├── repository/  implémentations des dépôts
 │   ├── prefs/       SettingsRepositoryImpl (DataStore Preferences)
 │   └── mapper/      entités -> modèles du domaine
@@ -98,21 +120,28 @@ fr.eva.cloudgallery
 ```
 
 La couche `ui` ne dépend que des interfaces de `domain`. Les implémentations `data` sont liées par
-Hilt.
+Hilt. Seul `CloudGalleryApp` relie la couche `data` à Coil (enregistrement du fetcher des
+miniatures OneDrive dans l'ImageLoader construit par `ui/image`).
 
 ### Modules Hilt (`di/`)
 
 | Module | Rôle |
 |---|---|
 | `CoroutinesModule` | Qualificateurs `@IoDispatcher` (`Dispatchers.IO`), `@DefaultDispatcher` et `@ApplicationScope` (`CoroutineScope(SupervisorJob() + Default)`) pour le travail qui doit survivre aux écrans |
-| `DatabaseModule` | `AppDatabase` (singleton, fichier `cloudgallery.db`, migration 1→2) et les 9 DAO |
+| `DatabaseModule` | `AppDatabase` (singleton, fichier `cloudgallery.db`, migrations 1→2 et 2→3) et les 10 DAO |
 | `DataStoreModule` | Instance unique de `DataStore<Preferences>` (fichier `settings`) |
 | `RepositoryModule` | `@Binds` des interfaces du domaine vers `MediaRepositoryImpl`, `AlbumRepositoryImpl`, `FavoritesRepositoryImpl`, `MediaStoreIndexer`, `MediaStoreWriter`, `SettingsRepositoryImpl` et `PlaybackPositionRepositoryImpl` |
+| `CloudModule` | `@Binds` de `CloudAccountRepository` (`CloudSessionCoordinator`), `CloudTokenProvider` (`MsalAuthService`), `CloudMediaSyncer` (`OneDriveSyncer`) et `CloudThumbnailCache` (`CoilCloudThumbnailCache`). Graphe sans cycle : le client Graph ne dépend que du fournisseur de jetons |
+| `CloudNetworkModule` | `OkHttpClient` de Microsoft Graph, injecté via `dagger.Lazy` et créé au premier appel, sur le dispatcher d'E/S |
 
 `CloudGalleryApp` (`@HiltAndroidApp`) fournit aussi l'`ImageLoader` Coil unique
 (`SingletonImageLoader.Factory`) : cache mémoire d'environ 25 % de la mémoire de l'application, cache
-disque de 256 Mo, miniatures MediaStore chargées par `ContentResolver.loadThumbnail` (fetcher
-`LocalThumbnailFetcher`), images de vidéo extraites par `VideoFrameDecoder`.
+disque de 256 Mo (miniatures OneDrive uniquement), miniatures MediaStore chargées par
+`ContentResolver.loadThumbnail` (fetcher `LocalThumbnailFetcher`), images de vidéo extraites par
+`VideoFrameDecoder`, miniatures OneDrive chargées par `CloudThumbnailFetcher` (voir
+[Miniatures et aperçu](#miniatures-et-aperçu-phase-3)). La fabrique des miniatures OneDrive est
+légère : le client Graph, OkHttp et MSAL ne sont créés qu'au premier téléchargement, hors du thread
+principal.
 
 ### Flux de données
 
@@ -129,36 +158,51 @@ Pager (pageSize 150, initialLoad 450, prefetch 450, maxSize 1800, sans placehold
 Compose (LazyVerticalGrid + collectAsLazyPagingItems, Coil AsyncImage)
 ```
 
+OneDrive suit le même principe : `OneDriveSyncer` lit Microsoft Graph (delta) et
+`CloudSyncWriter` écrit dans Room (une transaction par page) ; l'UI n'interroge jamais Graph, à
+l'exception des miniatures chargées par Coil.
+
 L'UI ne lit jamais MediaStore directement. Elle observe Room, qui invalide automatiquement les
 `PagingSource` à chaque écriture de l'indexeur. `maxSize = 1800` limite la mémoire après un long
 défilement dans 100 000 médias. Les placeholders sont désactivés parce que les en-têtes jour/mois
 sont insérés entre les éléments chargés.
 
-### Schéma Room (version 2, schémas exportés dans `app/schemas/`)
+### Schéma Room (version 3, schémas exportés dans `app/schemas/`)
 
 Un **média logique** (`media`) peut avoir **plusieurs sources** (`media_source`) : le fichier local
-MediaStore (`LOCAL`), l'élément OneDrive (`ONEDRIVE`, prévu) et une copie hors ligne
-(`OFFLINE_COPY`, prévu). Favoris, albums et positions de lecture pointent vers le média logique, ce
-qui leur permet de survivre à la disparition ou au remplacement d'une des sources. Les colonnes
-`hasLocal`, `hasCloud`, `hasOffline` et `primaryUri` de `media` sont dénormalisées depuis
-`media_source` (`MediaDao.refreshSourceFlags`), ce qui évite toute jointure à la grille.
+MediaStore (`LOCAL`), l'élément OneDrive (`ONEDRIVE`) et une copie hors ligne (`OFFLINE_COPY`,
+prévu). Favoris, albums et positions de lecture pointent vers le média logique, ce qui leur permet
+de survivre à la disparition ou au remplacement d'une des sources. Les colonnes `hasLocal`,
+`hasCloud`, `hasOffline`, `primaryUri`, `cloudItemId` et `cloudCTag` de `media` sont dénormalisées
+depuis les sources **visibles** de `media_source` (`MediaDao.refreshSourceFlags`), ce qui évite
+toute jointure à la grille. `primaryUri` n'est renseignée que par un fichier local présent : une URI
+non nulle signifie « fichier local utilisable ». En phase 3, un élément OneDrive est toujours son
+propre média logique (aucune fusion avec un fichier local, voir les limitations).
+
+Migrations : 1→2 (phase 2) et 2→3 (phase 3 : colonnes `media.cloudItemId` / `media.cloudCTag`,
+table `cloud_folder`), testées par `MigrationTest`.
 
 | Table | Rôle |
 |---|---|
-| `media` | Média logique : type, nom, MIME, `dateTaken` (EXIF/MediaStore, à défaut date d'ajout puis de modification), dimensions, durée, taille, orientation, `primaryUri`, indicateurs de sources, `contentHash` (pour le futur dédoublonnage). Index `(dateTaken, id)`, `(mediaType, dateTaken)`, `displayName`, `contentHash` |
-| `media_source` | Une source physique d'un média. `kind` + `externalId` unique (`image:123` / `video:45` pour MediaStore, car les `_ID` images et vidéos peuvent se chevaucher), `uri`, `bucketKey` (`local:<BUCKET_ID>`, plus tard `onedrive:<parentId>`), chemin relatif, `generation` (GENERATION_MODIFIED), `eTag`/`cTag`/`sha1Hash`/`quickXorHash` (réservés à OneDrive), `volumeName`, `missingSince` (source masquée mais conservée) |
-| `album` | Album-dossier (`LOCAL_FOLDER`, `sourceKey` = bucketKey) ou album virtuel (`sourceKey` null). Nom personnalisé, épingle, ordre, couverture, masquage. Un dossier personnalisé n'est jamais supprimé automatiquement |
+| `media` | Média logique : type, nom, MIME, `dateTaken` (EXIF/MediaStore, à défaut date d'ajout puis de modification ; pour OneDrive `photo.takenDateTime`, puis `fileSystemInfo.createdDateTime`, puis `createdDateTime`), dimensions, durée, taille, orientation, `primaryUri`, indicateurs de sources, `cloudItemId` / `cloudCTag` (miniatures OneDrive), `contentHash` (`qxh:<quickXorHash>` pour OneDrive ; pas encore calculé pour les fichiers locaux). Index `(dateTaken, id)`, `(mediaType, dateTaken)`, `displayName`, `contentHash` |
+| `media_source` | Une source physique d'un média. `kind` + `externalId` unique (`image:123` / `video:45` pour MediaStore, car les `_ID` images et vidéos peuvent se chevaucher ; id d'élément pour OneDrive), `uri`, `bucketKey` (`local:<BUCKET_ID>` ou `onedrive:<id du dossier parent>`), chemin relatif (`OneDrive/Photos/2024/` pour OneDrive), `generation` (GENERATION_MODIFIED), `eTag`/`cTag`/`sha1Hash`/`quickXorHash` (OneDrive), `volumeName`, `missingSince` (source masquée mais conservée) |
+| `album` | Album-dossier (`LOCAL_FOLDER` ou `CLOUD_FOLDER`, `sourceKey` = bucketKey) ou album virtuel (`sourceKey` null). Nom personnalisé, épingle, ordre, couverture, masquage. Un dossier personnalisé n'est jamais supprimé automatiquement (sauf à la déconnexion OneDrive, après confirmation) |
+| `cloud_folder` | Dossiers OneDrive connus (id, parent, nom, racine) : noms et chemins des albums OneDrive, masquage du contenu d'un dossier supprimé |
 | `album_media` | Appartenance d'un média à un album virtuel (références, pas de copie) |
 | `favorite` | Favoris propres à l'application (`mediaId`, date d'ajout) |
 | `cached_file` | **Prévu** : fichiers en cache par média et par niveau (`THUMBNAIL`, `PREVIEW`, `ORIGINAL`, `OFFLINE`), date de dernier accès pour le LRU, `pinned` = conservé hors ligne (jamais évincé) |
 | `download_task` | **Prévu** : file de téléchargements (`QUEUED`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`), octets reçus/total, `keepOffline` |
-| `sync_cursor` | Curseur par fournisseur : `mediastore` (génération + `MediaStore.getVersion`) et plus tard `onedrive` (deltaLink Graph). Dates de dernière synchro et de dernière synchro complète, dernière erreur |
+| `sync_cursor` | Curseur par fournisseur : `mediastore` (génération + `MediaStore.getVersion`) et `onedrive` (deltaLink Graph, `version` = `<drive.id>\|<version du $select>`). Dates de dernière synchro et de dernière synchro complète, dernière erreur (code, traduit à l'affichage) |
 | `user_settings` | Table clé/valeur réservée. Les réglages actuels sont stockés dans DataStore |
 | `playback_position` | Position de reprise vidéo (enregistrée seulement entre 3 s après le début et 3 s avant la fin) |
 
 Les clés étrangères vers `media` sont en `ON DELETE CASCADE`. La base est **exclue des sauvegardes
 Android** (`backup_rules.xml`, `data_extraction_rules.xml`) : elle référence des `_ID` MediaStore
-propres à l'appareil. Seules les préférences sont sauvegardées.
+propres à l'appareil. Les fichiers de jetons MSAL (SharedPreferences chiffrées par une clé du
+Keystore, inutilisables sur un autre appareil), la clé MSAL enveloppée par le Keystore
+(`app_fr.eva.cloudgallery/adalks`, répertoire utilisé uniquement par MSAL), l'état de
+synchronisation OneDrive (`cloud_sync.xml`) et `msal_config.json` (`noBackupFilesDir`) en sont
+aussi exclus. Seules les préférences de l'application sont sauvegardées.
 
 ---
 
@@ -187,6 +231,8 @@ Versions exactes tirées de `gradle/libs.versions.toml` :
 | Media3 (exoplayer, ui-compose, ui) | 1.11.1 |
 | ExifInterface | 1.4.2 |
 | Coil 3 (`coil-compose`, `coil-video`) | 3.6.3 |
+| MSAL Android (`com.microsoft.identity.client:msal`) | 8.5.0 |
+| OkHttp | 5.5.0 |
 | kotlinx-coroutines (android, test) | 1.11.0 |
 | kotlinx-serialization-json | 1.11.0 |
 | JUnit | 4.13.2 |
@@ -194,7 +240,17 @@ Versions exactes tirées de `gradle/libs.versions.toml` :
 | Espresso Core | 3.7.0 |
 
 Le plugin `org.gradle.toolchains.foojay-resolver-convention` 1.0.0 est déclaré dans
-`settings.gradle.kts`. Aucune bibliothèque réseau ni MSAL n'est encore intégrée.
+`settings.gradle.kts`.
+
+**Dépôt supplémentaire pour MSAL.** MSAL dépend (via `com.microsoft.identity:common`) de
+`com.microsoft.device.display:display-mask:0.3.0`, publié uniquement sur le flux Maven du SDK Surface
+Duo (`https://pkgs.dev.azure.com/MicrosoftDeviceSDK/DuoSDK-Public/_packaging/Duo-SDK-Feed/maven/v1`).
+Ce dépôt est déclaré dans `settings.gradle.kts` en `exclusiveContent`, limité au groupe
+`com.microsoft.device.display` : il n'est jamais interrogé pour autre chose. Les règles R8 de MSAL
+sont fournies par ses AAR (aucune règle à ajouter côté application).
+
+OkHttp sert uniquement au client Microsoft Graph et aux miniatures OneDrive (fetcher Coil maison) :
+le module réseau de Coil (`coil-network-okhttp`) n'est pas utilisé.
 
 ---
 
@@ -207,7 +263,12 @@ Déclarées dans `AndroidManifest.xml` :
 | `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO` | Lecture de toute la bibliothèque (accès complet) |
 | `READ_MEDIA_VISUAL_USER_SELECTED` | Accès partiel « Sélectionner des photos » (Android 14 et plus) |
 | `ACCESS_MEDIA_LOCATION` | Coordonnées GPS non masquées dans les EXIF (`MediaStore.setRequireOriginal`) |
-| `INTERNET`, `ACCESS_NETWORK_STATE` | Réservées à OneDrive (phase 3 et suivantes). **Aucun accès réseau n'est fait aujourd'hui** |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Connexion Microsoft (MSAL) et Microsoft Graph (OneDrive). Aucun accès réseau sans compte OneDrive connecté |
+
+Les bibliothèques de MSAL ajoutent au manifeste fusionné la permission `NFC`, des fonctionnalités
+matérielles facultatives (NFC, hôte USB : clés de sécurité YubiKey) et quelques activités
+techniques. CloudGallery ne s'en sert pas ; elles n'empêchent pas l'installation sur un appareil
+qui n'a pas ces fonctions.
 
 Les quatre permissions médias sont demandées ensemble, et Android propose alors « Autoriser tout »,
 « Sélectionner des photos » ou « Refuser ». L'état est revérifié à chaque `ON_RESUME`
@@ -279,45 +340,137 @@ rattrapés au prochain passage au premier plan grâce au curseur de génération
 
 ## Synchronisation OneDrive et gestion du cache
 
-> **Prévu (phases 3-5), non implémenté.** Aucune de ces fonctions n'existe dans le code actuel. Le
-> schéma Room (`media_source` de type `ONEDRIVE`/`OFFLINE_COPY`, `cached_file`, `download_task`,
-> `sync_cursor`) et l'interface (badge « Album OneDrive », page « Disponible uniquement sur
-> OneDrive ») sont déjà préparés. Le Menu et les Paramètres affichent « Disponible dans une
-> prochaine version ».
+> **Synchronisation, miniatures et aperçu : implémentés (phase 3).** Originaux, streaming vidéo,
+> hors ligne et cache géré : **prévus (phases 4-5), non implémentés.** La fonction n'apparaît que
+> dans un build configuré pour OneDrive (voir
+> [Configuration Microsoft Entra](#configuration-microsoft-entra-et-paramétrage-msal)).
 
 ### Synchronisation (phase 3)
 
-- **Authentification** : MSAL Android en client public (aucun secret), compte Microsoft personnel,
-  scopes `Files.Read`, `User.Read` et `offline_access`. Les jetons sont gérés par MSAL
-  (`acquireTokenSilent`, puis interaction si nécessaire).
-- **Inventaire** : Microsoft Graph `GET /me/drive/root/delta` (ou un dossier choisi), avec `$select`
-  limité aux champs utiles (id, name, size, file.mimeType, file.hashes, photo, video, image,
-  parentReference, eTag, cTag, deleted). Les pages `@odata.nextLink` sont suivies jusqu'au
-  `@odata.deltaLink`, qui est enregistré dans `sync_cursor` (`provider = "onedrive"`). Les synchros
-  suivantes repartent de ce deltaLink. Si Graph répond `410 Gone` (jeton de delta expiré), une
-  resynchronisation complète est faite, en appliquant les mêmes règles de masquage que pour
-  MediaStore.
-- **Écriture** : chaque élément OneDrive devient une `media_source` de type `ONEDRIVE`
-  (`externalId` = id d'élément, `bucketKey` = `onedrive:<parentId>`, `cTag`/`eTag`, `quickXorHash`
-  et `sha1Hash` quand Graph les fournit), rattachée à un média logique.
-- **Limitation de débit** : en cas de `429 Too Many Requests` ou `503`, l'en-tête `Retry-After` est
-  respecté, avec un backoff exponentiel et un plafond. La file de requêtes est sérialisée par compte.
-- **Planification** (phase 5) : WorkManager périodique (contrainte réseau, éventuellement Wi-Fi
-  seulement) en plus de la synchro au premier plan.
+- **Authentification** : MSAL Android 8.5.0 en client public (aucun secret), mode compte unique,
+  autorité AAD avec l'audience `PersonalMicrosoftAccount` (comptes Microsoft personnels). Scopes
+  demandés : `Files.Read` et `User.Read` (MSAL ajoute lui-même `openid`, `profile` et
+  `offline_access`). La connexion s'ouvre dans un onglet de navigateur ; les jetons sont renouvelés
+  silencieusement (`acquireTokenSilent`, sur le thread d'E/S). Si une interaction est nécessaire,
+  l'écran Compte affiche « Reconnexion requise » et les données déjà indexées sont conservées. Hors
+  ligne, la session reste valide. Un jeton demandé avant une déconnexion et obtenu après est
+  abandonné (ni mis en cache, ni compte « connecté » rétabli). Une lecture du compte MSAL en échec
+  est retentée automatiquement (au plus toutes les 30 s) avant une synchro ou une miniature.
+- **Inventaire** : Microsoft Graph `GET /me/drive/root/delta` sur **tout le OneDrive**, avec un
+  `$select` explicite (`id, name, size, eTag, cTag, createdDateTime, lastModifiedDateTime,
+  fileSystemInfo, file, folder, package, image, photo, video, parentReference, deleted, root,
+  remoteItem`). Les pages `@odata.nextLink` sont suivies jusqu'au `@odata.deltaLink`, enregistré
+  **à la fin** dans `sync_cursor` (`provider = "onedrive"`) : un passage interrompu reprend depuis
+  le curseur précédent. Les liens sont utilisés tels quels, jamais reconstruits. Le curseur est lié
+  au lecteur (`drive.id`) et à la version du `$select` : changer la liste de champs force une
+  énumération complète.
+- **Filtrage** : seuls les fichiers `image/*` et `video/*` sont gardés (SVG exclus ; à défaut de
+  type MIME, les facettes `image`/`photo`/`video` décident). Les blocs-notes OneNote (`package`) et
+  les éléments partagés par d'autres (`remoteItem`) sont ignorés.
+- **Écriture** : une page = une transaction Room. Chaque élément OneDrive devient **son propre média
+  logique** avec une `media_source` de type `ONEDRIVE` (`externalId` = id d'élément, `bucketKey` =
+  `onedrive:<id du dossier parent>`, chemin lisible `OneDrive/Photos/2024/`, `cTag`/`eTag`,
+  `quickXorHash`, `sha1Hash` si fourni). Il n'est **jamais** rattaché à un fichier local, ni par le
+  nom ni par le contenu (dédoublonnage prévu en phase 6).
+- **Albums OneDrive** : chaque dossier qui contient des photos ou vidéos devient un album
+  `CLOUD_FOLDER` (badge nuage), dont le nom suit les renommages sur OneDrive. Renommage d'affichage
+  et épingle possibles ; pas de suppression ni de « Copier vers » un dossier OneDrive.
+- **Suppressions** : un élément `deleted` est **masqué** (`missingSince`), puis retiré de l'index
+  après **30 jours**. Un dossier supprimé ne masque son contenu qu'en fin de passage, s'il est
+  toujours absent ; un dossier restauré depuis la corbeille OneDrive déclenche une énumération
+  complète : quand un nouveau dossier apparaît alors que des éléments masqués sont dans ce dossier
+  ou dans un dossier retiré de l'index (sous-dossiers d'un dossier supprimé), le deltaLink est
+  effacé dans la transaction de la page (même interrompu, le passage suivant repart d'une
+  énumération complète) et l'énumération démarre aussitôt. Pendant les 30 jours qui suivent la
+  suppression d'un dossier contenant des médias, la création d'un nouveau dossier déclenche donc
+  aussi une énumération complète. `410 Gone` (jeton delta expiré) : nouvelle énumération complète depuis l'URL `Location`
+  (au plus deux par passage), puis les éléments non revus sont masqués. Rien n'est supprimé
+  immédiatement ; aucun fichier local ni OneDrive n'est touché.
+- **Déclenchement** : après la connexion, au retour au premier plan (au plus une fois toutes les
+  5 minutes, indépendamment de la permission médias) et par « Synchroniser maintenant » (Menu, qui
+  lance aussi l'indexation locale, et écran Compte). « Réindexer complètement » (Paramètres) reste
+  local. Un seul passage à la fois ; les demandes simultanées sont regroupées.
+- **Limitation de débit** : `429`, `502`, `503`, `504` : `Retry-After` (en secondes) respecté, sinon
+  attente exponentielle 2 s → 60 s, 5 nouvelles tentatives au plus ; un `Retry-After` de plus de
+  10 minutes suspend la synchro jusqu'à cette échéance. Toute pause demandée (« pause all further
+  requests ») s'applique à toutes les requêtes Graph suivantes, y compris quand la requête qui l'a
+  reçue abandonne : une pause de 10 minutes au plus est attendue, au-delà les requêtes (miniatures
+  comprises) échouent aussitôt sans être envoyées. La fin de la pause de synchronisation est
+  enregistrée (`cloud_sync.xml`) et respectée après un redémarrage ; elle est effacée avec les
+  données OneDrive. `401` : un renouvellement forcé du jeton, puis, si le nouveau jeton est lui
+  aussi refusé, reconnexion requise (le compte passe en « Reconnexion requise »). Le jeton n'est
+  envoyé qu'à `https://graph.microsoft.com`.
+- **Autre compte** : si le OneDrive connecté n'est pas celui des données de l'index, la synchro est
+  suspendue et l'écran Compte propose de remplacer ces données, **après confirmation**. Rien n'est
+  purgé automatiquement. Tant que ce décalage est constaté, aucune miniature des éléments de
+  l'autre compte n'est demandée à Graph (seules celles déjà en cache disque s'affichent).
+- **Déconnexion** (confirmation obligatoire) : déconnexion MSAL, puis retrait de toutes les données
+  OneDrive de l'index : sources, médias présents uniquement sur OneDrive avec leurs favoris et
+  leurs ajouts aux albums, albums OneDrive (y compris renommés ou épinglés), dossiers, curseur et
+  miniatures en cache. Les fichiers sur OneDrive et sur le téléphone ne sont pas modifiés. Si la
+  déconnexion MSAL échoue, les données sont conservées.
+- **Réglage « Afficher les éléments OneDrive dans Photos »** (désactivé par défaut, Paramètres et
+  écran Compte) : désactivé, Photos et Vidéos (grille, nombres, sélection par jour ou par
+  glissement) ne montrent que les médias présents sur l'appareil (ou hors ligne) ; les éléments
+  présents uniquement sur OneDrive restent visibles dans leurs albums OneDrive, les Favoris et les
+  albums personnalisés. Activé, tout est mélangé : une photo présente sur le téléphone **et** sur
+  OneDrive (sauvegarde de l'appareil photo, par exemple) apparaît **deux fois** jusqu'au
+  dédoublonnage de la phase 6.
+- **État** : sous-titre de l'entrée OneDrive du Menu (synchro en cours, date de la dernière synchro
+  et nombre d'éléments, ou erreur), ligne « Synchronisation OneDrive » des Paramètres et écran
+  Compte (profil, quota, « Synchroniser maintenant »). Les erreurs sont enregistrées sous forme de
+  code et traduites à l'affichage.
+- **Journaux** : ni jeton, ni deltaLink, ni nom de compte.
+- **Planification** (phase 5, prévu) : WorkManager périodique (contrainte réseau, éventuellement
+  Wi-Fi seulement) en plus de la synchro au premier plan.
+
+### Miniatures et aperçu (phase 3)
+
+- **Coil** : modèle `CloudThumbnail` (id d'élément + cTag), `CloudThumbnailKeyer` et
+  `CloudThumbnailFetcher` (`data/cloud/thumb/`). Requête
+  `GET /me/drive/items/{id}/thumbnails/0/{taille}/content` ; Graph redirige vers l'image, et OkHttp
+  suit la redirection sans l'en-tête `Authorization` (autre hôte).
+- **Tailles** : vignette carrée `c{n}x{n}_crop` au palier de la cellule (192 à 1024 px, mêmes
+  paliers que les miniatures locales), `smallSquare` pour 96 px. Si Graph refuse une taille
+  personnalisée (400 ou 404), la taille standard `mediumSquare` (176 px) ou `largeSquare` (800 px)
+  est demandée, et les tailles standard sont ensuite utilisées directement. Aperçu de la
+  visionneuse : `c1600x1600` (proportions d'origine), repli `large` (800 px). Les miniatures Graph
+  sont déjà orientées.
+- **Cache** : clé = id + cTag + palier (un renommage ne l'invalide pas, un nouveau contenu si).
+  Écriture dans le cache disque de l'ImageLoader (`cacheDir/coil`, 256 Mo, géré par Coil) : les
+  miniatures déjà vues s'affichent hors connexion. 4 téléchargements simultanés au plus (Coil
+  annule ceux des cellules sorties de l'écran) ; une miniature introuvable (404) n'est pas
+  redemandée pendant 10 minutes. Téléchargement uniquement pour un compte connecté ; la
+  déconnexion vide le cache disque et les miniatures OneDrive du cache mémoire.
+- **Priorité locale** : une cellule, une couverture d'album, la bande de miniatures ou le sélecteur
+  d'album utilisent toujours le fichier local s'il existe (MediaStore), la miniature OneDrive sinon.
+- **Visionneuse** : un élément présent uniquement sur OneDrive affiche l'aperçu (sans zoom), la
+  mention « Aperçu OneDrive : l'original sera disponible dans une prochaine version » et, pour une
+  vidéo, un badge avec sa durée (pas de bouton de lecture). Seuls Favori, Ajouter à l'album et
+  Détails sont proposés : rotation, rognage, copie, « Ouvrir avec », partage et suppression sont
+  masqués. Aperçu impossible (hors connexion sans cache, session expirée) : message explicatif.
+- **Sélection** : Partager, Supprimer et Copier sont désactivés si la sélection ne contient aucun
+  fichier local (tout un album OneDrive, par exemple). Pour une sélection mixte, ils ne traitent que
+  les fichiers locaux ; les boîtes de confirmation affichent le nombre exact de fichiers concernés
+  et le nombre d'éléments OneDrive non concernés. Favori et Ajouter à l'album s'appliquent à tout.
+- **Lecteur vidéo** : seule une source locale est lue ; « Ouvrir avec » n'est proposé que pour un
+  fichier local.
 
 ### Niveaux de qualité (phase 4)
 
-| Niveau | Source | Usage |
-|---|---|---|
-| Miniature | `/items/{id}/thumbnails` (small/medium) | Grille, couvertures d'album |
-| Aperçu | miniature `large` ou taille personnalisée, adaptée à l'écran | Visionneuse sans zoom |
-| Original | `@microsoft.graph.downloadUrl` (URL temporaire, sans en-tête d'authentification, compatible HTTP Range) | Zoom profond, partage, lecture vidéo en streaming |
+| Niveau | Source | Usage | État |
+|---|---|---|---|
+| Miniature | `/items/{id}/thumbnails/0/c{n}x{n}_crop/content` (repli `smallSquare`/`mediumSquare`/`largeSquare`) | Grille, couvertures d'album, bande de miniatures | Implémenté (phase 3) |
+| Aperçu | `/items/{id}/thumbnails/0/c1600x1600/content` (repli `large`) | Visionneuse sans zoom | Implémenté (phase 3) |
+| Original | `@microsoft.graph.downloadUrl` (URL temporaire, sans en-tête d'authentification, compatible HTTP Range) | Zoom profond, partage, lecture vidéo en streaming | **Prévu, non implémenté** |
 
 Pour la vidéo, ExoPlayer lira l'URL temporaire avec `DefaultHttpDataSource` (requêtes Range pour le
 seek) derrière un `ResolvingDataSource` qui renouvelle l'URL à son expiration. Une copie hors ligne
 sera lue en priorité si elle existe (voir `ui/video/PlaybackSource.kt`).
 
 ### Cache (phase 4-5)
+
+> **Prévu, non implémenté** (en dehors du cache disque Coil des miniatures décrit plus haut).
 
 - Les fichiers sont recensés dans `cached_file` (un par média et par niveau), avec `lastAccessAt`.
 - **Éviction LRU** sous un plafond configurable : les fichiers les moins récemment consultés sont
@@ -332,8 +485,8 @@ sera lue en priorité si elle existe (voir `ui/video/PlaybackSource.kt`).
 
 ## Configuration Microsoft Entra et paramétrage MSAL
 
-> **À faire en phase 3.** Rien de tout cela n'est encore nécessaire pour compiler ou utiliser
-> l'application.
+> **Nécessaire pour activer OneDrive.** Sans cette configuration, l'application se compile et
+> fonctionne normalement : les entrées OneDrive sont simplement masquées (aucun bouton inopérant).
 
 ### 1. Enregistrer l'application dans Microsoft Entra
 
@@ -384,22 +537,42 @@ $sha1 = (keytool -list -v -alias androiddebugkey -keystore "$env:USERPROFILE\.an
 l'APK release est aussi signé avec la clé debug (voir [Compilation](#compilation)), un seul hachage
 suffit. Si une vraie clé de release est créée un jour, il faudra enregistrer son hachage en plus.
 
-### 3. Intégration prévue dans le projet
+### 3. Configurer le projet
 
-- Dépendance `com.microsoft.identity.client:msal` : prendre la dernière version stable au moment de
-  la phase 3 et vérifier dans son README si un dépôt Maven supplémentaire est nécessaire.
-- **Client ID hors du dépôt** : l'ajouter dans `local.properties` (non versionné), par exemple
-  `msal.clientId=xxxxxxxx-xxxx-…` et `msal.signatureHash=…`, puis l'exposer via
-  `buildConfigField` (le `BuildConfig` est déjà activé dans `app/build.gradle.kts`) et des
-  placeholders de manifeste. Le client ID d'un client public n'est pas un secret, mais il reste
-  propre à chaque inscription et n'a pas à être versionné. **Ne jamais committer de secret.**
-- Fichier de configuration MSAL (`res/raw/auth_config_single_account.json`, généré à la
-  compilation ou rempli depuis `BuildConfig`) : `client_id`, `redirect_uri` (forme **encodée URL**),
-  `account_mode: "SINGLE"`, `authorization_user_agent: "DEFAULT"`, autorité AAD avec l'audience
-  `PersonalMicrosoftAccount`.
+1. Ajouter dans **`local.properties`** (à la racine, non versionné ; ne jamais le committer) :
+
+   ```properties
+   msal.clientId=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   msal.signatureHash=XXXXXXXXXXXXXXXXXXXXXXXXXXX=
+   ```
+
+   - `msal.clientId` : l'ID d'application (client) de l'étape 1 (format GUID).
+   - `msal.signatureHash` : le hachage de l'étape 2, **tel quel** (base64 de 28 caractères, non
+     encodé URL).
+   - Les mêmes clés peuvent être données en propriétés Gradle (`~/.gradle/gradle.properties`, ou
+     `-Pmsal.clientId=… -Pmsal.signatureHash=…` en ligne de commande), qui l'emportent sur
+     `local.properties`. Pratique si Android Studio réécrit `local.properties`.
+2. Recompiler (`./gradlew assembleDebug`). Une valeur absente ou mal formée n'empêche pas la
+   compilation : Gradle affiche « MSAL non configuré (msal.clientId / msal.signatureHash) : OneDrive
+   désactivé dans ce build » et l'application masque toutes les entrées OneDrive.
+3. Sur le téléphone : Menu > OneDrive (ou Paramètres > Compte > OneDrive) > « Se connecter à
+   OneDrive ». La première synchronisation démarre dès la connexion.
+
+Ce que fait le build (rien à écrire à la main) :
+
+- `BuildConfig.MSAL_CLIENT_ID` et `BuildConfig.MSAL_SIGNATURE_HASH` (`buildConfigField`), validés
+  par expression régulière.
 - Manifeste : `com.microsoft.identity.client.BrowserTabActivity` avec un intent-filter
-  `scheme="msauth"`, `host="fr.eva.cloudgallery"` et `path="/<hachage>"` (**non encodé** dans le
-  manifeste).
+  `scheme="msauth"`, `host="${applicationId}"` et `path="/<hachage>"` (**non encodé**, via le
+  placeholder `msalSignatureHash` ; valeur factice `msal-not-configured` si absent).
+- Configuration MSAL **générée à l'exécution** (pas de fichier `res/raw`) : au premier usage, sur le
+  thread d'E/S, `noBackupFilesDir/msal_config.json` est écrit avec `client_id`, `redirect_uri`
+  (forme **encodée URL** : `msauth://fr.eva.cloudgallery/<hachage encodé>`),
+  `account_mode: "SINGLE"`, `authorization_user_agent: "DEFAULT"`,
+  `broker_redirect_uri_registered: false` et l'autorité AAD `PersonalMicrosoftAccount`
+  (`consumers`), puis passé à `PublicClientApplication.createSingleAccountPublicClientApplication`.
+- Le client ID d'un client public n'est pas un secret, mais il reste propre à chaque inscription et
+  n'est jamais versionné. **Aucun secret n'est nécessaire.**
 
 ---
 
@@ -499,16 +672,24 @@ CloudGallery.
 |---|---|
 | `data/local/MediaStoreLogicTest` | Identifiants externes, dates, décision de relecture complète, empreintes, analyse des URI MediaStore / MediaDocuments, rognage, positions de lecture |
 | `data/local/RemovalPlanTest` | Plan de suppression : accès partiel, masquage, frein anti-suppression massive, délai de grâce de 30 jours |
-| `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue |
+| `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue, « Afficher les éléments OneDrive dans Photos » désactivé par défaut (DataStore vide) |
 | `data/repository/AlbumSortingTest` | Tri des albums |
 | `ui/albums/AlbumsLogicTest` | Colonnes, masquage des dossiers vides, actions de sélection (renommer, supprimer, épingler), noms |
-| `ui/grid/GridSelectionLogicTest` | Sélection (plages, jour/mois) |
+| `ui/grid/GridSelectionLogicTest` | Sélection (plages, jour/mois), cibles des actions sur fichiers locaux (éléments OneDrive exclus, nombres des confirmations) |
 | `ui/grid/GridSeparatorsTest` | En-têtes jour/mois |
 | `ui/grid/GridZoomLevelsTest` | Niveaux de zoom, colonnes, regroupement |
-| `ui/video/VideoPlayerLogicTest` | Classement des erreurs de lecture, position de reprise, seek borné, zones de double appui, vitesses, format d'image, média cloud sans source |
+| `ui/video/VideoPlayerLogicTest` | Classement des erreurs de lecture, position de reprise, seek borné, zones de double appui, vitesses, format d'image, média OneDrive jamais lu (pas de source locale) |
 | `ui/viewer/CropMathTest` | Géométrie du rognage |
 | `ui/viewer/ExifFormatTest` | Formatage des données EXIF |
 | `ui/viewer/ZoomMathTest` | Calculs de zoom de la visionneuse |
+| `ui/viewer/ViewerSummaryTest` | Bande de miniatures : mise à jour du résumé (favori, version, miniature OneDrive) |
+| `data/cloud/auth/CloudAuthLogicTest` | Validation du client ID et du hachage, URI de redirection encodée, configuration MSAL JSON, fraîcheur du jeton, classement des erreurs MSAL (hors ligne ≠ reconnexion) |
+| `data/cloud/graph/GraphCallerTest` | Boucle de requête Graph avec transport factice : jeton uniquement vers Graph, 401, 429/503 avec Retry-After ou attente exponentielle, 410, erreurs réseau, pause globale (appliquée même après abandon, échec immédiat au-delà de 10 min), jeton renouvelé refusé signalé, en-tête Accept, budget de tentatives des miniatures |
+| `data/cloud/graph/GraphRetryLogicTest` | Classement des statuts HTTP, Retry-After, attente exponentielle, URL de reprise, URL de confiance, URL delta initiale et URL des miniatures |
+| `data/cloud/graph/GraphDtoParsingTest` | Lecture des réponses Graph (pages delta, éléments supprimés, dossiers, packages, champs inconnus) |
+| `data/cloud/sync/OneDriveLogicTest` | Classement des éléments delta, type MIME, dates, chemins et noms d'albums OneDrive, plan de masquage/purge, intervalle au premier plan, curseur lié au lecteur, décision de démarrage (incrémental, complet, autre compte), suite d'un passage après une page (dossier restauré : énumération complète immédiate), pause Graph relue au démarrage |
+| `data/cloud/thumb/CloudThumbnailLogicTest` | Paliers de taille, tailles Graph et repli standard, clés de cache, miniatures introuvables (expiration) |
+| `data/mapper/CloudThumbMappingTest` | Référence de miniature OneDrive des lignes de grille et des couvertures d'album |
 | `ExampleUnitTest` | Test modèle d'Android Studio |
 
 ### Tests instrumentés (`app/src/androidTest`) : appareil ou émulateur requis
@@ -520,26 +701,83 @@ CloudGallery.
 - `data/db/MediaDaoTest` : base Room en mémoire. Ordre de pagination, projection des favoris,
   appartenance aux albums, nettoyage des orphelins, recalcul des colonnes dénormalisées, masquage
   d'une source avec conservation des favoris et albums, ré-identification, plages d'identifiants,
-  protection des albums personnalisés.
+  protection des albums personnalisés, sources OneDrive masquées, filtre « OneDrive dans Photos ».
+- `data/db/MigrationTest` : migrations 2→3 et 1→3 avec `MigrationTestHelper` (schémas exportés
+  ajoutés aux assets des tests instrumentés).
+- `data/cloud/sync/CloudSyncWriterTest` : écriture des pages delta (création, nouveau cTag,
+  suppression puis purge, dossier supprimé puis restauré, dossier supprimé sans facette `folder`,
+  restauration détectée pour les sous-dossiers et deltaLink effacé avec la page (passage
+  interrompu), énumération complète, albums OneDrive renommés), lignes locales jamais touchées.
+- `data/cloud/CloudDataPurgerTest` : retrait complet des données OneDrive (y compris sources
+  masquées, couvertures, miniatures), données locales intactes.
 - `ExampleInstrumentedTest` : test modèle.
 
-L'indexeur MediaStore, l'UI Compose et le lecteur vidéo n'ont pas de tests automatisés : ils se
-vérifient sur l'appareil.
+L'indexeur MediaStore, l'UI Compose, le lecteur vidéo, MSAL et les appels réels à Microsoft Graph
+n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
+
+### Vérifications sur l'appareil : OneDrive (phase 3)
+
+À faire sur le Galaxy S22 avec un build configuré (voir
+[Configuration Microsoft Entra](#configuration-microsoft-entra-et-paramétrage-msal)) :
+
+| Vérification | Résultat attendu |
+|---|---|
+| Build sans `msal.clientId` / `msal.signatureHash` | Compilation réussie, aucune entrée OneDrive dans Menu ni Paramètres |
+| Connexion (Menu > OneDrive > Se connecter) | Onglet de navigateur Microsoft, retour dans l'application, nom du compte affiché, synchro lancée |
+| Arrêt forcé puis relance | Compte toujours connecté, synchro au premier plan sans nouvelle connexion |
+| Première synchro | Albums OneDrive créés (un par dossier contenant des médias), miniatures Graph dans les albums |
+| Réglage « Afficher les éléments OneDrive dans Photos » | Désactivé : Photos et Vidéos sans éléments uniquement OneDrive (nombres compris) ; activé : éléments mélangés |
+| Second passage au premier plan avant 5 min | Aucune requête ; après 5 min, un seul appel delta |
+| Photo et dossier supprimés sur OneDrive (web), puis « Synchroniser maintenant » | Éléments masqués ; `deleted`, `root`, `parentReference.id`, `file.hashes.quickXorHash` et `photo` bien reçus avec le `$select` (sinon modifier `DELTA_SELECT` et `DELTA_SELECT_VERSION`) |
+| Dossier restauré depuis la corbeille OneDrive | Énumération complète automatique, contenu à nouveau visible |
+| Renommage / déplacement d'un dossier sur OneDrive | Album renommé, chemin mis à jour |
+| Tailles de miniatures `c{n}x{n}_crop` | Miniatures nettes ; si Graph les refuse, repli automatique sur les tailles standard |
+| Mode avion après un premier affichage | Miniatures déjà vues toujours affichées (cache disque) ; aperçu non vu : message explicatif |
+| Visionneuse sur un élément uniquement OneDrive | Aperçu avec mention, badge de durée pour une vidéo, pas de rotation, rognage, copie, partage, suppression ni « Ouvrir avec » |
+| Sélection uniquement OneDrive (album OneDrive) | Partager, Supprimer et Copier désactivés ; Favori et Ajouter à l'album actifs |
+| Sélection mixte, Supprimer | Titre avec le nombre de fichiers locaux, mention des éléments OneDrive non concernés ; seuls les fichiers locaux vont à la corbeille |
+| Connexion avec un autre compte Microsoft | Carte « Autre compte OneDrive », rien de purgé avant confirmation |
+| Déconnexion (confirmée) | Éléments et albums OneDrive retirés, miniatures OneDrive vidées (`cache/coil`), médias locaux intacts |
+| Session révoquée (mot de passe changé) | « Reconnexion requise », données conservées, reconnexion possible |
+| Déconnexion pendant le chargement de miniatures (réseau lent) | Compte toujours « Non connecté » ensuite, aucune synchro relancée |
+| Dossier contenant un sous-dossier de photos supprimé puis restauré (corbeille OneDrive) | Énumération complète, photos du sous-dossier à nouveau visibles |
+| Logcat (`adb logcat`) | Aucun jeton, deltaLink ni nom de compte |
+| `adb shell run-as fr.eva.cloudgallery ls -R shared_prefs files app_fr.eva.cloudgallery` | Noms des fichiers MSAL (dont `adalks`) conformes aux exclusions de sauvegarde |
 
 ---
 
 ## Limitations connues
 
-- **Pas de OneDrive** : connexion, synchronisation, streaming, cache et hors ligne ne sont pas
-  implémentés (phases 3 à 5). Les permissions `INTERNET` / `ACCESS_NETWORK_STATE` sont déclarées
-  mais inutilisées.
-- **Pas de synchro en arrière-plan** : l'index n'est mis à jour que lorsque l'application est au
-  premier plan (WorkManager est déclaré mais pas utilisé).
+- **OneDrive en lecture seule, sans originaux** : un élément présent uniquement sur OneDrive
+  s'affiche en miniature et en aperçu (800 à 1600 px) mais ne peut être ni zoomé en pleine
+  résolution, ni lu (vidéo), ni partagé, copié ou ouvert dans une autre application (phase 4). Pas
+  de hors ligne ni de page Stockage (phases 4-5).
+- **Comptes Microsoft personnels uniquement**, un seul compte à la fois. Le contenu du Coffre-fort
+  personnel (Personal Vault) n'est pas pris en charge (comportement de la requête delta non
+  vérifié) ; les éléments partagés par d'autres personnes sont ignorés.
+- **Doublons** : un média présent sur le téléphone et sur OneDrive est deux médias distincts. Le
+  réglage « Afficher les éléments OneDrive dans Photos » est désactivé par défaut pour éviter les
+  doublons dans Photos et Vidéos ; ils restent possibles dans les Favoris et les albums
+  personnalisés. Fusion prévue en phase 6 (sur empreinte de contenu, jamais sur le nom).
+- **OneDrive sans permission médias** : sans accès aux photos du téléphone, l'application affiche
+  l'écran d'autorisation et rien d'autre ; un usage « OneDrive seul » n'est pas possible en phase 3.
+- **Dates OneDrive** : `photo.takenDateTime` peut être l'heure locale EXIF présentée comme UTC ; un
+  élément OneDrive peut alors être classé quelques heures à côté de sa copie locale.
+- **Première synchro d'une grande bibliothèque** : si l'application est tuée pendant la première
+  énumération complète, celle-ci recommence depuis le début au passage suivant (écritures
+  idempotentes, sans perte).
+- **Pas de synchro en arrière-plan** : l'index local et OneDrive ne sont mis à jour que lorsque
+  l'application est au premier plan (OneDrive : au plus toutes les 5 minutes, ou « Synchroniser
+  maintenant »). WorkManager est déclaré mais pas utilisé.
 - **Favoris et albums personnalisés propres à l'application** : ils ne sont pas lus depuis Samsung
   Galerie ni écrits dans le champ `IS_FAVORITE` de MediaStore, et la base est exclue des sauvegardes.
   Une désinstallation ou un changement d'appareil les perd.
 - **Pas de recherche** (ni par nom, ni par lieu, ni par contenu).
-- **Pas de dédoublonnage** : la colonne `contentHash` existe mais n'est pas renseignée.
+- **Pas de dédoublonnage** : `contentHash` n'est renseigné que pour OneDrive (`qxh:<quickXorHash>`) ;
+  l'empreinte des fichiers locaux n'est pas calculée.
+- **Cache des miniatures OneDrive** : borné à 256 Mo et géré par Coil (éviction LRU), sans réglage
+  ni page Stockage. Les tailles personnalisées de miniatures sont documentées par Microsoft mais pas
+  encore vérifiées sur l'appareil (repli automatique sur les tailles standard).
 - **Très grandes images** : la visionneuse plafonne vers 24 MP. Il n'y a pas de décodage par tuiles,
   donc pas de pleine résolution pour les panoramas ou les photos de 50 MP et plus.
 - **GIF non animés** (pas de `coil-gif`). Pas de support spécifique des photos animées / Motion

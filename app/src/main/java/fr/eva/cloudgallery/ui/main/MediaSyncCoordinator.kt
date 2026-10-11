@@ -5,6 +5,8 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
+import fr.eva.cloudgallery.domain.model.CloudSyncReason
+import fr.eva.cloudgallery.domain.repository.CloudMediaSyncer
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.ui.permissions.MediaAccess
 import fr.eva.cloudgallery.ui.permissions.MediaPermissions
@@ -21,11 +23,16 @@ import javax.inject.Singleton
  * l'obtention de l'autorisation, ou à la demande (Menu / Paramètres). Ne fait rien sans accès
  * aux médias. Les synchronisations ne se chevauchent pas ; une demande complète pendant une
  * synchro incrémentale est enchaînée après elle.
+ *
+ * La synchronisation OneDrive est demandée en parallèle (premier plan, « Synchroniser
+ * maintenant »), indépendamment de l'accès aux médias locaux ; elle ne s'exécute que pour un
+ * compte connecté et se limite elle-même au premier plan.
  */
 @Singleton
 class MediaSyncCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val indexer: dagger.Lazy<LocalMediaIndexer>,
+    private val cloudSync: dagger.Lazy<CloudMediaSyncer>,
     @ApplicationScope private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) {
@@ -33,13 +40,23 @@ class MediaSyncCoordinator @Inject constructor(
 
     fun hasMediaAccess(): Boolean = MediaPermissions.currentAccess(context) != MediaAccess.NONE
 
-    /** Appli revenue au premier plan : synchro incrémentale. */
-    fun onForeground() = syncIfAllowed(full = false)
+    /** Appli revenue au premier plan : synchro incrémentale (locale et OneDrive). */
+    fun onForeground() {
+        syncIfAllowed(full = false)
+        cloudSync.get().requestSync(CloudSyncReason.FOREGROUND)
+    }
 
     /** Autorisation accordée ou étendue (partielle -> complète, nouveaux éléments choisis). */
     fun onAccessChanged() = syncIfAllowed(full = false)
 
-    fun syncNow(full: Boolean) = syncIfAllowed(full)
+    /**
+     * Synchro immédiate. La relecture complète ([full]) ne concerne que les médias locaux : la
+     * synchro OneDrive est toujours incrémentale (énumération complète automatique si nécessaire).
+     */
+    fun syncNow(full: Boolean) {
+        syncIfAllowed(full)
+        if (!full) cloudSync.get().requestSync(CloudSyncReason.MANUAL)
+    }
 
     @Synchronized
     private fun syncIfAllowed(full: Boolean) {

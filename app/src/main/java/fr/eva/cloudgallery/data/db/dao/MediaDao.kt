@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.Flow
 private const val ROW_COLUMNS = """
     m.id, m.mediaType, m.mimeType, m.dateTaken, m.dateModified, m.durationMs, m.width, m.height,
     m.orientation, m.primaryUri, m.hasLocal, m.hasCloud, m.hasOffline,
-    EXISTS(SELECT 1 FROM favorite f WHERE f.mediaId = m.id) AS isFavorite
+    EXISTS(SELECT 1 FROM favorite f WHERE f.mediaId = m.id) AS isFavorite,
+    m.cloudItemId, m.cloudCTag
 """
 
 /** Membres d'un album : dossier (via media_source.bucketKey) ou album virtuel (album_media). */
@@ -31,6 +32,14 @@ private const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
  */
 private const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
 
+/**
+ * Photos et Vidéos (réglage « Afficher les éléments OneDrive dans Photos ») : sans
+ * `:includeCloudOnly`, seuls les médias présents sur l'appareil ou disponibles hors connexion y
+ * figurent ; les éléments uniquement sur OneDrive restent dans leurs albums OneDrive, les
+ * Favoris et les albums de l'utilisateur. Sous-ensemble de [VISIBLE].
+ */
+private const val LIBRARY = "(m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1))"
+
 /** Eléments situés entre deux éléments de la liste triée (bornes incluses). */
 private const val BETWEEN = """
     (m.dateTaken < :newerDate OR (m.dateTaken = :newerDate AND m.id <= :newerId))
@@ -44,11 +53,11 @@ interface MediaDao {
 
     // --- Grilles paginées ---------------------------------------------------------------
 
-    @Query("SELECT $ROW_COLUMNS FROM media m WHERE $VISIBLE $ORDER")
-    fun pagingTimeline(): PagingSource<Int, MediaRow>
+    @Query("SELECT $ROW_COLUMNS FROM media m WHERE $LIBRARY $ORDER")
+    fun pagingTimeline(includeCloudOnly: Boolean): PagingSource<Int, MediaRow>
 
-    @Query("SELECT $ROW_COLUMNS FROM media m WHERE $VISIBLE AND m.mediaType = 'VIDEO' $ORDER")
-    fun pagingVideos(): PagingSource<Int, MediaRow>
+    @Query("SELECT $ROW_COLUMNS FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO' $ORDER")
+    fun pagingVideos(includeCloudOnly: Boolean): PagingSource<Int, MediaRow>
 
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite) $ORDER")
     fun pagingFavorites(): PagingSource<Int, MediaRow>
@@ -58,11 +67,11 @@ interface MediaDao {
 
     // --- Identifiants ordonnés (visionneuse) --------------------------------------------
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE $ORDER")
-    fun observeTimelineIds(): Flow<List<Long>>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY $ORDER")
+    fun observeTimelineIds(includeCloudOnly: Boolean): Flow<List<Long>>
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.mediaType = 'VIDEO' $ORDER")
-    fun observeVideoIds(): Flow<List<Long>>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO' $ORDER")
+    fun observeVideoIds(includeCloudOnly: Boolean): Flow<List<Long>>
 
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite) $ORDER")
     fun observeFavoriteIds(): Flow<List<Long>>
@@ -72,11 +81,11 @@ interface MediaDao {
 
     // --- Comptages ----------------------------------------------------------------------
 
-    @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE")
-    fun observeTimelineCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM media m WHERE $LIBRARY")
+    fun observeTimelineCount(includeCloudOnly: Boolean): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE AND m.mediaType = 'VIDEO'")
-    fun observeVideoCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO'")
+    fun observeVideoCount(includeCloudOnly: Boolean): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite)")
     fun observeFavoriteCount(): Flow<Int>
@@ -86,11 +95,11 @@ interface MediaDao {
 
     // --- Plages d'identifiants (sélection par jour / par glisser), même ordre que les grilles ---
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE AND $IN_PERIOD $ORDER")
-    suspend fun timelineIdsInPeriod(startMs: Long, endMs: Long): List<Long>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY AND $IN_PERIOD $ORDER")
+    suspend fun timelineIdsInPeriod(includeCloudOnly: Boolean, startMs: Long, endMs: Long): List<Long>
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.mediaType = 'VIDEO' AND $IN_PERIOD $ORDER")
-    suspend fun videoIdsInPeriod(startMs: Long, endMs: Long): List<Long>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO' AND $IN_PERIOD $ORDER")
+    suspend fun videoIdsInPeriod(includeCloudOnly: Boolean, startMs: Long, endMs: Long): List<Long>
 
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite) AND $IN_PERIOD $ORDER")
     suspend fun favoriteIdsInPeriod(startMs: Long, endMs: Long): List<Long>
@@ -98,11 +107,11 @@ interface MediaDao {
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) AND $IN_PERIOD $ORDER")
     suspend fun albumIdsInPeriod(albumId: Long, startMs: Long, endMs: Long): List<Long>
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE AND $BETWEEN $ORDER")
-    suspend fun timelineIdsBetween(newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY AND $BETWEEN $ORDER")
+    suspend fun timelineIdsBetween(includeCloudOnly: Boolean, newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
 
-    @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.mediaType = 'VIDEO' AND $BETWEEN $ORDER")
-    suspend fun videoIdsBetween(newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
+    @Query("SELECT m.id FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO' AND $BETWEEN $ORDER")
+    suspend fun videoIdsBetween(includeCloudOnly: Boolean, newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
 
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite) AND $BETWEEN $ORDER")
     suspend fun favoriteIdsBetween(newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
@@ -123,6 +132,10 @@ interface MediaDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorite WHERE mediaId = :id)")
     fun observeIsFavorite(id: Long): Flow<Boolean>
+
+    /** Médias parmi [ids] qui ont un fichier local utilisable (actions de partage, suppression, copie). */
+    @Query("SELECT COUNT(*) FROM media WHERE id IN (:ids) AND hasLocal = 1 AND primaryUri IS NOT NULL")
+    suspend fun countWithLocalFile(ids: List<Long>): Int
 
     /** Ligne de grille observable pour un seul média (contexte Single). */
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE m.id = :id")
@@ -147,15 +160,23 @@ interface MediaDao {
     @Query("DELETE FROM media WHERE id NOT IN (SELECT DISTINCT mediaId FROM media_source)")
     suspend fun deleteOrphans(): Int
 
-    /** Recalcule les indicateurs dénormalisés à partir des sources. */
+    /**
+     * Recalcule les colonnes dénormalisées à partir des sources visibles : une source masquée
+     * (missingSince) ne compte plus, et `primaryUri` n'est renseignée que par un fichier local
+     * présent (uri non nulle = fichier local utilisable).
+     */
     @Query(
         """
         UPDATE media SET
             hasLocal = EXISTS(SELECT 1 FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'LOCAL' AND s.missingSince IS NULL),
-            hasCloud = EXISTS(SELECT 1 FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'ONEDRIVE'),
-            hasOffline = EXISTS(SELECT 1 FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'OFFLINE_COPY'),
+            hasCloud = EXISTS(SELECT 1 FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'ONEDRIVE' AND s.missingSince IS NULL),
+            hasOffline = EXISTS(SELECT 1 FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'OFFLINE_COPY' AND s.missingSince IS NULL),
             primaryUri = (SELECT s.uri FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'LOCAL'
-                ORDER BY (s.missingSince IS NULL) DESC LIMIT 1)
+                AND s.missingSince IS NULL ORDER BY s.id LIMIT 1),
+            cloudItemId = (SELECT s.externalId FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'ONEDRIVE'
+                AND s.missingSince IS NULL ORDER BY s.id LIMIT 1),
+            cloudCTag = (SELECT s.cTag FROM media_source s WHERE s.mediaId = media.id AND s.kind = 'ONEDRIVE'
+                AND s.missingSince IS NULL ORDER BY s.id LIMIT 1)
         WHERE id IN (:ids)
         """,
     )

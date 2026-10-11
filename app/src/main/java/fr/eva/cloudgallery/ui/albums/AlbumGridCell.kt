@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import fr.eva.cloudgallery.ui.components.OneUiCheckCircle
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
@@ -43,6 +44,7 @@ internal data class AlbumBadge(val icon: ImageVector, val contentDescription: St
 /**
  * Cellule de la grille d'albums façon One UI : couverture carrée arrondie, nom sur une ligne,
  * nombre d'éléments en dessous. Sans couverture, affiche [emptyIcon] sur le fond de chargement.
+ * Couverture : fichier local ([coverUri]) ou, à défaut, miniature OneDrive ([coverCloud]).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -50,6 +52,7 @@ internal fun AlbumGridCell(
     name: String,
     countText: String,
     coverUri: Uri?,
+    coverCloud: CloudThumbRef?,
     coverIsVideo: Boolean,
     coverVersion: Long,
     emptyIcon: ImageVector,
@@ -86,12 +89,13 @@ internal fun AlbumGridCell(
                 .clip(shape)
                 .background(colors.placeholder),
         ) {
-            if (coverUri != null) {
+            if (coverUri != null || coverCloud != null) {
                 ThumbnailImage(
                     uri = coverUri,
                     isVideo = coverIsVideo,
                     version = coverVersion,
                     modifier = Modifier.fillMaxSize(),
+                    cloud = coverCloud,
                 )
             } else {
                 Icon(

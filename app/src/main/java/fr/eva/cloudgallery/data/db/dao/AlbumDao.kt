@@ -32,7 +32,8 @@ private const val ALBUM_ROWS = """
     SELECT a.id, a.name, a.customName, a.type, a.sourceKey, a.relativePath, a.isPinned, a.sortIndex,
         COALESCE(st.cnt, 0) AS mediaCount,
         c.id AS coverMediaId, c.primaryUri AS coverUri, c.mediaType AS coverType,
-        c.dateModified AS coverDateModified, st.latest AS latestDate
+        c.dateModified AS coverDateModified, c.cloudItemId AS coverCloudItemId, c.cloudCTag AS coverCloudCTag,
+        st.latest AS latestDate
     FROM album a
     LEFT JOIN stats st ON st.albumId = a.id
     LEFT JOIN media c ON c.id = COALESCE(a.coverMediaId, st.latestId)
@@ -83,11 +84,22 @@ interface AlbumDao {
      */
     @Query(
         """
-        DELETE FROM album WHERE id IN (:ids) AND type = 'LOCAL_FOLDER'
+        DELETE FROM album WHERE id IN (:ids) AND type = :type
             AND customName IS NULL AND isPinned = 0 AND isHidden = 0 AND coverMediaId IS NULL
         """,
     )
-    suspend fun deleteUncustomizedFolders(ids: List<Long>)
+    suspend fun deleteUncustomizedFolders(ids: List<Long>, type: AlbumType)
+
+    /** Supprime tous les albums d'un type (ex. albums OneDrive lors de la déconnexion). */
+    @Query("DELETE FROM album WHERE type = :type")
+    suspend fun deleteByType(type: AlbumType)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM album WHERE type = :type)")
+    suspend fun existsByType(type: AlbumType): Boolean
+
+    /** coverMediaId n'a pas de clé étrangère : on retire les couvertures qui pointent vers un média disparu. */
+    @Query("UPDATE album SET coverMediaId = NULL WHERE coverMediaId IS NOT NULL AND coverMediaId NOT IN (SELECT id FROM media)")
+    suspend fun clearDanglingCovers()
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMembers(members: List<AlbumMediaEntity>)

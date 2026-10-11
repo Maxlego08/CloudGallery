@@ -1,15 +1,23 @@
 package fr.eva.cloudgallery.domain.repository
 
+import android.app.Activity
 import android.content.IntentSender
 import android.net.Uri
 import androidx.paging.PagingData
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.domain.model.CloudAuthRequiredException
+import fr.eva.cloudgallery.domain.model.CloudException
+import fr.eva.cloudgallery.domain.model.CloudProfile
+import fr.eva.cloudgallery.domain.model.CloudSyncReason
+import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.domain.model.SignInOutcome
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +35,9 @@ interface MediaRepository {
     suspend fun getMedia(id: Long): MediaDetails?
 
     suspend fun getSummaries(ids: List<Long>): List<MediaSummary>
+
+    /** Nombre de médias parmi [ids] disposant d'un fichier local (les éléments uniquement OneDrive sont exclus). */
+    suspend fun countWithLocalFile(ids: Collection<Long>): Int
 
     /** Identifiants du contexte dont la date de prise de vue est dans [startMs, endMs[, dans l'ordre de [pagedMedia]. */
     suspend fun idsInPeriod(context: MediaContext, startMs: Long, endMs: Long): List<Long>
@@ -112,6 +123,94 @@ interface SettingsRepository {
     suspend fun setAutoPlayVideos(enabled: Boolean)
     suspend fun setConfirmBeforeDelete(enabled: Boolean)
     suspend fun setUseTrash(enabled: Boolean)
+    suspend fun setShowCloudInPhotos(enabled: Boolean)
+}
+
+/**
+ * Compte OneDrive (mode compte unique) vu par l'UI : connexion, déconnexion et données cloud
+ * locales. Les opérations interactives ne suspendent pas l'appelant : leur issue est publiée
+ * dans [signInOutcomes] et l'état dans [state].
+ */
+interface CloudAccountRepository {
+    /** Vrai si ce build embarque une configuration MSAL valide (sinon tout est masqué). */
+    val isAvailable: Boolean
+
+    val state: StateFlow<CloudAccountState>
+
+    /** Vrai pendant une connexion interactive (page Microsoft ouverte). */
+    val signInRunning: StateFlow<Boolean>
+
+    /** Issues des connexions interactives, une par tentative. */
+    val signInOutcomes: Flow<SignInOutcome>
+
+    /** Relit le compte persisté par MSAL (thread d'E/S). */
+    suspend fun refresh()
+
+    /** Ouvre la page de connexion Microsoft depuis [activity]. */
+    fun signIn(activity: Activity)
+
+    /** Reconnexion du compte courant après expiration de la session. */
+    fun reauthenticate(activity: Activity)
+
+    /**
+     * Déconnecte le compte puis retire de l'index local toutes les données OneDrive (médias,
+     * favoris et ajouts aux albums associés, albums OneDrive). Les fichiers sur OneDrive et sur
+     * l'appareil ne sont jamais modifiés. Echec de la déconnexion : les données sont conservées.
+     */
+    suspend fun signOutAndPurge(): Result<Unit>
+
+    /** Retire les données OneDrive restées dans l'index après une session terminée. */
+    suspend fun purgeLeftoverData(): Result<Unit>
+
+    /** Etat de la synchronisation OneDrive. */
+    val syncState: StateFlow<CloudSyncState>
+
+    /** Synchronisation OneDrive immédiate (incrémentale). */
+    fun syncNow()
+
+    /** Nom, adresse et quota du compte connecté (Microsoft Graph). */
+    suspend fun loadProfile(): Result<CloudProfile>
+
+    /**
+     * Le OneDrive connecté diffère de celui des données de l'index ([CloudSyncState.accountMismatch]) :
+     * après confirmation de l'utilisateur, retire les données de l'ancien compte puis synchronise
+     * le compte connecté. Les fichiers sur OneDrive et sur l'appareil ne sont jamais modifiés.
+     */
+    suspend fun replaceMismatchedData(): Result<Unit>
+}
+
+/**
+ * Synchronisation OneDrive -> index local (lecture seule côté OneDrive). Ne s'exécute que pour
+ * un compte connecté ; les demandes simultanées sont regroupées.
+ */
+interface CloudMediaSyncer {
+    val state: StateFlow<CloudSyncState>
+
+    /** Demande une synchronisation (sans attendre). Sans effet si OneDrive est indisponible. */
+    fun requestSync(reason: CloudSyncReason)
+
+    /**
+     * Interrompt la synchronisation en cours et exécute [block] en exclusion mutuelle avec toute
+     * synchronisation (déconnexion, purge). L'état est relu ensuite.
+     */
+    suspend fun <T> exclusive(block: suspend () -> T): T
+}
+
+/** Jeton d'accès Microsoft Graph pour le compte connecté. */
+interface CloudTokenProvider {
+    /**
+     * Jeton valide, renouvelé silencieusement si besoin (thread d'E/S).
+     * @throws CloudAuthRequiredException si une reconnexion interactive est nécessaire.
+     * @throws CloudException pour les autres échecs (réseau, service…).
+     */
+    suspend fun accessToken(forceRefresh: Boolean = false): String
+
+    /**
+     * Microsoft Graph a refusé (401) [token], obtenu juste avant par un renouvellement forcé :
+     * l'accès a été révoqué côté service, le compte passe en reconnexion requise. Sans effet si
+     * [token] n'est plus le jeton courant (déconnexion, autre compte entre-temps).
+     */
+    suspend fun onTokenRejected(token: String)
 }
 
 interface PlaybackPositionRepository {

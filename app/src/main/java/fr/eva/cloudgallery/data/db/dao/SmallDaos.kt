@@ -36,6 +36,13 @@ interface SyncCursorDao {
 
     @Upsert
     suspend fun upsert(cursor: SyncCursorEntity)
+
+    @Query("DELETE FROM sync_cursor WHERE provider = :provider")
+    suspend fun delete(provider: String)
+
+    /** Efface le lien de reprise (deltaLink) : la prochaine synchro repartira de zéro. */
+    @Query("UPDATE sync_cursor SET cursor = NULL WHERE provider = :provider")
+    suspend fun clearLink(provider: String)
 }
 
 @Dao

@@ -6,6 +6,7 @@ import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.domain.model.AlbumSummary
+import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSourceInfo
 import fr.eva.cloudgallery.domain.model.MediaSummary
@@ -25,6 +26,7 @@ fun MediaRow.toSummary(): MediaSummary = MediaSummary(
     hasLocal = hasLocal,
     hasCloud = hasCloud,
     hasOffline = hasOffline,
+    cloudThumb = cloudThumbRef(cloudItemId, cloudCTag, dateModified),
 )
 
 fun MediaSourceEntity.toInfo(): MediaSourceInfo = MediaSourceInfo(
@@ -56,6 +58,7 @@ fun MediaEntity.toDetails(isFavorite: Boolean, sources: List<MediaSourceEntity>)
     isFavorite = isFavorite,
     // Une source masquée (corbeille, volume démonté…) n'est pas exploitable par l'UI.
     sources = sources.filter { it.missingSince == null }.map { it.toInfo() },
+    cloudThumb = cloudThumbRef(cloudItemId, cloudCTag, dateModified),
 )
 
 fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(
@@ -71,4 +74,12 @@ fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(
     coverDateModified = coverDateModified ?: 0L,
     latestDate = latestDate ?: 0L,
     isPinned = isPinned,
+    coverCloud = coverCloudItemId?.let { cloudThumbRef(it, coverCloudCTag, coverDateModified ?: 0L) },
 )
+
+/**
+ * Miniature OneDrive : version = cTag (contenu) ; à défaut (cTag absent), la date de
+ * modification, pour qu'un changement de contenu invalide quand même le cache.
+ */
+private fun cloudThumbRef(itemId: String?, cTag: String?, dateModified: Long): CloudThumbRef? =
+    itemId?.let { CloudThumbRef(it, cTag?.takeIf { tag -> tag.isNotBlank() } ?: "m$dateModified") }

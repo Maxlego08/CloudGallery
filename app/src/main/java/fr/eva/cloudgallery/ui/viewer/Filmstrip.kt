@@ -99,6 +99,7 @@ internal fun Filmstrip(
                     uri = summary?.uri,
                     isVideo = summary?.type == MediaType.VIDEO,
                     version = summary?.dateModified ?: 0L,
+                    cloud = summary?.cloudThumb,
                     modifier = Modifier
                         .size(CellSize)
                         .clip(CellShape)

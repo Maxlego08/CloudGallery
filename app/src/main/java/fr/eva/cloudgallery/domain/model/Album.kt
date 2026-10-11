@@ -28,4 +28,6 @@ data class AlbumSummary(
     val coverDateModified: Long,
     val latestDate: Long,
     val isPinned: Boolean,
+    /** Miniature OneDrive de la couverture, utilisée quand la couverture n'a pas de fichier local. */
+    val coverCloud: CloudThumbRef? = null,
 )

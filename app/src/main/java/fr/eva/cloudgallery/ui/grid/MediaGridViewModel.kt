@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -135,6 +137,28 @@ abstract class MediaGridViewModel(
     val allSelected: StateFlow<Boolean> = combine(_selection, count) { sel, c ->
         c != null && c > 0 && sel.size >= c
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * Fichiers locaux de la sélection (comptés en base, sur le thread d'E/S) : active ou non
+     * Partager / Supprimer / Copier et donne les nombres exacts des boîtes de confirmation.
+     * null si inconnu (échec de lecture) : les actions restent possibles et filtrent elles-mêmes.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val selectionTargets: StateFlow<SelectionTargets?> = _selection
+        .mapLatest { ids ->
+            if (ids.isEmpty()) {
+                SelectionTargets(ids, 0)
+            } else {
+                try {
+                    SelectionTargets(ids, deps.mediaRepository.countWithLocalFile(ids))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _events = Channel<GridEvent>(Channel.BUFFERED)
     val events: Flow<GridEvent> = _events.receiveAsFlow()
@@ -269,17 +293,26 @@ abstract class MediaGridViewModel(
             ids.toList().chunked(SQL_CHUNK).flatMap { deps.mediaRepository.getSummaries(it) }
         }
 
-    /** Médias sélectionnés disposant d'une URI locale ; signale les éléments uniquement distants. */
-    private suspend fun localSelection(): List<MediaSummary> {
+    /**
+     * Médias sélectionnés disposant d'un fichier local ([localActionTargets]). Les éléments
+     * uniquement sur OneDrive ne sont jamais traités : message si aucun fichier local, et
+     * nombre d'éléments ignorés si [notifySkipped] (déjà indiqué par une boîte de confirmation sinon).
+     */
+    private suspend fun localSelection(notifySkipped: Boolean): List<MediaSummary> {
         val all = selectedSummaries()
-        val local = all.filter { it.uri != null }
-        if (local.size < all.size) toast(R.string.common_cloud_only_not_supported)
+        val local = localActionTargets(all)
+        val skipped = all.size - local.size
+        when {
+            local.isEmpty() -> toast(R.string.common_cloud_only_not_supported)
+            skipped > 0 && notifySkipped ->
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_cloud_items_skipped, skipped, listOf(skipped))))
+        }
         return local
     }
 
     fun share() {
         viewModelScope.launch {
-            val local = localSelection()
+            val local = localSelection(notifySkipped = true)
             if (local.isEmpty()) return@launch
             if (local.size > MAX_SHARE) {
                 emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_share_limit, MAX_SHARE, listOf(MAX_SHARE))))
@@ -333,7 +366,8 @@ abstract class MediaGridViewModel(
     fun requestDelete() {
         viewModelScope.launch {
             if (pendingDeleteBatches.isNotEmpty()) return@launch
-            val local = localSelection()
+            // Avec confirmation, la boîte de dialogue a déjà indiqué les éléments OneDrive non concernés.
+            val local = localSelection(notifySkipped = settings.value?.confirmBeforeDelete == false)
             if (local.isEmpty()) return@launch
             pendingDeleteToTrash = settings.value?.useTrash ?: true
             val batches = local.mapNotNull { it.uri }.chunked(MAX_DELETE_BATCH)
@@ -393,7 +427,8 @@ abstract class MediaGridViewModel(
             return
         }
         viewModelScope.launch {
-            val local = localSelection()
+            // La boîte de saisie a déjà indiqué les éléments OneDrive non concernés.
+            val local = localSelection(notifySkipped = false)
             if (local.isEmpty()) return@launch
             val path = "Pictures/$clean/"
             val result = withContext(deps.ioDispatcher) {

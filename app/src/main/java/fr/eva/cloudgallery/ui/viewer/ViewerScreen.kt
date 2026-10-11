@@ -142,6 +142,8 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
     val current = media
     val isLocal = current != null && current.hasLocal && current.uri != null
+    // Uniquement sur OneDrive : les actions sur fichier local sont masquées (pas de bouton inopérant).
+    val cloudOnly = current != null && !isLocal
     val isImage = current?.type == MediaType.IMAGE
     val chromeShown = chromeVisible && dismissProgress < 0.02f && !showCropEditor
     ImmersiveSystemBars(visible = chromeShown || showCropEditor)
@@ -235,6 +237,7 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     ViewerActionBar(
                         media = current,
                         isLocal = isLocal,
+                        cloudOnly = cloudOnly,
                         isImage = isImage,
                         onFavorite = viewModel::toggleFavorite,
                         onEdit = { showCropEditor = true },
@@ -263,7 +266,7 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                 onMenuExpandedChange = { menuExpanded = it },
                 menuItems = buildList {
                     add(OneUiMenuItem(stringResource(R.string.common_details)) { showDetails = true })
-                    if (isImage) {
+                    if (isImage && !cloudOnly) {
                         // Rotation sans perte : seulement pour les formats dont l'orientation EXIF est modifiable.
                         if (viewModel.canRotate(current)) {
                             add(OneUiMenuItem(stringResource(R.string.viewer_rotate_left), enabled = isLocal && !busy) { viewModel.requestRotate(270) })
@@ -272,13 +275,15 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                         add(OneUiMenuItem(stringResource(R.string.viewer_crop), enabled = isLocal) { showCropEditor = true })
                     }
                     add(OneUiMenuItem(stringResource(R.string.common_add_to_album), enabled = current != null) { showAlbumPicker = true })
-                    add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
-                    add(
-                        OneUiMenuItem(stringResource(R.string.common_open_with), enabled = isLocal) {
-                            val m = current
-                            if (m?.uri != null) openWithExternalApp(context, m.uri, m.mimeType)
-                        },
-                    )
+                    if (!cloudOnly) {
+                        add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
+                        add(
+                            OneUiMenuItem(stringResource(R.string.common_open_with), enabled = isLocal) {
+                                val m = current
+                                if (m?.uri != null) openWithExternalApp(context, m.uri, m.mimeType)
+                            },
+                        )
+                    }
                 },
             )
         }
@@ -453,11 +458,15 @@ private fun ViewerTopBar(
     }
 }
 
-/** Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager, Supprimer. */
+/**
+ * Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager,
+ * Supprimer. Elément uniquement sur OneDrive ([cloudOnly]) : Favori seul (lecture seule).
+ */
 @Composable
 private fun ViewerActionBar(
     media: MediaDetails?,
     isLocal: Boolean,
+    cloudOnly: Boolean,
     isImage: Boolean,
     onFavorite: () -> Unit,
     onEdit: () -> Unit,
@@ -484,6 +493,7 @@ private fun ViewerActionBar(
                 tint = if (favorite) OneUiFavoriteRed else ViewerColors.content,
             )
         }
+        if (cloudOnly) return@Row
         ActionSlot {
             OneUiIconButton(
                 icon = Icons.Outlined.Edit,

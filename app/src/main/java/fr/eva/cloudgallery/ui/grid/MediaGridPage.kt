@@ -105,6 +105,7 @@ fun MediaGridPage(
     val zoomLevel by viewModel.zoomLevel.collectAsStateWithLifecycle()
     val count by viewModel.count.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val selectionTargets by viewModel.selectionTargets.collectAsStateWithLifecycle()
     val selectionMode by viewModel.selectionMode.collectAsStateWithLifecycle()
     val allSelected by viewModel.allSelected.collectAsStateWithLifecycle()
     val dayIds by viewModel.dayIds.collectAsStateWithLifecycle()
@@ -237,6 +238,8 @@ fun MediaGridPage(
 
         if (selectionMode) {
             val enabled = selection.isNotEmpty()
+            // Partager / Supprimer / Copier : seulement si la sélection contient un fichier local.
+            val localEnabled = localActionsEnabled(selection, selectionTargets)
             val shareLabel = stringResource(R.string.common_share)
             val addToAlbumLabel = stringResource(R.string.common_add_to_album)
             val favoriteLabel = stringResource(R.string.grid_action_favorite)
@@ -246,7 +249,7 @@ fun MediaGridPage(
             val confirmDelete = loadedSettings?.confirmBeforeDelete ?: true
 
             val actions = buildList {
-                add(OneUiAction(Icons.Outlined.Share, shareLabel, enabled) { viewModel.share() })
+                add(OneUiAction(Icons.Outlined.Share, shareLabel, localEnabled) { viewModel.share() })
                 if (albumActionOverride != null) {
                     add(OneUiAction(albumActionOverride.icon, albumActionOverride.label, enabled, albumActionOverride.onClick))
                 } else {
@@ -258,7 +261,7 @@ fun MediaGridPage(
                     add(OneUiAction(Icons.Outlined.FavoriteBorder, favoriteLabel, enabled) { viewModel.toggleFavorite() })
                 }
                 add(
-                    OneUiAction(Icons.Outlined.Delete, deleteLabel, enabled) {
+                    OneUiAction(Icons.Outlined.Delete, deleteLabel, localEnabled) {
                         if (confirmDelete) showDeleteDialog = true else viewModel.requestDelete()
                     },
                 )
@@ -268,7 +271,7 @@ fun MediaGridPage(
                 if (albumActionOverride != null) {
                     add(OneUiMenuItem(addToAlbumLabel) { moreOpen = false; showAlbumPicker = true })
                 }
-                add(OneUiMenuItem(copyLabel) { moreOpen = false; showCopyDialog = true })
+                add(OneUiMenuItem(copyLabel, enabled = localEnabled) { moreOpen = false; showCopyDialog = true })
             }
 
             Box(
@@ -284,8 +287,21 @@ fun MediaGridPage(
         }
     }
 
+    // Nombres exacts : seuls les fichiers locaux sont supprimés ou copiés.
+    val counts = actionCounts(selection, selectionTargets)
+    val skippedNotice = if (counts.skippedCloud > 0) {
+        pluralStringResource(R.plurals.grid_cloud_items_skipped, counts.skippedCloud, counts.skippedCloud)
+    } else {
+        null
+    }
+
     if (showDeleteDialog) {
-        val n = selection.size
+        val n = counts.local
+        val info = if (settings?.useTrash != false) {
+            stringResource(R.string.common_trash_info)
+        } else {
+            stringResource(R.string.grid_delete_permanent_message)
+        }
         OneUiDialog(
             title = pluralStringResource(R.plurals.common_delete_confirm, n, n),
             onDismiss = { showDeleteDialog = false },
@@ -295,11 +311,7 @@ fun MediaGridPage(
                 viewModel.requestDelete()
             },
             dismissLabel = stringResource(R.string.common_cancel),
-            message = if (settings?.useTrash != false) {
-                stringResource(R.string.common_trash_info)
-            } else {
-                stringResource(R.string.grid_delete_permanent_message)
-            },
+            message = if (skippedNotice != null) "$info\n\n$skippedNotice" else info,
             destructive = true,
         )
     }
@@ -315,6 +327,7 @@ fun MediaGridPage(
             },
             onDismiss = { showCopyDialog = false },
             placeholder = stringResource(R.string.grid_copy_folder_hint),
+            message = skippedNotice,
         )
     }
 

@@ -86,6 +86,17 @@ interface MediaSourceDao {
     @Query("SELECT COUNT(*) FROM media_source WHERE kind = :kind AND missingSince IS NULL")
     suspend fun count(kind: SourceKind): Int
 
+    /** Vrai s'il existe au moins une source de ce type, masquée ou non (contrairement à [count]). */
+    @Query("SELECT EXISTS(SELECT 1 FROM media_source WHERE kind = :kind)")
+    suspend fun existsAny(kind: SourceKind): Boolean
+
+    /** Médias ayant au moins une source de ce type (masquée ou non). */
+    @Query("SELECT DISTINCT mediaId FROM media_source WHERE kind = :kind")
+    suspend fun mediaIdsByKind(kind: SourceKind): List<Long>
+
+    @Query("DELETE FROM media_source WHERE kind = :kind")
+    suspend fun deleteByKind(kind: SourceKind)
+
     /** Dossiers distincts d'un type de source (pour créer/mettre à jour les albums-dossiers). */
     @Query(
         """
@@ -95,6 +106,65 @@ interface MediaSourceDao {
         """,
     )
     suspend fun buckets(kind: SourceKind): List<BucketRow>
+
+    /** Comme [buckets], en ignorant les sources masquées (albums OneDrive). */
+    @Query(
+        """
+        SELECT bucketKey, bucketName, relativePath FROM media_source
+        WHERE kind = :kind AND bucketKey IS NOT NULL AND missingSince IS NULL
+        GROUP BY bucketKey
+        """,
+    )
+    suspend fun visibleBuckets(kind: SourceKind): List<BucketRow>
+
+    /** Nom et chemin lisibles d'un dossier OneDrive, recopiés sur ses sources (sans réécriture inutile). */
+    @Query(
+        """
+        UPDATE media_source SET bucketName = :name, relativePath = :path
+        WHERE kind = 'ONEDRIVE' AND bucketKey = :key AND (bucketName IS NOT :name OR relativePath IS NOT :path)
+        """,
+    )
+    suspend fun updateCloudBucketInfo(key: String, name: String, path: String?)
+
+    /** Médias ayant une source OneDrive visible dans ces dossiers (au plus 500 clés par appel). */
+    @Query(
+        """
+        SELECT DISTINCT mediaId FROM media_source
+        WHERE kind = 'ONEDRIVE' AND bucketKey IN (:keys) AND missingSince IS NULL
+        """,
+    )
+    suspend fun visibleCloudMediaIdsInBuckets(keys: List<String>): List<Long>
+
+    /** Masque les sources OneDrive de ces dossiers (dossier supprimé sur OneDrive). */
+    @Query(
+        """
+        UPDATE media_source SET missingSince = :now
+        WHERE kind = 'ONEDRIVE' AND bucketKey IN (:keys) AND missingSince IS NULL
+        """,
+    )
+    suspend fun markMissingInBuckets(keys: List<String>, now: Long)
+
+    /**
+     * Dossier restauré possible : vrai si une source OneDrive masquée appartient à l'un des
+     * dossiers [keys] (dossiers nouvellement reçus), ou à un dossier absent de `cloud_folder`.
+     * Ce second cas couvre les sous-dossiers d'un dossier supprimé puis restauré : leurs lignes
+     * ont été retirées avec lui, plus rien ne les rattache au dossier restauré. Les clés suivent
+     * `cloudBucketKey` (« onedrive:<id du dossier> »).
+     */
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM media_source
+            WHERE kind = 'ONEDRIVE' AND missingSince IS NOT NULL AND bucketKey IS NOT NULL
+              AND (bucketKey IN (:keys) OR bucketKey NOT IN (SELECT 'onedrive:' || itemId FROM cloud_folder))
+        )
+        """,
+    )
+    suspend fun existsHiddenCloudInBucketsOrOrphaned(keys: List<String>): Boolean
+
+    /** Vrai si ce dossier contient au moins une source OneDrive visible. */
+    @Query("SELECT EXISTS(SELECT 1 FROM media_source WHERE kind = 'ONEDRIVE' AND bucketKey = :key AND missingSince IS NULL)")
+    suspend fun existsVisibleCloudInBucket(key: String): Boolean
 }
 
 data class BucketRow(

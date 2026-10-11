@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
@@ -28,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.ui.account.cloudAccountSummary
+import fr.eva.cloudgallery.ui.account.cloudSyncStatusText
 import fr.eva.cloudgallery.ui.components.OneUiCard
 import fr.eva.cloudgallery.ui.components.OneUiCategoryHeader
 import fr.eva.cloudgallery.ui.components.OneUiDivider
@@ -40,20 +44,23 @@ import fr.eva.cloudgallery.ui.settings.indexStatusText
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Onglet « Menu » : accès aux collections (Favoris, Vidéos), aux paramètres et à l'état de
- * l'indexation locale. Pas d'entrée Corbeille : la corbeille système n'est pas consultable
- * de façon fiable par une appli tierce.
+ * Onglet « Menu » : accès aux collections (Favoris, Vidéos), au compte OneDrive (si ce build
+ * le permet), aux paramètres et à l'état de l'indexation locale. Pas d'entrée Corbeille : la
+ * corbeille système n'est pas consultable de façon fiable par une appli tierce.
  */
 @Composable
 fun MenuScreen(
     onOpenFavorites: () -> Unit,
     onOpenVideos: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     viewModel: MenuViewModel = hiltViewModel(),
 ) {
     val indexState by viewModel.indexState.collectAsStateWithLifecycle()
+    val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val cloudSyncState by viewModel.cloudSyncState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
     val colors = OneUiTheme.colors
@@ -110,6 +117,19 @@ fun MenuScreen(
                             onClick = if (indexState.running) null else viewModel::syncNow,
                             trailing = if (indexState.running) RunningTrailing else null,
                         )
+                        // Masquée quand ce build n'embarque pas de configuration OneDrive.
+                        if (viewModel.cloudAvailable) {
+                            OneUiDivider(startIndent = dimens.cardPadding + 40.dp)
+                            // Compte connecté : état de la synchronisation ; sinon, état du compte.
+                            val signedIn = cloudState is CloudAccountState.SignedIn
+                            OneUiListItem(
+                                title = stringResource(R.string.common_onedrive),
+                                subtitle = if (signedIn) cloudSyncStatusText(cloudSyncState) else cloudAccountSummary(cloudState),
+                                icon = Icons.Rounded.Cloud,
+                                onClick = onOpenAccount,
+                                trailing = if (signedIn && cloudSyncState.running) RunningTrailing else null,
+                            )
+                        }
                     }
                 }
             }

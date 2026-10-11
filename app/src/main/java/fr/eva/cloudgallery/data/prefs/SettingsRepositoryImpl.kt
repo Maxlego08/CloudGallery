@@ -55,6 +55,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAutoPlayVideos(enabled: Boolean) = set(Keys.AUTO_PLAY_VIDEOS, enabled)
     override suspend fun setConfirmBeforeDelete(enabled: Boolean) = set(Keys.CONFIRM_DELETE, enabled)
     override suspend fun setUseTrash(enabled: Boolean) = set(Keys.USE_TRASH, enabled)
+    override suspend fun setShowCloudInPhotos(enabled: Boolean) = set(Keys.SHOW_CLOUD_IN_PHOTOS, enabled)
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
@@ -71,6 +72,7 @@ class SettingsRepositoryImpl @Inject constructor(
             autoPlayVideos = this[Keys.AUTO_PLAY_VIDEOS] ?: d.autoPlayVideos,
             confirmBeforeDelete = this[Keys.CONFIRM_DELETE] ?: d.confirmBeforeDelete,
             useTrash = this[Keys.USE_TRASH] ?: d.useTrash,
+            showCloudInPhotos = this[Keys.SHOW_CLOUD_IN_PHOTOS] ?: d.showCloudInPhotos,
         )
     }
 
@@ -83,6 +85,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_PLAY_VIDEOS = booleanPreferencesKey("auto_play_videos")
         val CONFIRM_DELETE = booleanPreferencesKey("confirm_before_delete")
         val USE_TRASH = booleanPreferencesKey("use_trash")
+        val SHOW_CLOUD_IN_PHOTOS = booleanPreferencesKey("show_cloud_in_photos")
     }
 
     private companion object {

@@ -6,16 +6,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.BrokenImage
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaType
+import fr.eva.cloudgallery.ui.image.CloudPreviewImage
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.theme.ViewerColors
@@ -61,7 +69,7 @@ internal fun ViewerPage(
     }
     val uri = media.uri?.takeIf { media.hasLocal }
     when {
-        uri == null -> CloudOnlyPage(isCurrentPage = isCurrentPage, callbacks = callbacks, modifier = modifier)
+        uri == null -> CloudOnlyPage(media = media, isCurrentPage = isCurrentPage, callbacks = callbacks, modifier = modifier)
         media.type == MediaType.VIDEO -> VideoPage(
             media = media,
             uri = uri,
@@ -156,9 +164,14 @@ private fun VideoPage(
     }
 }
 
-/** Média présent uniquement sur OneDrive : pas encore affichable en phase 1. */
+/**
+ * Média présent uniquement sur OneDrive : grand aperçu Microsoft Graph aux proportions d'origine
+ * (sans zoom), mention « aperçu » et, pour une vidéo, un badge (durée) sans bouton de lecture.
+ * Aperçu indisponible (hors connexion sans cache, session expirée…) : message explicatif.
+ */
 @Composable
 private fun CloudOnlyPage(
+    media: MediaDetails,
     isCurrentPage: Boolean,
     callbacks: PageGestureCallbacks,
     modifier: Modifier = Modifier,
@@ -166,14 +179,66 @@ private fun CloudOnlyPage(
     val scope = rememberCoroutineScope()
     val state = remember { ZoomState(scope) }
     LaunchedEffect(isCurrentPage) { if (!isCurrentPage) state.reset() }
-    // TODO(onedrive): afficher l'aperçu / télécharger l'original quand la source OneDrive sera branchée.
+    val ref = media.cloudThumb
+    var previewFailed by remember(ref) { mutableStateOf(false) }
+    // TODO(phase 4): original OneDrive (téléchargement à la demande, zoom, lecture vidéo en streaming).
     ZoomableBox(state = state, zoomEnabled = false, callbacks = callbacks, modifier = modifier) {
-        PageMessage(
-            icon = { Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = ViewerColors.content, modifier = Modifier.size(40.dp)) },
-            title = stringResource(R.string.viewer_cloud_only_title),
-            message = stringResource(R.string.viewer_cloud_only_message),
-            modifier = Modifier.align(Alignment.Center),
-        )
+        if (ref != null) {
+            CloudPreviewImage(
+                ref = ref,
+                modifier = Modifier.matchParentSize(),
+                onError = { previewFailed = it },
+            )
+        }
+        if (ref == null || previewFailed) {
+            PageMessage(
+                icon = { Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = ViewerColors.content, modifier = Modifier.size(40.dp)) },
+                title = stringResource(R.string.viewer_cloud_only_title),
+                message = stringResource(R.string.viewer_cloud_only_message),
+                modifier = Modifier.align(Alignment.Center),
+            )
+        } else {
+            CloudPreviewCaption(
+                media = media,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(top = 72.dp, start = 24.dp, end = 24.dp),
+            )
+        }
+    }
+}
+
+/** Mention « aperçu OneDrive » et, pour une vidéo, badge avec sa durée (aucune action). */
+@Composable
+private fun CloudPreviewCaption(media: MediaDetails, modifier: Modifier = Modifier) {
+    val pill = Modifier
+        .clip(RoundedCornerShape(50))
+        .background(Color(0x66000000))
+        .padding(horizontal = 10.dp, vertical = 4.dp)
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (media.type == MediaType.VIDEO) {
+            Row(pill, verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (media.durationMs > 0) Formatters.duration(media.durationMs) else stringResource(R.string.common_video),
+                    style = OneUiTheme.typography.badge,
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        Row(pill, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.viewer_cloud_only_preview),
+                style = OneUiTheme.typography.badge,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

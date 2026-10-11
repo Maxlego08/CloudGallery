@@ -16,7 +16,8 @@ sealed interface PlaybackSource {
 /**
  * Choisit la source de lecture d'un média.
  *
- * Phase 2 : uniquement les fichiers locaux.
+ * Phase 3 : uniquement un fichier local présent (source LOCAL visible) ; jamais l'URI principale
+ * du média en repli, ni pour un élément OneDrive (qui reste [PlaybackSource.Unavailable]).
  * TODO(phase 4) : ajouter `PlaybackSource.Remote` pour les médias OneDrive — obtenir une URL de
  *  téléchargement temporaire (@microsoft.graph.downloadUrl), la renouveler à l'expiration via un
  *  `ResolvingDataSource` au-dessus de `DefaultHttpDataSource` (requêtes HTTP Range pour le seek),
@@ -25,7 +26,7 @@ sealed interface PlaybackSource {
 object PlaybackSourceResolver {
 
     fun resolve(details: MediaDetails): PlaybackSource {
-        val local = details.localSource?.uri ?: details.uri
+        val local = details.localSource?.uri
         return if (local != null) PlaybackSource.Local(local, details.mimeType) else PlaybackSource.Unavailable
     }
 

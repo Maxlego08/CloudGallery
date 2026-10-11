@@ -7,7 +7,8 @@
     <string name="viewer_play">Play video</string>
     <string name="viewer_load_error">Can\'t display this image.</string>
     <string name="viewer_cloud_only_title">Only available on OneDrive</string>
-    <string name="viewer_cloud_only_message">This file isn\'t stored on this device. It can be displayed once OneDrive sync is available.</string>
+    <string name="viewer_cloud_only_message">This file isn\'t stored on this device and its OneDrive preview couldn\'t be loaded. Check your Internet connection and your OneDrive account.</string>
+    <string name="viewer_cloud_only_preview">OneDrive preview: the original will be available in a future version</string>
     <string name="viewer_delete_permanent_info">The item will be permanently deleted.</string>
     <string name="viewer_rotate_failed">Couldn\'t rotate this image. This format may not be supported.</string>
     <string name="viewer_copy_saved">Copy saved</string>

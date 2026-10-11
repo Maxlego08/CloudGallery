@@ -18,7 +18,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .build()
 
     @Provides fun mediaDao(db: AppDatabase) = db.mediaDao()
@@ -30,4 +30,5 @@ object DatabaseModule {
     @Provides fun userSettingDao(db: AppDatabase) = db.userSettingDao()
     @Provides fun cachedFileDao(db: AppDatabase) = db.cachedFileDao()
     @Provides fun downloadTaskDao(db: AppDatabase) = db.downloadTaskDao()
+    @Provides fun cloudFolderDao(db: AppDatabase) = db.cloudFolderDao()
 }

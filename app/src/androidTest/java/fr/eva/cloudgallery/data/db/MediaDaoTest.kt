@@ -95,11 +95,11 @@ class MediaDaoTest {
     @Test
     fun pagingTimeline_ordersByDateTakenThenIdDesc() = runTest {
         val (a, b, c) = seed()
-        val rows = loadAll(db.mediaDao().pagingTimeline())
+        val rows = loadAll(db.mediaDao().pagingTimeline(includeCloudOnly = true))
         assertEquals(listOf(c, b, a), rows.map { it.id })
         assertTrue(rows.all { it.hasLocal && it.primaryUri != null })
-        assertEquals(listOf(c, b, a), db.mediaDao().observeTimelineIds().first())
-        assertEquals(listOf(c), loadAll(db.mediaDao().pagingVideos()).map { it.id })
+        assertEquals(listOf(c, b, a), db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
+        assertEquals(listOf(c), loadAll(db.mediaDao().pagingVideos(includeCloudOnly = true)).map { it.id })
     }
 
     @Test
@@ -148,7 +148,7 @@ class MediaDaoTest {
         assertEquals(1, db.mediaDao().deleteOrphans())
 
         assertNull(db.mediaDao().getById(c))
-        assertEquals(listOf(b, a), db.mediaDao().observeTimelineIds().first())
+        assertEquals(listOf(b, a), db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
         // La référence de l'album virtuel disparaît en cascade, l'album reste.
         assertEquals(0, db.mediaDao().observeAlbumCount(virtual).first())
         assertNotNull(db.albumDao().getById(virtual))
@@ -212,7 +212,7 @@ class MediaDaoTest {
         db.mediaSourceDao().markMissing(listOf(source.id), now = 123)
         db.mediaDao().refreshSourceFlags(listOf(a))
 
-        assertFalse(a in db.mediaDao().observeTimelineIds().first())
+        assertFalse(a in db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
         assertEquals(0, db.mediaDao().observeFavoriteCount().first())
         assertEquals(0, db.mediaDao().observeAlbumCount(virtual).first())
         // Données de l'utilisateur conservées.
@@ -227,9 +227,9 @@ class MediaDaoTest {
         // Source revenue : média de nouveau visible avec son favori.
         db.mediaSourceDao().update(source.copy(missingSince = null))
         db.mediaDao().refreshSourceFlags(listOf(a))
-        assertTrue(a in db.mediaDao().observeTimelineIds().first())
+        assertTrue(a in db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
         assertEquals(1, db.mediaDao().observeFavoriteCount().first())
-        assertTrue(b in db.mediaDao().observeTimelineIds().first())
+        assertTrue(b in db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
     }
 
     @Test
@@ -249,10 +249,10 @@ class MediaDaoTest {
     fun idRanges_followGridOrder() = runTest {
         val (a, b, c) = seed()
         val dao = db.mediaDao()
-        assertEquals(listOf(c, b, a), dao.timelineIdsBetween(5_000, c, 1_000, a))
-        assertEquals(listOf(b, a), dao.timelineIdsBetween(1_000, b, 1_000, a))
-        assertEquals(listOf(b, a), dao.timelineIdsInPeriod(0, 2_000))
-        assertEquals(listOf(c), dao.videoIdsInPeriod(0, 10_000))
+        assertEquals(listOf(c, b, a), dao.timelineIdsBetween(true, 5_000, c, 1_000, a))
+        assertEquals(listOf(b, a), dao.timelineIdsBetween(true, 1_000, b, 1_000, a))
+        assertEquals(listOf(b, a), dao.timelineIdsInPeriod(true, 0, 2_000))
+        assertEquals(listOf(c), dao.videoIdsInPeriod(true, 0, 10_000))
     }
 
     @Test
@@ -267,9 +267,110 @@ class MediaDaoTest {
         val pinned = albumDao.insert(
             AlbumEntity(name = "C", type = AlbumType.LOCAL_FOLDER, sourceKey = "local:9", relativePath = null, createdAt = 0, updatedAt = 0, isPinned = true),
         )
-        albumDao.deleteUncustomizedFolders(listOf(plain, renamed, pinned))
+        albumDao.deleteUncustomizedFolders(listOf(plain, renamed, pinned), AlbumType.LOCAL_FOLDER)
         assertNull(albumDao.getById(plain))
         assertNotNull(albumDao.getById(renamed))
         assertNotNull(albumDao.getById(pinned))
+    }
+
+    private fun cloudSource(mediaId: Long, itemId: String, cTag: String = "c1", missingSince: Long? = null) = MediaSourceEntity(
+        mediaId = mediaId, kind = SourceKind.ONEDRIVE, externalId = itemId, uri = null,
+        bucketKey = "onedrive:root", bucketName = null, relativePath = null, sizeBytes = 0, dateModified = 0,
+        cTag = cTag, missingSince = missingSince,
+    )
+
+    @Test
+    fun refreshSourceFlags_ignoresHiddenCloudSourceAndKeepsFavorite() = runTest {
+        val mediaDao = db.mediaDao()
+        val id = mediaDao.insert(media(10))
+        val sourceId = db.mediaSourceDao().insert(cloudSource(id, "od-1", cTag = "ct"))
+        mediaDao.refreshSourceFlags(listOf(id))
+        mediaDao.getById(id)!!.let {
+            assertTrue(it.hasCloud)
+            assertEquals("od-1", it.cloudItemId)
+            assertEquals("ct", it.cloudCTag)
+            assertNull(it.primaryUri)
+        }
+        db.favoriteDao().insertAll(listOf(FavoriteEntity(id, 1)))
+
+        db.mediaSourceDao().markMissing(listOf(sourceId), now = 5)
+        mediaDao.refreshSourceFlags(listOf(id))
+        mediaDao.getById(id)!!.let {
+            assertFalse(it.hasCloud)
+            assertNull(it.cloudItemId)
+            assertNull(it.cloudCTag)
+        }
+        assertFalse(id in mediaDao.observeTimelineIds(includeCloudOnly = true).first())
+        assertEquals(0, mediaDao.observeFavoriteCount().first())
+        assertTrue(db.favoriteDao().isFavorite(id))
+    }
+
+    @Test
+    fun refreshSourceFlags_hiddenLocalSourceGivesNoUri() = runTest {
+        val (a, _, _) = seed()
+        val source = db.mediaSourceDao().find(SourceKind.LOCAL, "image:11")!!
+        db.mediaSourceDao().markMissing(listOf(source.id), now = 5)
+        db.mediaDao().refreshSourceFlags(listOf(a))
+        db.mediaDao().getById(a)!!.let {
+            assertFalse(it.hasLocal)
+            assertNull(it.primaryUri)
+        }
+    }
+
+    @Test
+    fun cloudOnlyMedia_followPhotosSettingButStayInFavoritesAndAlbums() = runTest {
+        val (a, _, _) = seed()
+        val mediaDao = db.mediaDao()
+        val cloudImage = mediaDao.insert(media(9_000))
+        val cloudVideo = mediaDao.insert(media(9_500, MediaType.VIDEO))
+        db.mediaSourceDao().insert(cloudSource(cloudImage, "od-img"))
+        db.mediaSourceDao().insert(cloudSource(cloudVideo, "od-vid"))
+        mediaDao.refreshSourceFlags(listOf(cloudImage, cloudVideo))
+        db.favoriteDao().insertAll(listOf(FavoriteEntity(cloudImage, 1)))
+        val virtual = db.albumDao().insert(
+            AlbumEntity(name = "V", type = AlbumType.VIRTUAL, sourceKey = null, relativePath = null, createdAt = 0, updatedAt = 0),
+        )
+        db.albumDao().insertMembers(listOf(AlbumMediaEntity(virtual, cloudVideo, 0), AlbumMediaEntity(virtual, a, 0)))
+
+        assertFalse(cloudImage in mediaDao.observeTimelineIds(includeCloudOnly = false).first())
+        assertTrue(cloudImage in mediaDao.observeTimelineIds(includeCloudOnly = true).first())
+        assertEquals(3, mediaDao.observeTimelineCount(includeCloudOnly = false).first())
+        assertEquals(5, mediaDao.observeTimelineCount(includeCloudOnly = true).first())
+        assertEquals(1, mediaDao.observeVideoCount(includeCloudOnly = false).first())
+        assertEquals(2, mediaDao.observeVideoCount(includeCloudOnly = true).first())
+        assertEquals(listOf(cloudImage), mediaDao.timelineIdsInPeriod(true, 8_000, 9_100))
+        assertTrue(mediaDao.timelineIdsInPeriod(false, 8_000, 9_100).isEmpty())
+        // Favoris et albums montrent tout ce qui est visible.
+        assertEquals(1, mediaDao.observeFavoriteCount().first())
+        assertEquals(2, mediaDao.observeAlbumCount(virtual).first())
+    }
+
+    @Test
+    fun albumRows_exposeCoverCloudItem() = runTest {
+        val mediaDao = db.mediaDao()
+        val id = mediaDao.insert(media(10))
+        db.mediaSourceDao().insert(cloudSource(id, "od-cover", cTag = "ct9"))
+        mediaDao.refreshSourceFlags(listOf(id))
+        val album = db.albumDao().insert(
+            AlbumEntity(name = "OneDrive", type = AlbumType.CLOUD_FOLDER, sourceKey = "onedrive:root", relativePath = "OneDrive/", createdAt = 0, updatedAt = 0),
+        )
+        val row = db.albumDao().observeAlbumRow(album).first()!!
+        assertEquals(1, row.mediaCount)
+        assertEquals(id, row.coverMediaId)
+        assertNull(row.coverUri)
+        assertEquals("od-cover", row.coverCloudItemId)
+        assertEquals("ct9", row.coverCloudCTag)
+    }
+
+    @Test
+    fun deleteByKindOnedrive_leavesLocalMediaIntact() = runTest {
+        val (a, b, c) = seed()
+        val mediaDao = db.mediaDao()
+        val cloud = mediaDao.insert(media(9_000))
+        db.mediaSourceDao().insert(cloudSource(cloud, "od-x"))
+        mediaDao.refreshSourceFlags(listOf(cloud))
+        db.mediaSourceDao().deleteByKind(SourceKind.ONEDRIVE)
+        assertEquals(1, mediaDao.deleteOrphans())
+        assertEquals(listOf(c, b, a), mediaDao.observeTimelineIds(includeCloudOnly = true).first())
     }
 }

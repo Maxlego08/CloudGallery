@@ -14,6 +14,12 @@ data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
     /** Envoie à la corbeille Android (récupérable 30 j) au lieu de supprimer définitivement. */
     val useTrash: Boolean = true,
+    /**
+     * Affiche dans Photos et Vidéos les éléments présents uniquement sur OneDrive. Désactivé par
+     * défaut tant que les doublons appareil/OneDrive ne sont pas fusionnés : ces éléments restent
+     * visibles dans leurs albums OneDrive, les Favoris et les albums de l'utilisateur.
+     */
+    val showCloudInPhotos: Boolean = false,
 )
 
 /** Etat de l'indexation des médias locaux. */

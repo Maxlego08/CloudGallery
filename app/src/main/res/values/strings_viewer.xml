@@ -7,7 +7,8 @@
     <string name="viewer_play">Lire la vidéo</string>
     <string name="viewer_load_error">Impossible d\'afficher cette image.</string>
     <string name="viewer_cloud_only_title">Disponible uniquement sur OneDrive</string>
-    <string name="viewer_cloud_only_message">Ce fichier n\'est pas présent sur l\'appareil. Il pourra être affiché lorsque la synchronisation OneDrive sera disponible.</string>
+    <string name="viewer_cloud_only_message">Ce fichier n\'est pas présent sur l\'appareil et son aperçu OneDrive n\'a pas pu être chargé. Vérifiez la connexion à Internet et le compte OneDrive.</string>
+    <string name="viewer_cloud_only_preview">Aperçu OneDrive : l\'original sera disponible dans une prochaine version</string>
     <string name="viewer_delete_permanent_info">L\'élément sera supprimé définitivement.</string>
     <string name="viewer_rotate_failed">Impossible de faire pivoter cette image. Ce format n\'est peut-être pas pris en charge.</string>
     <string name="viewer_copy_saved">Copie enregistrée</string>

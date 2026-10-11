@@ -210,6 +210,7 @@ private fun DialogTextButton(
 /**
  * Boîte de saisie de texte One UI (création / renommage d'album…). Le texte initial est
  * entièrement sélectionné ; la confirmation est désactivée tant que la saisie est vide.
+ * [message] : texte facultatif affiché au-dessus du champ.
  */
 @Composable
 fun OneUiTextInputDialog(
@@ -219,6 +220,7 @@ fun OneUiTextInputDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     placeholder: String? = null,
+    message: String? = null,
 ) {
     val colors = OneUiTheme.colors
     var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -234,7 +236,7 @@ fun OneUiTextInputDialog(
         confirmLabel = confirmLabel,
         onConfirm = confirm,
         dismissLabel = stringResource(R.string.common_cancel),
-        message = null,
+        message = message,
         destructive = false,
         confirmEnabled = canConfirm,
         content = {

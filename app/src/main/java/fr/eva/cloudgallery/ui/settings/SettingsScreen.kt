@@ -41,8 +41,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.BuildConfig
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.model.ThemeMode
+import fr.eva.cloudgallery.ui.account.cloudAccountSummary
+import fr.eva.cloudgallery.ui.account.cloudSyncStatusText
 import fr.eva.cloudgallery.ui.components.OneUiBackButton
 import fr.eva.cloudgallery.ui.components.OneUiCard
 import fr.eva.cloudgallery.ui.components.OneUiCategoryHeader
@@ -59,11 +63,14 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAccount: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val indexState by viewModel.indexState.collectAsStateWithLifecycle()
+    val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val cloudSyncState by viewModel.cloudSyncState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
     val colors = OneUiTheme.colors
@@ -104,6 +111,10 @@ fun SettingsScreen(
                     SettingsContent(
                         settings = current,
                         indexState = indexState,
+                        cloudState = if (viewModel.cloudAvailable) cloudState else null,
+                        cloudSyncState = cloudSyncState,
+                        onOpenAccount = onOpenAccount,
+                        onShowCloudInPhotos = viewModel::setShowCloudInPhotos,
                         onThemeClick = { showThemeDialog = true },
                         onShowVideoDuration = viewModel::setShowVideoDuration,
                         onAutoPlay = viewModel::setAutoPlayVideos,
@@ -146,6 +157,10 @@ fun SettingsScreen(
 private fun SettingsContent(
     settings: AppSettings,
     indexState: IndexState,
+    cloudState: CloudAccountState?,
+    cloudSyncState: CloudSyncState,
+    onOpenAccount: () -> Unit,
+    onShowCloudInPhotos: (Boolean) -> Unit,
     onThemeClick: () -> Unit,
     onShowVideoDuration: (Boolean) -> Unit,
     onAutoPlay: (Boolean) -> Unit,
@@ -155,6 +170,34 @@ private fun SettingsContent(
 ) {
     val indent = OneUiTheme.dimens.cardPadding
     Column(Modifier.fillMaxWidth()) {
+        // Compte OneDrive : absent des builds sans configuration MSAL (cloudState null).
+        if (cloudState != null) {
+            OneUiCategoryHeader(stringResource(R.string.settings_section_account))
+            OneUiCard {
+                OneUiListItem(
+                    title = stringResource(R.string.common_onedrive),
+                    subtitle = cloudAccountSummary(cloudState),
+                    onClick = onOpenAccount,
+                )
+                // Etat de la synchronisation (information) : compte connecté ou session à renouveler.
+                if (cloudState is CloudAccountState.SignedIn || cloudState is CloudAccountState.NeedsReauth) {
+                    OneUiDivider(startIndent = indent)
+                    OneUiListItem(
+                        title = stringResource(R.string.settings_cloud_sync_state),
+                        subtitle = cloudSyncStatusText(cloudSyncState),
+                        trailing = if (cloudSyncState.running) RunningTrailing else null,
+                    )
+                }
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_show_cloud_in_photos),
+                    subtitle = stringResource(R.string.settings_show_cloud_in_photos_summary),
+                    checked = settings.showCloudInPhotos,
+                    onCheckedChange = onShowCloudInPhotos,
+                )
+            }
+        }
+
         OneUiCategoryHeader(stringResource(R.string.settings_section_appearance))
         OneUiCard {
             OneUiListItem(
@@ -216,12 +259,6 @@ private fun SettingsContent(
             OneUiListItem(
                 title = stringResource(R.string.app_name),
                 subtitle = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
-            )
-            OneUiDivider(startIndent = indent)
-            // Information uniquement : la connexion OneDrive n'existe pas encore (phase 3).
-            OneUiListItem(
-                title = stringResource(R.string.common_onedrive),
-                subtitle = stringResource(R.string.settings_onedrive_soon),
             )
         }
     }

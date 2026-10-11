@@ -1,9 +1,35 @@
+import java.io.StringReader
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+}
+
+// --- OneDrive (MSAL) ---------------------------------------------------------------------
+// Identifiant d'application Entra et empreinte de signature : lus depuis local.properties
+// (non versionné) ou, en priorité, depuis une propriété Gradle (-Pmsal.clientId=…,
+// ~/.gradle/gradle.properties). Jamais écrits en dur dans le dépôt. Valeurs absentes ou
+// invalides : le build réussit et la fonction OneDrive est masquée dans l'appli.
+val localProps = Properties().apply {
+    providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.orNull
+        ?.let { load(StringReader(it)) }
+}
+
+fun msalProp(key: String): String =
+    (providers.gradleProperty(key).orNull ?: localProps.getProperty(key)).orEmpty().trim()
+
+val msalClientId: String = msalProp("msal.clientId")
+    .takeIf { Regex("^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").matches(it) }
+    .orEmpty()
+val msalSignatureHash: String = msalProp("msal.signatureHash")
+    .takeIf { Regex("^[A-Za-z0-9+/]{27}=$").matches(it) }
+    .orEmpty()
+if (msalClientId.isEmpty() || msalSignatureHash.isEmpty()) {
+    logger.warn("MSAL non configuré (msal.clientId / msal.signatureHash) : OneDrive désactivé dans ce build")
 }
 
 android {
@@ -16,10 +42,16 @@ android {
         applicationId = "fr.eva.cloudgallery"
         minSdk = 36
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "MSAL_CLIENT_ID", "\"$msalClientId\"")
+        buildConfigField("String", "MSAL_SIGNATURE_HASH", "\"$msalSignatureHash\"")
+        // Toujours défini (sinon la fusion du manifeste échoue) ; chemin factice si non configuré,
+        // sans effet puisque la fonction est alors désactivée.
+        manifestPlaceholders["msalSignatureHash"] = msalSignatureHash.ifEmpty { "msal-not-configured" }
     }
 
     buildTypes {
@@ -40,6 +72,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    // Schémas Room exportés, lus par MigrationTestHelper dans les tests instrumentés.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
 }
 
@@ -86,6 +122,8 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.microsoft.msal)
+    implementation(libs.okhttp)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

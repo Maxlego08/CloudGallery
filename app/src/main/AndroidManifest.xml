@@ -50,6 +50,27 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
+
+        <!--
+           Retour de la connexion Microsoft (MSAL) : l'onglet de navigateur redirige vers
+           msauth://<applicationId>/<empreinte de signature>. Chemin NON encodé ici (il l'est dans
+           la configuration JSON). L'activité est fournie par MSAL ; seul le filtre est ajouté.
+        -->
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="msauth"
+                    android:host="${applicationId}"
+                    android:path="/${msalSignatureHash}" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

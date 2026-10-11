@@ -1,8 +1,11 @@
 package fr.eva.cloudgallery.ui.video
 
 import androidx.media3.common.PlaybackException
+import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import fr.eva.cloudgallery.domain.model.MediaDetails
+import fr.eva.cloudgallery.domain.model.MediaSourceInfo
 import fr.eva.cloudgallery.domain.model.MediaType
+import fr.eva.cloudgallery.domain.model.SourceKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -125,6 +128,25 @@ class VideoPlayerLogicTest {
             durationMs = 1000, sizeBytes = 1, orientation = 0, uri = null, isFavorite = false,
             sources = emptyList(),
         )
+        assertEquals(PlaybackSource.Unavailable, PlaybackSourceResolver.resolve(details))
+    }
+
+    @Test
+    fun `onedrive source alone is never played`() {
+        val details = MediaDetails(
+            id = 1, type = MediaType.VIDEO, displayName = "a.mp4", mimeType = "video/mp4",
+            dateTaken = 0, dateAdded = 0, dateModified = 0, width = 1920, height = 1080,
+            durationMs = 1000, sizeBytes = 1, orientation = 0, uri = null, isFavorite = false,
+            sources = listOf(
+                MediaSourceInfo(
+                    id = 1, kind = SourceKind.ONEDRIVE, externalId = "ITEM!1", uri = null, bucketKey = "onedrive:P",
+                    bucketName = "Photos", relativePath = "OneDrive/Photos/", sizeBytes = 1, dateModified = 0,
+                ),
+            ),
+            cloudThumb = CloudThumbRef("ITEM!1", "ctag"),
+        )
+        assertTrue(details.hasCloud)
+        assertFalse(details.hasLocal)
         assertEquals(PlaybackSource.Unavailable, PlaybackSourceResolver.resolve(details))
     }
 }

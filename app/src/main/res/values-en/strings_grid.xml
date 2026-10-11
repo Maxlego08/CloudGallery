@@ -23,6 +23,11 @@
         <item quantity="one">Deleting in %d step: confirm each system request.</item>
         <item quantity="other">Deleting in %d steps: confirm each system request.</item>
     </plurals>
+    <string name="grid_cloud_only_a11y">only on OneDrive</string>
+    <plurals name="grid_cloud_items_skipped">
+        <item quantity="one">%d item stored only on OneDrive isn\'t affected.</item>
+        <item quantity="other">%d items stored only on OneDrive aren\'t affected.</item>
+    </plurals>
     <plurals name="grid_share_limit">
         <item quantity="one">You can share up to %d item at a time.</item>
         <item quantity="other">You can share up to %d items at a time.</item>

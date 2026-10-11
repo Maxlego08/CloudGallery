@@ -119,14 +119,14 @@ class ViewerViewModel @Inject constructor(
     private var pendingAction: PendingAction? = null
 
     init {
-        // Tient la bande de miniatures à jour après une modification du média courant (rotation, favori).
+        // Tient la bande de miniatures à jour après une modification du média courant (rotation,
+        // favori, fichier local apparu ou retiré, nouveau contenu OneDrive).
         viewModelScope.launch {
             currentMedia.collect { media ->
                 if (media == null) return@collect
                 val cached = _summaries.value[media.id] ?: return@collect
-                if (cached.dateModified != media.dateModified || cached.isFavorite != media.isFavorite || cached.uri != media.uri) {
-                    _summaries.update { it + (media.id to cached.copy(dateModified = media.dateModified, isFavorite = media.isFavorite, uri = media.uri)) }
-                }
+                val refreshed = refreshedSummary(cached, media)
+                if (refreshed != cached) _summaries.update { it + (media.id to refreshed) }
             }
         }
     }
@@ -343,3 +343,16 @@ class ViewerViewModel @Inject constructor(
         const val KEY_CURRENT = "viewer_current_id"
     }
 }
+
+/**
+ * Résumé de la bande de miniatures mis à jour depuis les détails du média courant : tout ce qui
+ * change l'image affichée (version, fichier local, miniature OneDrive) et le favori.
+ */
+internal fun refreshedSummary(cached: MediaSummary, media: MediaDetails): MediaSummary = cached.copy(
+    dateModified = media.dateModified,
+    isFavorite = media.isFavorite,
+    uri = media.uri,
+    hasLocal = media.hasLocal,
+    hasCloud = media.hasCloud,
+    cloudThumb = media.cloudThumb,
+)

@@ -6,6 +6,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import fr.eva.cloudgallery.data.db.dao.AlbumDao
 import fr.eva.cloudgallery.data.db.dao.CachedFileDao
+import fr.eva.cloudgallery.data.db.dao.CloudFolderDao
 import fr.eva.cloudgallery.data.db.dao.DownloadTaskDao
 import fr.eva.cloudgallery.data.db.dao.FavoriteDao
 import fr.eva.cloudgallery.data.db.dao.MediaDao
@@ -16,6 +17,7 @@ import fr.eva.cloudgallery.data.db.dao.UserSettingDao
 import fr.eva.cloudgallery.data.db.entity.AlbumEntity
 import fr.eva.cloudgallery.data.db.entity.AlbumMediaEntity
 import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
+import fr.eva.cloudgallery.data.db.entity.CloudFolderEntity
 import fr.eva.cloudgallery.data.db.entity.DownloadTaskEntity
 import fr.eva.cloudgallery.data.db.entity.FavoriteEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
@@ -40,8 +42,9 @@ import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
         SyncCursorEntity::class,
         UserSettingEntity::class,
         PlaybackPositionEntity::class,
+        CloudFolderEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -54,6 +57,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userSettingDao(): UserSettingDao
     abstract fun cachedFileDao(): CachedFileDao
     abstract fun downloadTaskDao(): DownloadTaskDao
+    abstract fun cloudFolderDao(): CloudFolderDao
 
     companion object {
         const val NAME = "cloudgallery.db"
@@ -67,6 +71,25 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE media_source ADD COLUMN volumeName TEXT")
                 db.execSQL("ALTER TABLE media_source ADD COLUMN missingSince INTEGER")
                 db.execSQL("UPDATE sync_cursor SET cursor = NULL WHERE provider = 'mediastore'")
+            }
+        }
+
+        /**
+         * v3 : OneDrive. Identifiant et cTag de l'élément OneDrive dénormalisés dans `media`
+         * (miniatures sans jointure), et table des dossiers OneDrive. Aucune donnée OneDrive
+         * n'existe en v2 : rien à recopier. Les nouvelles colonnes de `media` sont recalculées
+         * par refreshSourceFlags.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN cloudItemId TEXT")
+                db.execSQL("ALTER TABLE media ADD COLUMN cloudCTag TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `cloud_folder` (`itemId` TEXT NOT NULL, `parentId` TEXT, " +
+                        "`name` TEXT NOT NULL, `isRoot` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`itemId`))",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_cloud_folder_parentId` ON `cloud_folder` (`parentId`)")
             }
         }
     }
