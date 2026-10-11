@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Couche données : messages d'erreur d'indexation et d'écriture. -->
+<resources>
+    <string name="data_error_no_permission">Autorisez l\'accès aux photos et vidéos pour afficher votre galerie.</string>
+    <string name="data_error_sync_failed">Échec de l\'indexation des médias : %1$s</string>
+    <string name="data_warning_mass_removal">De nombreux médias ont disparu d\'un coup : ils sont masqués mais conservés (favoris et albums inclus) pendant 30 jours.</string>
+    <string name="data_folder_unnamed">Sans nom</string>
+    <string name="data_error_invalid_angle">Angle de rotation invalide (multiple de 90° attendu).</string>
+    <string name="data_error_rotate_unsupported">La rotation sans perte n\'est possible que pour les images JPEG et WebP.</string>
+    <string name="data_error_write_denied">Autorisation de modification du fichier refusée.</string>
+    <string name="data_error_not_image">Seules les images peuvent être recadrées.</string>
+    <string name="data_error_decode">Impossible de lire le fichier.</string>
+    <string name="data_error_save">Impossible d\'enregistrer le fichier.</string>
+    <string name="data_error_copy_failed">Aucun fichier n\'a pu être copié.</string>
+</resources>

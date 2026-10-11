@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shell_tab_photos">Pictures</string>
+    <string name="shell_tab_albums">Albums</string>
+    <string name="shell_tab_menu">Menu</string>
+    <string name="shell_open_failed">Can\'t open this file: it isn\'t part of the device media library.</string>
+
+    <string name="perm_title">Your photos and videos</string>
+    <string name="perm_message">CloudGallery needs access to the photos and videos on this device to show them, organize them into albums and play them.</string>
+    <string name="perm_reason_browse">Browse your photos by date and album</string>
+    <string name="perm_reason_videos">Play your videos</string>
+    <string name="perm_reason_private">Everything stays on the device: nothing is uploaded</string>
+    <string name="perm_denied_message">Access was denied. Allow \"Photos and videos\" in the app settings.</string>
+    <string name="perm_open_settings">Open settings</string>
+    <string name="perm_allow">Allow access</string>
+    <string name="perm_partial_banner">Access limited to some photos</string>
+    <string name="perm_partial_manage">Manage</string>
+
+    <string name="menu_title">Menu</string>
+    <string name="menu_favorites">Favorites</string>
+    <string name="menu_videos">Videos</string>
+    <string name="menu_library">Library</string>
+    <string name="menu_sync_now">Sync now</string>
+
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_show_video_duration">Show video duration</string>
+    <string name="settings_autoplay_videos">Autoplay videos</string>
+    <string name="settings_autoplay_videos_summary">Start playback when a video is opened</string>
+    <string name="settings_section_delete">Deletion</string>
+    <string name="settings_use_trash">Use trash</string>
+    <string name="settings_use_trash_summary">Deleted items can be restored for 30 days from the Android trash.</string>
+    <string name="settings_confirm_delete">Confirm before deleting</string>
+    <string name="settings_section_library">Library</string>
+    <string name="settings_index_state">Indexing status</string>
+    <string name="settings_index_running">Indexing…</string>
+    <string name="settings_index_error">Indexing error: %1$s</string>
+    <string name="settings_index_last">Last updated: %1$s · %2$s</string>
+    <string name="settings_index_never">Library not indexed yet</string>
+    <string name="settings_reindex">Full re-index</string>
+    <string name="settings_reindex_summary">Re-reads every file on the device</string>
+    <string name="settings_reindex_title">Re-index the library?</string>
+    <string name="settings_reindex_message">Every file on the device will be read again. This may take a few minutes; your favorites and albums are kept.</string>
+    <string name="settings_reindex_confirm">Re-index</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_onedrive_soon">Available in a future version</string>
+</resources>

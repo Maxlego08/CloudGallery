@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lecteur vidéo (zone VIDEO). -->
+<resources>
+    <string name="video_play">Lire</string>
+    <string name="video_pause">Pause</string>
+    <string name="video_replay">Revoir</string>
+    <string name="video_rewind_10">Reculer de 10 secondes</string>
+    <string name="video_forward_10">Avancer de 10 secondes</string>
+    <string name="video_seek_back_seconds">-%d s</string>
+    <string name="video_seek_forward_seconds">+%d s</string>
+    <string name="video_seekbar">Position de lecture</string>
+    <string name="video_position_desc">%1$s sur %2$s</string>
+    <string name="video_volume">Volume</string>
+    <string name="video_mute">Couper le son</string>
+    <string name="video_unmute">Activer le son</string>
+    <string name="video_rotate">Pivoter l\'écran</string>
+    <string name="video_speed">Vitesse de lecture</string>
+    <string name="video_speed_normal">%s (normale)</string>
+    <string name="video_open_with_other_app">Ouvrir avec une autre application</string>
+    <string name="video_error_unsupported">Ce format vidéo n\'est pas pris en charge par le lecteur intégré</string>
+    <string name="video_error_corrupted">Cette vidéo semble endommagée et ne peut pas être lue par le lecteur intégré.</string>
+    <string name="video_error_not_accessible">Le fichier vidéo est introuvable ou inaccessible. Il a peut-être été déplacé ou supprimé.</string>
+    <string name="video_error_io">Impossible de lire le fichier vidéo.</string>
+    <string name="video_error_not_found">Cette vidéo n\'existe plus dans la galerie.</string>
+    <string name="video_error_cloud_only">Cette vidéo est uniquement sur OneDrive. La lecture en streaming n\'est pas encore disponible.</string>
+    <string name="video_error_other">La lecture de cette vidéo a échoué.</string>
+</resources>

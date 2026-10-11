@@ -1,0 +1,434 @@
+package fr.eva.cloudgallery.ui.grid
+
+import android.content.IntentSender
+import android.net.Uri
+import androidx.annotation.PluralsRes
+import androidx.annotation.StringRes
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
+import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.di.ApplicationScope
+import fr.eva.cloudgallery.di.IoDispatcher
+import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.MediaContext
+import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.domain.repository.AlbumRepository
+import fr.eva.cloudgallery.domain.repository.FavoritesRepository
+import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
+import fr.eva.cloudgallery.domain.repository.LocalMediaWriter
+import fr.eva.cloudgallery.domain.repository.MediaRepository
+import fr.eva.cloudgallery.domain.repository.SettingsRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.ZoneId
+import javax.inject.Inject
+
+/** Dépendances communes des écrans de grille (regroupées pour alléger les constructeurs Hilt). */
+class MediaGridDeps @Inject constructor(
+    val mediaRepository: MediaRepository,
+    val favoritesRepository: FavoritesRepository,
+    val albumRepository: AlbumRepository,
+    val settingsRepository: SettingsRepository,
+    val localMediaIndexer: LocalMediaIndexer,
+    val localMediaWriter: LocalMediaWriter,
+    @param:IoDispatcher val ioDispatcher: CoroutineDispatcher,
+    @param:ApplicationScope val applicationScope: CoroutineScope,
+)
+
+/** Message ponctuel à afficher (toast), résolu dans l'UI. */
+sealed interface GridMessage {
+    data class Text(@StringRes val resId: Int, val args: List<Any> = emptyList()) : GridMessage
+    data class Plural(@PluralsRes val resId: Int, val count: Int, val args: List<Any> = emptyList()) : GridMessage
+}
+
+/** Evénements ponctuels VM -> UI. */
+sealed interface GridEvent {
+    data class Share(val uris: List<Uri>, val mimeTypes: List<String?>) : GridEvent
+    data class LaunchDeleteRequest(val intentSender: IntentSender) : GridEvent
+    data class Message(val message: GridMessage) : GridEvent
+}
+
+/**
+ * Base commune des grilles (Photos, albums, favoris, vidéos) : données paginées avec en-têtes,
+ * niveau de zoom persistant, sélection et actions sur la sélection.
+ */
+abstract class MediaGridViewModel(
+    val mediaContext: MediaContext,
+    protected val deps: MediaGridDeps,
+) : ViewModel() {
+
+    /** Niveau de zoom enregistré pour cet écran. */
+    protected abstract fun zoomLevelOf(settings: AppSettings): Int
+
+    protected abstract suspend fun persistZoomLevel(level: Int)
+
+    private val zone: ZoneId = ZoneId.systemDefault()
+
+    val settings: StateFlow<AppSettings?> = deps.settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Valeur locale appliquée immédiatement, avant l'aller-retour DataStore. */
+    private val zoomOverride = MutableStateFlow<Int?>(null)
+
+    val zoomLevel: StateFlow<Int?> = combine(settings, zoomOverride) { s, override ->
+        override ?: s?.let { GridZoomLevels.clamp(zoomLevelOf(it)) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val grouping: Flow<GridGrouping> = zoomLevel.filterNotNull()
+        .map { GridZoomLevels.grouping(it) }
+        .distinctUntilChanged()
+
+    /**
+     * Portée des caches de pagination : les transformations (conversion, insertion des en-têtes
+     * sur toutes les pages en cache lors d'un changement de regroupement) tournent hors du thread
+     * principal ; l'UI collecte ensuite le résultat sur le thread principal.
+     */
+    private val pagingScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.Default)
+
+    private val basePaging: Flow<PagingData<GridItem.Media>> = deps.mediaRepository.pagedMedia(mediaContext)
+        .map { data -> data.map { GridItem.Media(it) } }
+        .cachedIn(pagingScope)
+
+    /**
+     * Grille paginée avec en-têtes de jour / mois. La pagination de base est mise en cache :
+     * un changement de regroupement ne recharge pas les pages, il réinsère seulement les en-têtes.
+     */
+    val gridItems: Flow<PagingData<GridItem>> = combine(basePaging, grouping) { data, g ->
+        val withHeaders: PagingData<GridItem> = data.insertSeparators { before: GridItem.Media?, after: GridItem.Media? ->
+            headerBetween(before?.media, after?.media, g, zone)
+        }
+        withHeaders
+    }.flowOn(Dispatchers.Default).cachedIn(pagingScope)
+
+    val count: StateFlow<Int?> = deps.mediaRepository.observeCount(mediaContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _selection = MutableStateFlow<Set<Long>>(emptySet())
+    val selection: StateFlow<Set<Long>> = _selection.asStateFlow()
+
+    private val _selectionMode = MutableStateFlow(false)
+    val selectionMode: StateFlow<Boolean> = _selectionMode.asStateFlow()
+
+    val allSelected: StateFlow<Boolean> = combine(_selection, count) { sel, c ->
+        c != null && c > 0 && sel.size >= c
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val _events = Channel<GridEvent>(Channel.BUFFERED)
+    val events: Flow<GridEvent> = _events.receiveAsFlow()
+
+    /**
+     * Identifiants complets (base de données) des jours dont l'en-tête a été touché : la pagination
+     * ne charge qu'une partie d'un grand jour, l'état de la case ne peut donc pas en dépendre seul.
+     */
+    private val _dayIds = MutableStateFlow<Map<Long, List<Long>>>(emptyMap())
+    val dayIds: StateFlow<Map<Long, List<Long>>> = _dayIds.asStateFlow()
+
+    /** Suppression découpée en lots (une confirmation système par lot). */
+    private val pendingDeleteBatches = ArrayDeque<List<Uri>>()
+    private var pendingDeleteToTrash = true
+    private var completedDeleteBatches = 0
+
+    init {
+        // Contenu modifié (ajout, suppression) : les listes par jour en cache ne sont plus fiables.
+        viewModelScope.launch {
+            deps.mediaRepository.observeCount(mediaContext).collect { _dayIds.value = emptyMap() }
+        }
+    }
+
+    // --- Zoom ---
+
+    fun onZoomChange(delta: Int) {
+        val current = zoomLevel.value ?: return
+        val next = GridZoomLevels.step(current, delta)
+        if (next == current) return
+        zoomOverride.value = next
+        viewModelScope.launch { runCatching { persistZoomLevel(next) } }
+    }
+
+    // --- Sélection ---
+
+    fun enterSelectionMode() {
+        _selectionMode.value = true
+    }
+
+    fun exitSelectionMode() {
+        _selectionMode.value = false
+        _selection.value = emptySet()
+        _dayIds.value = emptyMap()
+    }
+
+    fun toggle(id: Long) {
+        _selection.update { if (id in it) it - id else it + id }
+    }
+
+    /** Appui long : entre en mode sélection avec cet élément, ou bascule son état. */
+    fun onLongPress(id: Long) {
+        if (!_selectionMode.value) {
+            _selectionMode.value = true
+            _selection.value = setOf(id)
+        } else {
+            toggle(id)
+        }
+    }
+
+    fun setSelected(ids: Collection<Long>, selected: Boolean) {
+        if (ids.isEmpty()) return
+        _selectionMode.value = true
+        _selection.update { if (selected) it + ids else it - ids.toSet() }
+    }
+
+    /**
+     * En-tête de jour touché en mode sélection : sélectionne (ou désélectionne si tout l'est déjà)
+     * TOUS les médias du jour, lus en base, y compris ceux que la pagination n'a pas encore chargés.
+     */
+    fun toggleDay(header: GridItem.Header) {
+        if (header.grouping != GridGrouping.DAY) return
+        viewModelScope.launch {
+            val (start, end) = periodBoundsMs(header.epochDay, header.grouping, zone)
+            val ids = try {
+                deps.mediaRepository.idsInPeriod(mediaContext, start, end)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                toast(R.string.common_error_generic)
+                return@launch
+            }
+            if (ids.isEmpty()) return@launch
+            _dayIds.update { it + (header.epochDay to ids) }
+            val selected = _selection.value
+            setSelected(ids, !ids.all { it in selected })
+        }
+    }
+
+    /**
+     * Fin d'un glisser de sélection : la plage entre [anchor] et [end] est résolue en base pour
+     * inclure les éléments que la pagination n'avait pas encore chargés pendant le geste.
+     */
+    fun finishDragSelect(anchor: MediaSummary, end: MediaSummary, select: Boolean) {
+        if (anchor.id == end.id) return
+        viewModelScope.launch {
+            val ids = try {
+                deps.mediaRepository.idsBetween(mediaContext, anchor, end)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@launch
+            }
+            if (ids.isNotEmpty()) setSelected(ids, select)
+        }
+    }
+
+    fun toggleAll() {
+        viewModelScope.launch {
+            if (allSelected.value) {
+                _selection.value = emptySet()
+            } else {
+                val ids = withContext(deps.ioDispatcher) {
+                    deps.mediaRepository.observeMediaIds(mediaContext).first()
+                }
+                _selection.value = ids.toSet()
+            }
+        }
+    }
+
+    // --- Actions ---
+
+    protected fun emit(event: GridEvent) {
+        _events.trySend(event)
+    }
+
+    protected fun toast(@StringRes resId: Int, vararg args: Any) {
+        emit(GridEvent.Message(GridMessage.Text(resId, args.toList())))
+    }
+
+    protected suspend fun selectedSummaries(ids: Collection<Long> = _selection.value): List<MediaSummary> =
+        withContext(deps.ioDispatcher) {
+            ids.toList().chunked(SQL_CHUNK).flatMap { deps.mediaRepository.getSummaries(it) }
+        }
+
+    /** Médias sélectionnés disposant d'une URI locale ; signale les éléments uniquement distants. */
+    private suspend fun localSelection(): List<MediaSummary> {
+        val all = selectedSummaries()
+        val local = all.filter { it.uri != null }
+        if (local.size < all.size) toast(R.string.common_cloud_only_not_supported)
+        return local
+    }
+
+    fun share() {
+        viewModelScope.launch {
+            val local = localSelection()
+            if (local.isEmpty()) return@launch
+            if (local.size > MAX_SHARE) {
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_share_limit, MAX_SHARE, listOf(MAX_SHARE))))
+                return@launch
+            }
+            emit(GridEvent.Share(local.mapNotNull { it.uri }, local.map { it.mimeType }))
+            exitSelectionMode()
+        }
+    }
+
+    /** Ajoute la sélection aux favoris, ou l'en retire si tous les éléments y sont déjà. */
+    fun toggleFavorite() {
+        viewModelScope.launch {
+            val ids = _selection.value
+            if (ids.isEmpty()) return@launch
+            val summaries = selectedSummaries(ids)
+            val allFavorite = summaries.isNotEmpty() && summaries.all { it.isFavorite }
+            val ok = withContext(deps.ioDispatcher) {
+                runCatching { deps.favoritesRepository.setFavorite(ids, !allFavorite) }.isSuccess
+            }
+            when {
+                !ok -> toast(R.string.common_error_generic)
+                allFavorite -> toast(R.string.grid_favorites_removed)
+                else -> toast(R.string.grid_favorites_added)
+            }
+            if (ok) exitSelectionMode()
+        }
+    }
+
+    fun addToAlbum(albumId: Long) {
+        viewModelScope.launch {
+            val ids = _selection.value
+            if (ids.isEmpty()) return@launch
+            val ok = withContext(deps.ioDispatcher) {
+                runCatching { deps.albumRepository.addToAlbum(albumId, ids) }.isSuccess
+            }
+            if (ok) {
+                toast(R.string.grid_added_to_album)
+                exitSelectionMode()
+            } else {
+                toast(R.string.common_error_generic)
+            }
+        }
+    }
+
+    /**
+     * Prépare la demande système de suppression (corbeille ou définitive selon les réglages).
+     * Une grande sélection est découpée en lots : toutes les URI d'une demande transitent dans une
+     * seule transaction Binder (~1 Mo). Chaque lot reste confirmé par la boîte de dialogue système.
+     */
+    fun requestDelete() {
+        viewModelScope.launch {
+            if (pendingDeleteBatches.isNotEmpty()) return@launch
+            val local = localSelection()
+            if (local.isEmpty()) return@launch
+            pendingDeleteToTrash = settings.value?.useTrash ?: true
+            val batches = local.mapNotNull { it.uri }.chunked(MAX_DELETE_BATCH)
+            if (batches.isEmpty()) return@launch
+            completedDeleteBatches = 0
+            pendingDeleteBatches.addAll(batches)
+            if (batches.size > 1) {
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_delete_batches, batches.size, listOf(batches.size))))
+            }
+            launchNextDeleteBatch()
+        }
+    }
+
+    private suspend fun launchNextDeleteBatch() {
+        val batch = pendingDeleteBatches.removeFirstOrNull() ?: return finishDelete()
+        val toTrash = pendingDeleteToTrash
+        val sender = withContext(deps.ioDispatcher) {
+            runCatching { deps.localMediaWriter.createDeleteRequest(batch, toTrash) }.getOrNull()
+        }
+        if (sender != null) {
+            emit(GridEvent.LaunchDeleteRequest(sender))
+        } else {
+            pendingDeleteBatches.clear()
+            toast(R.string.common_error_generic)
+            finishDelete()
+        }
+    }
+
+    private fun finishDelete() {
+        if (completedDeleteBatches > 0) {
+            exitSelectionMode()
+            resync()
+        }
+        completedDeleteBatches = 0
+    }
+
+    fun onDeleteResult(granted: Boolean) {
+        if (!granted) {
+            // Refus : on s'arrête là (les lots déjà confirmés restent supprimés).
+            pendingDeleteBatches.clear()
+            finishDelete()
+            return
+        }
+        completedDeleteBatches++
+        if (pendingDeleteBatches.isEmpty()) {
+            finishDelete()
+        } else {
+            viewModelScope.launch { launchNextDeleteBatch() }
+        }
+    }
+
+    /** Copie les fichiers locaux sélectionnés vers « Pictures/<nom>/ ». */
+    fun copyToFolder(folderName: String) {
+        val clean = sanitizeFolderName(folderName)
+        if (clean.isEmpty()) {
+            toast(R.string.grid_copy_invalid_name)
+            return
+        }
+        viewModelScope.launch {
+            val local = localSelection()
+            if (local.isEmpty()) return@launch
+            val path = "Pictures/$clean/"
+            val result = withContext(deps.ioDispatcher) {
+                runCatching { deps.localMediaWriter.copyToFolder(local.mapNotNull { it.uri }, path) }
+                    .getOrElse { Result.failure(it) }
+            }
+            result.onSuccess { copied ->
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_copy_done, copied, listOf(copied, path))))
+                exitSelectionMode()
+                resync()
+            }.onFailure {
+                toast(R.string.grid_copy_failed)
+            }
+        }
+    }
+
+    /** Relance l'indexation après une écriture (survit à la fermeture de l'écran). */
+    protected fun resync() {
+        deps.applicationScope.launch(deps.ioDispatcher) {
+            runCatching { deps.localMediaIndexer.sync() }
+        }
+    }
+
+    companion object {
+        /** Limite de variables SQLite par requête : on découpe les listes d'identifiants. */
+        private const val SQL_CHUNK = 500
+
+        /** Au-delà, l'intent de partage dépasse la taille maximale d'une transaction Binder. */
+        const val MAX_SHARE = 500
+
+        /** URI par demande de suppression système (une transaction Binder par demande). */
+        const val MAX_DELETE_BATCH = 1_000
+
+        /** Nom de dossier sûr pour MediaStore (pas de séparateurs ni caractères réservés). */
+        fun sanitizeFolderName(name: String): String =
+            name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "").trim().trim('.').trim()
+    }
+}

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Coquille de l'appli : onglets, autorisations, Menu, Paramètres. -->
+<resources>
+    <!-- Onglets -->
+    <string name="shell_tab_photos">Photos</string>
+    <string name="shell_tab_albums">Albums</string>
+    <string name="shell_tab_menu">Menu</string>
+    <string name="shell_open_failed">Impossible d\'ouvrir ce fichier : il ne fait pas partie de la bibliothèque multimédia de l\'appareil.</string>
+
+    <!-- Autorisations -->
+    <string name="perm_title">Vos photos et vidéos</string>
+    <string name="perm_message">CloudGallery a besoin d\'accéder aux photos et vidéos de l\'appareil pour les afficher, les classer en albums et les lire.</string>
+    <string name="perm_reason_browse">Parcourir vos photos par date et par album</string>
+    <string name="perm_reason_videos">Lire vos vidéos</string>
+    <string name="perm_reason_private">Tout reste sur l\'appareil : rien n\'est envoyé en ligne</string>
+    <string name="perm_denied_message">L\'accès a été refusé. Autorisez « Photos et vidéos » dans les paramètres de l\'application.</string>
+    <string name="perm_open_settings">Ouvrir les paramètres</string>
+    <string name="perm_allow">Autoriser l\'accès</string>
+    <string name="perm_partial_banner">Accès limité à certaines photos</string>
+    <string name="perm_partial_manage">Gérer</string>
+
+    <!-- Menu -->
+    <string name="menu_title">Menu</string>
+    <string name="menu_favorites">Favoris</string>
+    <string name="menu_videos">Vidéos</string>
+    <string name="menu_library">Bibliothèque</string>
+    <string name="menu_sync_now">Synchroniser maintenant</string>
+
+    <!-- Paramètres -->
+    <string name="settings_section_appearance">Apparence</string>
+    <string name="settings_theme">Thème</string>
+    <string name="settings_theme_system">Système</string>
+    <string name="settings_theme_light">Clair</string>
+    <string name="settings_theme_dark">Sombre</string>
+    <string name="settings_section_display">Affichage</string>
+    <string name="settings_show_video_duration">Afficher la durée des vidéos</string>
+    <string name="settings_autoplay_videos">Lecture automatique des vidéos</string>
+    <string name="settings_autoplay_videos_summary">Lancer la lecture à l\'ouverture d\'une vidéo</string>
+    <string name="settings_section_delete">Suppression</string>
+    <string name="settings_use_trash">Utiliser la corbeille</string>
+    <string name="settings_use_trash_summary">Les éléments supprimés restent récupérables pendant 30 jours dans la corbeille Android.</string>
+    <string name="settings_confirm_delete">Confirmer avant suppression</string>
+    <string name="settings_section_library">Bibliothèque</string>
+    <string name="settings_index_state">État de l\'indexation</string>
+    <string name="settings_index_running">Indexation en cours…</string>
+    <string name="settings_index_error">Erreur d\'indexation : %1$s</string>
+    <string name="settings_index_last">Dernière mise à jour : %1$s · %2$s</string>
+    <string name="settings_index_never">Bibliothèque pas encore indexée</string>
+    <string name="settings_reindex">Réindexer complètement</string>
+    <string name="settings_reindex_summary">Relit tous les fichiers de l\'appareil</string>
+    <string name="settings_reindex_title">Réindexer la bibliothèque ?</string>
+    <string name="settings_reindex_message">Tous les fichiers de l\'appareil seront relus. Cela peut prendre quelques minutes ; vos favoris et albums sont conservés.</string>
+    <string name="settings_reindex_confirm">Réindexer</string>
+    <string name="settings_section_about">À propos</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_onedrive_soon">Disponible dans une prochaine version</string>
+</resources>

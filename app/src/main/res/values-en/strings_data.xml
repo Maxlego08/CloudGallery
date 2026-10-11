@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Data layer: indexing and write error messages. -->
+<resources>
+    <string name="data_error_no_permission">Allow access to photos and videos to show your gallery.</string>
+    <string name="data_error_sync_failed">Media indexing failed: %1$s</string>
+    <string name="data_warning_mass_removal">Many items disappeared at once: they are hidden but kept (with favourites and albums) for 30 days.</string>
+    <string name="data_folder_unnamed">Unnamed</string>
+    <string name="data_error_invalid_angle">Invalid rotation angle (multiple of 90° expected).</string>
+    <string name="data_error_rotate_unsupported">Lossless rotation is only possible for JPEG and WebP images.</string>
+    <string name="data_error_write_denied">Permission to modify the file was denied.</string>
+    <string name="data_error_not_image">Only images can be cropped.</string>
+    <string name="data_error_decode">Unable to read the file.</string>
+    <string name="data_error_save">Unable to save the file.</string>
+    <string name="data_error_copy_failed">No file could be copied.</string>
+</resources>

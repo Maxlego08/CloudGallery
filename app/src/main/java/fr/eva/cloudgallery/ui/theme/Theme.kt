@@ -1,58 +1,129 @@
 package fr.eva.cloudgallery.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import fr.eva.cloudgallery.domain.model.ThemeMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+@Immutable
+data class OneUiDimens(
+    val screenPadding: Dp = 24.dp,
+    val cardPadding: Dp = 20.dp,
+    val cardRadius: Dp = 26.dp,
+    val sheetRadius: Dp = 26.dp,
+    val dialogRadius: Dp = 26.dp,
+    val thumbnailSpacing: Dp = 2.dp,
+    val albumCoverRadius: Dp = 16.dp,
+    val listItemMinHeight: Dp = 60.dp,
+    val bottomBarHeight: Dp = 64.dp,
+    val actionBarHeight: Dp = 64.dp,
+    val appBarHeight: Dp = 56.dp,
+    /** Hauteur de la zone de grand titre (≈ 38 % de l'écran sur One UI, bornée). */
+    val largeTitleMinHeight: Dp = 180.dp,
+    val largeTitleMaxHeight: Dp = 300.dp,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+private val LocalOneUiColors = staticCompositionLocalOf { LightOneUiColors }
+private val LocalOneUiTypography = staticCompositionLocalOf { OneUiTypography() }
+private val LocalOneUiDimens = staticCompositionLocalOf { OneUiDimens() }
+private val LocalOneUiIsDark = staticCompositionLocalOf { false }
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
+/** Accès aux jetons du thème : `OneUiTheme.colors.accent`, etc. */
+object OneUiTheme {
+    val colors: OneUiColors
+        @Composable @ReadOnlyComposable get() = LocalOneUiColors.current
+    val typography: OneUiTypography
+        @Composable @ReadOnlyComposable get() = LocalOneUiTypography.current
+    val dimens: OneUiDimens
+        @Composable @ReadOnlyComposable get() = LocalOneUiDimens.current
 
+    /** Thème de l'appli (réglage Clair / Sombre / Système), pas forcément celui du système. */
+    val isDark: Boolean
+        @Composable @ReadOnlyComposable get() = LocalOneUiIsDark.current
+}
+
+@Composable
+fun isAppInDarkTheme(mode: ThemeMode): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+/**
+ * Thème propre au projet : jetons One UI exposés via [OneUiTheme], et un ColorScheme Material 3
+ * dérivé (pour les rares composants Material réutilisés : TextField, Switch…). Pas de couleurs dynamiques
+ * Material You afin de garder l'apparence Samsung Galerie.
+ */
 @Composable
 fun CloudGalleryTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val colors = if (darkTheme) DarkOneUiColors else LightOneUiColors
+    val scheme = if (darkTheme) {
+        darkColorScheme(
+            primary = colors.accent,
+            onPrimary = androidx.compose.ui.graphics.Color.White,
+            background = colors.background,
+            onBackground = colors.textPrimary,
+            surface = colors.background,
+            onSurface = colors.textPrimary,
+            surfaceVariant = colors.card,
+            onSurfaceVariant = colors.textSecondary,
+            surfaceContainer = colors.sheet,
+            surfaceContainerHigh = colors.sheet,
+            surfaceContainerHighest = colors.card,
+            surfaceContainerLow = colors.card,
+            outline = colors.divider,
+            outlineVariant = colors.divider,
+            error = colors.danger,
+        )
+    } else {
+        lightColorScheme(
+            primary = colors.accent,
+            onPrimary = androidx.compose.ui.graphics.Color.White,
+            background = colors.background,
+            onBackground = colors.textPrimary,
+            surface = colors.background,
+            onSurface = colors.textPrimary,
+            surfaceVariant = colors.groupedBackground,
+            onSurfaceVariant = colors.textSecondary,
+            surfaceContainer = colors.sheet,
+            surfaceContainerHigh = colors.sheet,
+            surfaceContainerHighest = colors.card,
+            surfaceContainerLow = colors.card,
+            outline = colors.divider,
+            outlineVariant = colors.divider,
+            error = colors.danger,
+        )
     }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val dimens = OneUiDimens()
+    CompositionLocalProvider(
+        LocalOneUiColors provides colors,
+        LocalOneUiTypography provides OneUiTypography(),
+        LocalOneUiDimens provides dimens,
+        LocalOneUiIsDark provides darkTheme,
+    ) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = Typography,
+            shapes = Shapes(
+                small = RoundedCornerShape(12.dp),
+                medium = RoundedCornerShape(18.dp),
+                large = RoundedCornerShape(dimens.cardRadius),
+                extraLarge = RoundedCornerShape(dimens.dialogRadius),
+            ),
+            content = content,
+        )
+    }
 }
