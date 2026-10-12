@@ -21,7 +21,7 @@
     <string name="storage_clear_cache">Vider le cache</string>
     <string name="storage_clear_cache_summary">Miniatures, aperçus et originaux (%1$s). Les copies hors ligne sont conservées.</string>
     <string name="storage_clear_title">Vider le cache ?</string>
-    <string name="storage_clear_message">Les miniatures, aperçus et originaux OneDrive enregistrés sur l\'appareil (%1$s) seront supprimés, puis rechargés au besoin. Les copies hors ligne sont conservées et aucun fichier n\'est supprimé de OneDrive ni du téléphone.</string>
+    <string name="storage_clear_message">Les miniatures, aperçus et originaux OneDrive enregistrés sur l\'appareil (%1$s) seront supprimés, puis rechargés au besoin, y compris la mise en cache de tout OneDrive (arrêtée, et « Garder à jour » désactivé). Les copies hors ligne sont conservées et aucun fichier n\'est supprimé de OneDrive ni du téléphone.</string>
     <string name="storage_clear_confirm">Vider</string>
     <string name="storage_cleared">Cache vidé</string>
     <string name="storage_clear_failed">Le cache n\'a pas pu être vidé entièrement</string>

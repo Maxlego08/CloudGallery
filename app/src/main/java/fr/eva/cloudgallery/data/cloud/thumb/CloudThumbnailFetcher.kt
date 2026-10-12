@@ -15,15 +15,20 @@ import fr.eva.cloudgallery.data.cloud.CloudAccessGuard
 import fr.eva.cloudgallery.data.cloud.CloudDataGeneration
 import fr.eva.cloudgallery.data.cloud.graph.GraphApi
 import fr.eva.cloudgallery.data.cloud.graph.GraphHttpException
+import fr.eva.cloudgallery.data.cloud.precache.CloudPrecacheStore
+import fr.eva.cloudgallery.data.cloud.precache.PrecacheKind
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.CloudAuthRequiredException
 import fr.eva.cloudgallery.domain.model.CloudThumbnail
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okio.Buffer
 import okio.BufferedSource
+import okio.FileSystem
+import okio.Path.Companion.toOkioPath
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,9 +55,11 @@ class CloudThumbnailKeyer internal constructor(private val env: CloudThumbnailFe
 /**
  * Charge une miniature Microsoft Graph (`/thumbnails/0/{size}/content`) :
  * 1. cache disque de l'ImageLoader (clé = élément + cTag + palier : fonctionne hors connexion) ;
- * 2. sinon, uniquement pour un compte connecté et si la requête autorise le réseau
+ * 2. mise en cache de tout OneDrive ([CloudPrecacheStore]) à une taille égale ou supérieure ;
+ * 3. sinon, uniquement pour un compte connecté et si la requête autorise le réseau
  *    (`networkCachePolicy`), téléchargement (4 au plus en parallèle, pause globale de Graph
- *    respectée) puis écriture dans le cache disque.
+ *    respectée) puis écriture dans le cache disque ; en échec, taille inférieure de la mise en
+ *    cache de tout OneDrive s'il y en a une.
  * Tout le travail (disque, réseau, MSAL) se fait sur le dispatcher d'E/S.
  */
 class CloudThumbnailFetcher private constructor(
@@ -71,13 +78,34 @@ class CloudThumbnailFetcher private constructor(
         if (options.diskCachePolicy.readEnabled && diskCache != null) {
             diskCache.openSnapshot(key)?.let { return@withContext it.toResult(diskCache, key, null, DataSource.DISK) }
         }
+        // Mise en cache de tout OneDrive : taille égale ou supérieure d'abord (aucune perte de netteté).
+        precached(bucket, previewSide, allowLower = false)?.let { return@withContext it }
+        try {
+            fetchFromNetwork(diskCache, bucket, previewSide, key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Hors connexion, compte indisponible, miniature introuvable : une taille inférieure
+            // mise en cache vaut mieux qu'une case vide.
+            precached(bucket, previewSide, allowLower = true) ?: throw e
+        }
+    }
+
+    /** Fichier de la mise en cache de tout OneDrive pour cette demande, null s'il n'y en a pas. */
+    private fun precached(bucket: Int, previewSide: Int?, allowLower: Boolean): FetchResult? {
+        val kind = if (previewSide != null) PrecacheKind.PREVIEW else PrecacheKind.GRID
+        val file = env.precache.find(data.ref, kind, previewSide ?: bucket, allowLower) ?: return null
+        return SourceFetchResult(ImageSource(file.toOkioPath(), FileSystem.SYSTEM), null, DataSource.DISK)
+    }
+
+    private suspend fun fetchFromNetwork(diskCache: DiskCache?, bucket: Int, previewSide: Int?, key: String): FetchResult {
         // Requête limitée au cache (copie hors ligne affichée) : jamais de téléchargement.
         if (!options.networkCachePolicy.readEnabled) throw CloudThumbnailUnavailableException()
         val generation = env.generation.value
         if (env.isUnavailable(key, generation)) throw CloudThumbnailUnavailableException()
         env.ensureSignedIn()
         val size = cloudThumbSize(bucket, previewSide)
-        env.permits.withPermit {
+        return env.permits.withPermit {
             val path = effectiveThumbPath(size, env.customSizesRejected)
             try {
                 download(path, key, generation, diskCache)
@@ -161,6 +189,7 @@ class CloudThumbnailFetcher private constructor(
         private val guard: CloudAccessGuard,
         internal val graph: dagger.Lazy<GraphApi>,
         internal val generation: CloudDataGeneration,
+        internal val precache: CloudPrecacheStore,
         @param:IoDispatcher internal val io: CoroutineDispatcher,
     ) : Fetcher.Factory<CloudThumbnail> {
 

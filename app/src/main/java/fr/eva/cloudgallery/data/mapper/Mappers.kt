@@ -90,5 +90,5 @@ fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(
  * Miniature OneDrive : version = cTag (contenu) ; à défaut (cTag absent), la date de
  * modification, pour qu'un changement de contenu invalide quand même le cache.
  */
-private fun cloudThumbRef(itemId: String?, cTag: String?, dateModified: Long): CloudThumbRef? =
+internal fun cloudThumbRef(itemId: String?, cTag: String?, dateModified: Long): CloudThumbRef? =
     itemId?.let { CloudThumbRef(it, cTag?.takeIf { tag -> tag.isNotBlank() } ?: "m$dateModified") }

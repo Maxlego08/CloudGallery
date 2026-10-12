@@ -21,7 +21,7 @@
     <string name="storage_clear_cache">Clear cache</string>
     <string name="storage_clear_cache_summary">Thumbnails, previews and originals (%1$s). Offline copies are kept.</string>
     <string name="storage_clear_title">Clear cache?</string>
-    <string name="storage_clear_message">OneDrive thumbnails, previews and originals stored on this device (%1$s) will be removed and downloaded again when needed. Offline copies are kept and no file is deleted from OneDrive or from the phone.</string>
+    <string name="storage_clear_message">OneDrive thumbnails, previews and originals stored on this device (%1$s) will be removed and downloaded again when needed, including the full OneDrive caching (stopped, and “Keep up to date” turned off). Offline copies are kept and no file is deleted from OneDrive or from the phone.</string>
     <string name="storage_clear_confirm">Clear</string>
     <string name="storage_cleared">Cache cleared</string>
     <string name="storage_clear_failed">The cache could not be fully cleared</string>

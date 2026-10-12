@@ -278,6 +278,7 @@ Déclarées dans `AndroidManifest.xml` :
 | `RUN_USER_INITIATED_JOBS` | Téléchargement des copies hors ligne par une tâche de transfert lancée par l'utilisateur (JobScheduler `setUserInitiated`), sans quota ni limite de durée |
 | `<queries>` `com.samsung.knox.securefolder` | Savoir si l'appli Dossier sécurisé Samsung est installée, pour proposer « Déplacer vers le Dossier sécurisé » (aucune API Knox utilisée) |
 | `POST_NOTIFICATIONS` | Progression des copies hors ligne. Demandée une seule fois, au premier « Conserver hors ligne » ; refusée, les téléchargements fonctionnent quand même (progression visible dans l'application et dans le Gestionnaire de tâches) |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | « Mettre en cache tout OneDrive » : travail WorkManager en service de premier plan (`SystemForegroundService` déclaré `dataSync`), avec notification de progression et « Annuler » |
 
 Les bibliothèques de MSAL ajoutent au manifeste fusionné la permission `NFC`, des fonctionnalités
 matérielles facultatives (NFC, hôte USB : clés de sécurité YubiKey) et quelques activités
@@ -663,6 +664,33 @@ jamais touchés, et aucune confirmation système n'est nécessaire.
 - Une page « Stockage » affichera l'espace occupé par niveau, le plafond et un bouton de vidage
   (fichiers non épinglés). Ce cache ne contient que des copies de fichiers OneDrive : les fichiers de
   l'utilisateur ne sont jamais concernés.
+
+### Mise en cache de tout OneDrive
+
+Paramètres > Stockage > « Mettre en cache tout OneDrive » : pour chaque élément dont la miniature
+vient de OneDrive (aucun fichier sur le téléphone), la **vignette de la grille** (palier du zoom
+par défaut pour cet écran) et l'**aperçu de la visionneuse** (même palier que la visionneuse en
+Wi-Fi, 1600 px pour les vidéos) sont téléchargés une fois. Les vidéos complètes et les originaux
+restent en ligne.
+
+- **Stockage** : `noBackupFilesDir/onedrive_precache/<2 car.>/<SHA-1(id + cTag)>.g<palier>` ou
+  `.p<côté>`, hors du cache Coil et de son plafond LRU, jamais évincé automatiquement. Le chargeur
+  de miniatures (`CloudThumbnailFetcher`) le lit après le cache Coil : taille égale ou supérieure
+  d'abord ; hors connexion ou en échec, une taille inférieure plutôt qu'une case vide.
+- **Exécution** : WorkManager (`OneDrivePrecacheWorker`, travail unique `onedrive_precache`), en
+  service de premier plan `dataSync` quand il est lancé appli visible (sinon travail ordinaire,
+  repris par WorkManager). Wi-Fi si le réglage « Wi-Fi uniquement » des copies hors ligne est actif,
+  batterie et stockage non faibles, 3 téléchargements en parallèle, pause globale de Graph respectée.
+  Reprise sans retéléchargement (fichiers déjà présents sautés) ; arrêt sous 2 Go libres (ou 5 % du
+  volume), à la déconnexion, et pause après 20 échecs réseau consécutifs ou une limitation Graph.
+  La limite de 6 h des services `dataSync` (Android 15) interrompt au pire un passage, repris ensuite.
+- **Estimation et progression** : nombre d'éléments à télécharger et taille estimée (≈ 35 Ko par
+  vignette, 350 Ko par aperçu) avant confirmation ; progression dans la page et la notification.
+- **Garder à jour** (désactivé par défaut) : après chaque synchronisation réussie, un passage est
+  ajouté en arrière-plan. Sinon, seul un nettoyage sans réseau retire les fichiers des éléments
+  disparus, modifiés (nouveau cTag) ou désormais présents sur le téléphone.
+- **Vidage** : « Vider le cache » arrête les passages, supprime tout et désactive « Garder à jour » ;
+  la déconnexion, la purge et le changement de compte suppriment aussi tout.
 
 ### Recherche (phase 6)
 
