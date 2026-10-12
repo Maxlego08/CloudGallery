@@ -298,6 +298,74 @@ class MigrationTest {
         }
     }
 
+    /** Source locale telle qu'en v5 (avant la signature d'empreinte). */
+    private fun SupportSQLiteDatabase.insertV5LocalSource() {
+        execSQL(
+            "INSERT INTO media_source (id, mediaId, kind, externalId, uri, bucketKey, bucketName, relativePath, " +
+                "sizeBytes, dateModified, generation) VALUES " +
+                "(1, 1, 'LOCAL', '7', 'content://media/external/images/media/7', 'local:1', 'Camera', 'DCIM/Camera/', 5, 10, 3)",
+        )
+    }
+
+    private fun SupportSQLiteDatabase.assertMigratedTo6() {
+        // Empreinte locale jamais calculée : signature nulle.
+        query("SELECT externalId, hashSignature FROM media_source WHERE id = 1").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("7", c.getString(0))
+            assertTrue(c.isNull(1))
+        }
+        // Index de recherche vide, utilisable (accents et casse ignorés par unicode61).
+        query("SELECT COUNT(*) FROM media_fts").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(0, c.getInt(0))
+        }
+        execSQL("INSERT INTO media_fts (rowid, name, folders, dates) VALUES (1, 'IMG_1.jpg', 'Caméra', 'août 2026')")
+        query("SELECT rowid FROM media_fts WHERE media_fts MATCH 'camera aout'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1L, c.getLong(0))
+        }
+    }
+
+    @Test
+    fun migrate5To6_addsHashSignatureAndSearchIndex() {
+        helper.createDatabase(TEST_DB, 5).apply {
+            insertLocalMedia()
+            insertV5LocalSource()
+            insertV4Folder()
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, AppDatabase.MIGRATION_5_6).use { db ->
+            db.assertMigratedTo5()
+            db.assertMigratedTo6()
+        }
+    }
+
+    @Test
+    fun migrate1To6_chainsMigrations() {
+        helper.createDatabase(TEST_DB, 1).apply {
+            insertLocalMedia()
+            insertV3CacheRows()
+            close()
+        }
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            6,
+            true,
+            AppDatabase.MIGRATION_1_2,
+            AppDatabase.MIGRATION_2_3,
+            AppDatabase.MIGRATION_3_4,
+            AppDatabase.MIGRATION_4_5,
+            AppDatabase.MIGRATION_5_6,
+        ).use { db ->
+            db.assertMigratedTo3()
+            db.assertMigratedTo4()
+            db.insertV4Folder()
+            db.assertMigratedTo5()
+            db.insertV5LocalSource()
+            db.assertMigratedTo6()
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
     }

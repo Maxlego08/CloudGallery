@@ -3,6 +3,8 @@ package fr.eva.cloudgallery.data.db.entity
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Fts4
+import androidx.room.FtsOptions
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import fr.eva.cloudgallery.domain.model.AlbumType
@@ -84,6 +86,13 @@ data class MediaSourceEntity(
     val cTag: String? = null,
     val sha1Hash: String? = null,
     val quickXorHash: String? = null,
+    /**
+     * Fichier local dont [quickXorHash] a été calculé par l'appli : signature du fichier à ce
+     * moment-là (taille, date de modification, génération MediaStore, voir `localHashSignature`).
+     * Une signature différente de l'état courant rend l'empreinte périmée. Null : jamais calculée
+     * (toujours null pour OneDrive, dont l'empreinte vient de Graph).
+     */
+    val hashSignature: String? = null,
     /** VOLUME_NAME MediaStore (ex. « external_primary » ou volume amovible) ; null si inconnu. */
     val volumeName: String? = null,
     /**
@@ -92,6 +101,21 @@ data class MediaSourceEntity(
      * est masquée mais conservée, avec favoris et albums, jusqu'à confirmation de sa disparition.
      */
     val missingSince: Long? = null,
+)
+
+/**
+ * Index de recherche plein texte (FTS4, tokeniseur unicode61 : casse et accents ignorés) d'un
+ * média logique : [rowId] = `media.id`. Tenu à jour par la couche données (pas de clé étrangère
+ * possible sur une table virtuelle) : nom du fichier, noms des dossiers de ses sources visibles,
+ * libellés de date (année, mois en toutes lettres…).
+ */
+@Fts4(tokenizer = FtsOptions.TOKENIZER_UNICODE61)
+@Entity(tableName = "media_fts")
+data class MediaFtsEntity(
+    @PrimaryKey @ColumnInfo(name = "rowid") val rowId: Long,
+    val name: String,
+    val folders: String,
+    val dates: String,
 )
 
 @Entity(

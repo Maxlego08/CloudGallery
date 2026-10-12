@@ -23,6 +23,8 @@ import fr.eva.cloudgallery.domain.model.KeepOfflineResult
 import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
+import fr.eva.cloudgallery.domain.model.SpaceSaverCandidate
+import fr.eva.cloudgallery.domain.model.SpaceSaverList
 import fr.eva.cloudgallery.domain.model.StorageUsage
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -86,6 +88,14 @@ interface AlbumRepository {
     suspend fun addToAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun removeFromAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun setPinned(albumId: Long, pinned: Boolean)
+}
+
+/** Recherches récentes (sur l'appareil seulement), la plus récente en tête. */
+interface SearchHistoryRepository {
+    val recent: Flow<List<String>>
+    suspend fun add(query: String)
+    suspend fun remove(query: String)
+    suspend fun clear()
 }
 
 /** Indexation incrémentale de MediaStore vers la base Room. */
@@ -347,4 +357,16 @@ interface PlaybackPositionRepository {
     suspend fun get(mediaId: Long): Long
     suspend fun save(mediaId: Long, positionMs: Long, durationMs: Long)
     suspend fun clear(mediaId: Long)
+}
+
+/**
+ * Economiseur d'espace : copies locales déjà sur OneDrive (empreinte et taille identiques),
+ * jamais supprimées sans revue, confirmation et dialogue système ; toujours vers la corbeille.
+ */
+interface SpaceSaverRepository {
+    /** Copies proposées (dispatcher d'E/S). */
+    suspend fun candidates(): SpaceSaverList
+
+    /** Copies revues encore supprimables, relues en base juste avant la demande. */
+    suspend fun revalidate(reviewed: List<SpaceSaverCandidate>): List<SpaceSaverCandidate>
 }

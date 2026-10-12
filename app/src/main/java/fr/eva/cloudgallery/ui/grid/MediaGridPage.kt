@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,6 +90,10 @@ private const val LARGE_TITLE_KEY = "large_title"
  * @param albumActionOverride remplace « Ajouter à l'album » dans la barre (l'action passe dans « Plus »).
  * @param favoriteActionOverride remplace l'action Favori par défaut.
  * @param emptyAction boutons de l'état vide (hors indexation en cours).
+ * @param topBarActions icônes ajoutées à la barre supérieure, avant le menu « Plus ».
+ * @param topBar remplace la barre supérieure hors mode sélection (ex. champ de recherche) ; elle
+ *   reçoit le modificateur qui la place en haut et applique elle-même l'inset de la barre d'état.
+ * @param largeTitle faux : pas de grand titre, une ligne discrète avec le nombre d'éléments.
  */
 @Composable
 fun MediaGridPage(
@@ -105,6 +112,9 @@ fun MediaGridPage(
     favoriteActionOverride: GridExtraAction? = null,
     isIndexing: Boolean = false,
     emptyAction: (@Composable () -> Unit)? = null,
+    topBarActions: @Composable RowScope.() -> Unit = {},
+    topBar: (@Composable (Modifier) -> Unit)? = null,
+    largeTitle: Boolean = true,
 ) {
     val colors = OneUiTheme.colors
     val dimens = OneUiTheme.dimens
@@ -168,7 +178,9 @@ fun MediaGridPage(
     val onZoomChange = remember(viewModel) { { delta: Int -> viewModel.onZoomChange(delta) } }
 
     val subtitle = count?.let { pluralStringResource(R.plurals.common_items_count, it, it) }
-    val header = remember(title, subtitle) { largeTitleItem(title, subtitle) }
+    val header = remember(title, subtitle, largeTitle) {
+        if (largeTitle) largeTitleItem(title, subtitle) else compactCountItem(subtitle)
+    }
 
     // Le petit titre apparaît quand le grand titre quitte l'écran.
     val titleAlpha by rememberCollapsedTitleAlpha(gridState)
@@ -181,7 +193,7 @@ fun MediaGridPage(
             if (isEmpty) {
                 Column(Modifier.fillMaxSize()) {
                     Spacer(Modifier.height(gridTop))
-                    OneUiLargeTitleHeader(title = title, subtitle = null)
+                    if (largeTitle) OneUiLargeTitleHeader(title = title, subtitle = null)
                     EmptyState(
                         icon = emptyIcon,
                         title = if (isIndexing) stringResource(R.string.common_loading) else emptyTitle,
@@ -222,6 +234,8 @@ fun MediaGridPage(
                 onToggleAll = viewModel::toggleAll,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
+        } else if (topBar != null) {
+            topBar(Modifier.align(Alignment.TopCenter))
         } else {
             OneUiTopBar(
                 title = title,
@@ -229,6 +243,7 @@ fun MediaGridPage(
                 navigationIcon = navigationIcon,
                 modifier = Modifier.align(Alignment.TopCenter),
                 actions = {
+                    topBarActions()
                     if (menuItems.isNotEmpty()) {
                         Box {
                             OneUiIconButton(
@@ -409,6 +424,18 @@ fun MediaGridPage(
 private fun largeTitleItem(title: String, subtitle: String?): LazyGridScope.() -> Unit = {
     item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
         OneUiLargeTitleHeader(title = title, subtitle = subtitle)
+    }
+}
+
+/** Ligne discrète en tête de grille (sans grand titre) : nombre d'éléments. */
+private fun compactCountItem(subtitle: String?): LazyGridScope.() -> Unit = {
+    item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
+        Text(
+            text = subtitle.orEmpty(),
+            style = OneUiTheme.typography.listSubtitle,
+            color = OneUiTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = OneUiTheme.dimens.screenPadding, vertical = 8.dp),
+        )
     }
 }
 

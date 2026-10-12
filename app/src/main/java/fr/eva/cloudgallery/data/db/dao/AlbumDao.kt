@@ -11,7 +11,8 @@ import fr.eva.cloudgallery.domain.model.AlbumType
 import kotlinx.coroutines.flow.Flow
 
 /*
- * members : couples (albumId, mediaId) des albums-dossiers et des albums virtuels.
+ * members : couples (albumId, mediaId) des albums-dossiers (sources visibles, voir
+ *           FOLDER_MEMBER_SOURCE) et des albums virtuels.
  * stats   : nombre de médias, date la plus récente et média le plus récent (colonne « nue »
  *           associée à MAX(), comportement documenté de SQLite) pour la couverture.
  */
@@ -19,7 +20,7 @@ private const val ALBUM_ROWS = """
     WITH members AS (
         SELECT a.id AS albumId, s.mediaId AS mediaId
         FROM album a JOIN media_source s ON s.bucketKey = a.sourceKey
-        WHERE a.sourceKey IS NOT NULL
+        WHERE a.sourceKey IS NOT NULL AND $FOLDER_MEMBER_SOURCE
         UNION
         SELECT am.albumId AS albumId, am.mediaId AS mediaId FROM album_media am
     ),

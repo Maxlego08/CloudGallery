@@ -7,7 +7,8 @@
    l'appareil, il serait illisible une fois restauré. Il faut simplement se reconnecter.
    La clé de chiffrement MSAL enveloppée par le Keystore (app_<paquet>/adalks, répertoire
    utilisé uniquement par MSAL) est exclue pour la même raison, ainsi que l'état de
-   synchronisation OneDrive (cloud_sync.xml), lié à l'index local.
+   synchronisation OneDrive (cloud_sync.xml), lié à l'index local. Les recherches récentes
+   (search_history.xml) restent sur l'appareil.
    La configuration MSAL générée vit dans noBackupFilesDir (jamais sauvegardé).
    Les copies hors ligne OneDrive (files/offline/) sont exclues : volumineuses, liées à l'index
    local, et téléchargeables de nouveau.
@@ -16,6 +17,7 @@
     <exclude domain="database" path="." />
     <exclude domain="root" path="app_fr.eva.cloudgallery/" />
     <exclude domain="sharedpref" path="cloud_sync.xml" />
+    <exclude domain="sharedpref" path="search_history.xml" />
     <exclude domain="file" path="offline/" />
     <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.xml" />
     <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.foci.xml" />

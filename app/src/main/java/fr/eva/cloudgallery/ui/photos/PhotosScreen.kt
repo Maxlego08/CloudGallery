@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +23,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.MediaContext
+import fr.eva.cloudgallery.ui.components.OneUiIconButton
 import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiPillButton
 import fr.eva.cloudgallery.ui.grid.MediaGridPage
@@ -39,7 +41,8 @@ data class NoLocalAccessEmpty(
 /**
  * Onglet Photos : chronologie de tous les médias, groupée par jour ou par mois selon le zoom.
  * La position de défilement est conservée (état sauvegardable + pagination mise en cache dans le VM).
- * [noLocalAccess] : usage « OneDrive seul » (état vide adapté).
+ * [noLocalAccess] : usage « OneDrive seul » (état vide adapté). [onOpenSearch] : icône de
+ * recherche dans la barre supérieure (absente si null).
  */
 @Composable
 fun PhotosScreen(
@@ -49,6 +52,7 @@ fun PhotosScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     noLocalAccess: NoLocalAccessEmpty? = null,
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     val viewModel: PhotosViewModel = hiltViewModel()
     val gridState = rememberSaveable(saver = LazyGridState.Saver) { LazyGridState() }
@@ -111,6 +115,15 @@ fun PhotosScreen(
         menuItems = menuItems,
         isIndexing = indexing,
         emptyAction = emptyAction,
+        topBarActions = {
+            if (onOpenSearch != null) {
+                OneUiIconButton(
+                    icon = Icons.Outlined.Search,
+                    contentDescription = stringResource(R.string.search_open),
+                    onClick = onOpenSearch,
+                )
+            }
+        },
         modifier = modifier,
     )
 }

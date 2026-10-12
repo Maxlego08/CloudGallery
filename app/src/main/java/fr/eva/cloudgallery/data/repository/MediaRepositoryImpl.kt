@@ -13,6 +13,7 @@ import fr.eva.cloudgallery.data.cloud.offline.OfflineStore
 import fr.eva.cloudgallery.data.db.dao.CachedFileDao
 import fr.eva.cloudgallery.data.db.dao.MediaDao
 import fr.eva.cloudgallery.data.db.dao.MediaSourceDao
+import fr.eva.cloudgallery.data.db.dao.SearchDao
 import fr.eva.cloudgallery.data.db.entity.CacheKind
 import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
@@ -22,6 +23,7 @@ import fr.eva.cloudgallery.data.local.orderedByListPosition
 import fr.eva.cloudgallery.data.local.externalIdFromMediaDocumentId
 import fr.eva.cloudgallery.data.mapper.toDetails
 import fr.eva.cloudgallery.data.mapper.toSummary
+import fr.eva.cloudgallery.data.search.ftsMatchExpression
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.domain.model.MediaDetails
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -55,6 +58,7 @@ import javax.inject.Singleton
 class MediaRepositoryImpl @Inject constructor(
     private val mediaDao: MediaDao,
     private val sourceDao: MediaSourceDao,
+    private val searchDao: SearchDao,
     private val cachedFileDao: CachedFileDao,
     private val offlineStore: OfflineStore,
     private val indexer: LocalMediaIndexer,
@@ -78,6 +82,10 @@ class MediaRepositoryImpl @Inject constructor(
         MediaContext.Videos -> includeCloudOnly.flatMapLatest { cloud -> pager { mediaDao.pagingVideos(cloud) } }
         MediaContext.Favorites -> pager { mediaDao.pagingFavorites() }
         is MediaContext.Album -> pager { mediaDao.pagingAlbum(context.albumId) }
+        // Saisie sans mot : aucun résultat (pas de requête FTS).
+        is MediaContext.Search -> ftsMatchExpression(context.query)
+            ?.let { match -> pager { searchDao.pagingSearch(match) } }
+            ?: flowOf(PagingData.empty())
     }
 
     private fun pager(source: () -> PagingSource<Int, MediaRow>): Flow<PagingData<MediaSummary>> =
@@ -89,6 +97,7 @@ class MediaRepositoryImpl @Inject constructor(
         MediaContext.Videos -> includeCloudOnly.flatMapLatest { mediaDao.observeVideoIds(it) }
         is MediaContext.Album -> mediaDao.observeAlbumIds(context.albumId)
         is MediaContext.Single -> mediaDao.observeById(context.mediaId).map { listOfNotNull(it?.id) }
+        is MediaContext.Search -> ftsMatchExpression(context.query)?.let { searchDao.observeSearchIds(it) } ?: flowOf(emptyList())
     }.distinctUntilChanged().flowOn(io)
 
     /** Observe aussi la copie hors ligne : la visionneuse bascule sur le fichier dès qu'il est enregistré. */
@@ -145,6 +154,9 @@ class MediaRepositoryImpl @Inject constructor(
             is MediaContext.Single -> mediaDao.getRows(listOf(context.mediaId))
                 .filter { it.dateTaken in startMs until endMs }
                 .map { it.id }
+            is MediaContext.Search -> ftsMatchExpression(context.query)
+                ?.let { searchDao.searchIdsInPeriod(it, startMs, endMs) }
+                .orEmpty()
         }
     }
 
@@ -159,6 +171,9 @@ class MediaRepositoryImpl @Inject constructor(
             is MediaContext.Album ->
                 mediaDao.albumIdsBetween(context.albumId, newer.dateTaken, newer.id, older.dateTaken, older.id)
             is MediaContext.Single -> listOf(context.mediaId)
+            is MediaContext.Search -> ftsMatchExpression(context.query)
+                ?.let { searchDao.searchIdsBetween(it, newer.dateTaken, newer.id, older.dateTaken, older.id) }
+                .orEmpty()
         }
     }
 
@@ -168,6 +183,7 @@ class MediaRepositoryImpl @Inject constructor(
         MediaContext.Videos -> includeCloudOnly.flatMapLatest { mediaDao.observeVideoCount(it) }
         is MediaContext.Album -> mediaDao.observeAlbumCount(context.albumId)
         is MediaContext.Single -> mediaDao.observeById(context.mediaId).map { if (it != null) 1 else 0 }
+        is MediaContext.Search -> ftsMatchExpression(context.query)?.let { searchDao.observeSearchCount(it) } ?: flowOf(0)
     }.distinctUntilChanged().flowOn(io)
 
     override suspend fun findByContentUri(uri: Uri): Long? = withContext(io) {

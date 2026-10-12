@@ -190,8 +190,8 @@ table `cloud_folder`), 3→4 (phase 4 : `cached_file.version`, `download_task.cl
 
 | Table | Rôle |
 |---|---|
-| `media` | Média logique : type, nom, MIME, `dateTaken` (EXIF/MediaStore, à défaut date d'ajout puis de modification ; pour OneDrive `photo.takenDateTime`, puis `fileSystemInfo.createdDateTime`, puis `createdDateTime`), dimensions, durée, taille, orientation, `primaryUri`, indicateurs de sources, `cloudItemId` / `cloudCTag` (miniatures OneDrive), `contentHash` (`qxh:<quickXorHash>` pour OneDrive ; pas encore calculé pour les fichiers locaux). Index `(dateTaken, id)`, `(mediaType, dateTaken)`, `displayName`, `contentHash` |
-| `media_source` | Une source physique d'un média. `kind` + `externalId` unique (`image:123` / `video:45` pour MediaStore, car les `_ID` images et vidéos peuvent se chevaucher ; id d'élément pour OneDrive), `uri`, `bucketKey` (`local:<BUCKET_ID>` ou `onedrive:<id du dossier parent>`), chemin relatif (`OneDrive/Photos/2024/` pour OneDrive), `generation` (GENERATION_MODIFIED), `eTag`/`cTag`/`sha1Hash`/`quickXorHash` (OneDrive), `volumeName`, `missingSince` (source masquée mais conservée) |
+| `media` | Média logique : type, nom, MIME, `dateTaken` (EXIF/MediaStore, à défaut date d'ajout puis de modification ; pour OneDrive `photo.takenDateTime`, puis `fileSystemInfo.createdDateTime`, puis `createdDateTime`), dimensions, durée, taille, orientation, `primaryUri`, indicateurs de sources, `cloudItemId` / `cloudCTag` (miniatures OneDrive), `contentHash` (`qxh:<quickXorHash>` : fichier local une fois son empreinte calculée, sinon élément OneDrive). Index `(dateTaken, id)`, `(mediaType, dateTaken)`, `displayName`, `contentHash` |
+| `media_source` | Une source physique d'un média. `kind` + `externalId` unique (`image:123` / `video:45` pour MediaStore, car les `_ID` images et vidéos peuvent se chevaucher ; id d'élément pour OneDrive), `uri`, `bucketKey` (`local:<BUCKET_ID>` ou `onedrive:<id du dossier parent>`), chemin relatif (`OneDrive/Photos/2024/` pour OneDrive), `generation` (GENERATION_MODIFIED), `eTag`/`cTag`/`sha1Hash` (OneDrive), `quickXorHash` (Graph pour OneDrive, calculé par l'appli pour un fichier local), `hashSignature` (fichier local : taille, date de modification et génération au calcul de l'empreinte), `volumeName`, `missingSince` (source masquée mais conservée) |
 | `album` | Album-dossier (`LOCAL_FOLDER` ou `CLOUD_FOLDER`, `sourceKey` = bucketKey) ou album virtuel (`sourceKey` null). Nom personnalisé, épingle, ordre, couverture, masquage. Un dossier personnalisé n'est jamais supprimé automatiquement (sauf à la déconnexion OneDrive, après confirmation) |
 | `cloud_folder` | Dossiers OneDrive connus (id, parent, nom, racine) : noms et chemins des albums OneDrive, masquage du contenu d'un dossier supprimé. `deletedAt` : marqueur de suppression, gardé tant que le sous-arbre du dossier contient des éléments masqués (restauration depuis la corbeille) ; jamais montré |
 | `album_media` | Appartenance d'un média à un album virtuel (références, pas de copie) |
@@ -380,8 +380,9 @@ rattrapés au prochain passage au premier plan grâce au curseur de génération
 - **Écriture** : une page = une transaction Room. Chaque élément OneDrive devient **son propre média
   logique** avec une `media_source` de type `ONEDRIVE` (`externalId` = id d'élément, `bucketKey` =
   `onedrive:<id du dossier parent>`, chemin lisible `OneDrive/Photos/2024/`, `cTag`/`eTag`,
-  `quickXorHash`, `sha1Hash` si fourni). Il n'est **jamais** rattaché à un fichier local, ni par le
-  nom ni par le contenu (dédoublonnage prévu en phase 6).
+  `quickXorHash`, `sha1Hash` si fourni). Il n'est jamais rattaché à un fichier local par le nom ;
+  en fin de passage, `MediaMerger` le fusionne avec un fichier du téléphone de **même QuickXorHash
+  et même taille** (voir « Dédoublonnage »).
 - **Albums OneDrive** : chaque dossier qui contient des photos ou vidéos devient un album
   `CLOUD_FOLDER` (badge nuage), dont le nom suit les renommages sur OneDrive. Renommage d'affichage
   et épingle possibles ; pas de suppression ni de « Copier vers » un dossier OneDrive.
@@ -431,8 +432,8 @@ rattrapés au prochain passage au premier plan grâce au curseur de génération
   affichés, même réglage désactivé) ; les éléments
   présents uniquement sur OneDrive restent visibles dans leurs albums OneDrive, les Favoris et les
   albums personnalisés. Activé, tout est mélangé : une photo présente sur le téléphone **et** sur
-  OneDrive (sauvegarde de l'appareil photo, par exemple) apparaît **deux fois** jusqu'au
-  dédoublonnage de la phase 6.
+  OneDrive (sauvegarde de l'appareil photo, par exemple) apparaît **deux fois** tant que
+  l'empreinte du fichier local n'est pas calculée (en charge), puis une seule (dédoublonnage).
 - **État** : sous-titre de l'entrée OneDrive du Menu (synchro en cours, date de la dernière synchro
   et nombre d'éléments, ou erreur), ligne « Synchronisation OneDrive » des Paramètres et écran
   Compte (profil, quota, « Synchroniser maintenant »). Les erreurs sont enregistrées sous forme de
@@ -658,6 +659,48 @@ jamais touchés, et aucune confirmation système n'est nécessaire.
   (fichiers non épinglés). Ce cache ne contient que des copies de fichiers OneDrive : les fichiers de
   l'utilisateur ne sont jamais concernés.
 
+### Recherche (phase 6)
+
+- Index plein texte `media_fts` (FTS4, tokeniseur unicode61 : casse et accents ignorés), une entrée
+  par média logique (`rowid` = `media.id`) : nom du fichier ; dossiers des sources visibles, albums
+  virtuels qui le contiennent et noms personnalisés des albums-dossiers ; année, mois et jour de la
+  semaine en français et en anglais, jour du mois, « vidéo video » ou « photo image ».
+- `SearchIndexer` suit les tables `media`, `media_source`, `album` et `album_media` (InvalidationTracker
+  de Room) : 2 s après la dernière écriture, quelle qu'en soit l'origine (indexation MediaStore,
+  synchro OneDrive, purge, renommage), une mise à jour incrémentale en une transaction retire les
+  entrées supprimées ou périmées et ajoute les manquantes. Pour 100 000 médias, de l'ordre d'une à
+  quelques secondes sur le dispatcher d'E/S (le premier remplissage, après la migration v6, écrit
+  toutes les entrées).
+- Saisie → expression FTS sûre (`ftsMatchExpression`) : mots (lettres et chiffres) en minuscules,
+  chacun en préfixe (`mot*`), ET implicite ; aucun caractère de la syntaxe FTS ni opérateur ne passe.
+- Résultats : médias visibles (au moins une source présente), éléments uniquement sur OneDrive
+  compris quel que soit le réglage de Photos, du plus récent au plus ancien ; grille commune
+  (sélection, partage, albums…) et visionneuse limitée aux résultats (`MediaContext.Search`).
+- Recherches récentes (10 au plus) dans `search_history.xml`, exclu des sauvegardes.
+
+### Économiseur d'espace (phase 6)
+
+Paramètres > Stockage > Économiseur d'espace (`ui/saver/`). Seul endroit où l'appli propose de
+supprimer des fichiers du téléphone pour gagner de la place ; jamais lancé automatiquement, aucune
+notification.
+
+- **Copies proposées** (`MediaSourceDao.spaceSaverCandidates`, `SPACE_SAVER_SELECT`) : source locale
+  visible dont l'empreinte QuickXorHash, calculée par l'appli, est à jour (`hashSignature` égale à
+  `"<sizeBytes>:<dateModified>:<generation>"` du fichier) et identique, taille comprise, à celle d'un
+  élément OneDrive visible. Les règles portent sur les sources : copie et élément OneDrive regroupés
+  dans un même média ou non. Une copie favorite ou membre d'un album n'est proposée qu'une fois
+  regroupée avec l'élément OneDrive (sinon le favori ou l'album serait perdu) ; les copies écartées
+  sont comptées à l'écran.
+- **Revue** : filtre d'ancienneté (date de prise de vue : toutes, plus de 30 jours par défaut, 90 jours,
+  un an), toutes les copies du filtre cochées, l'utilisateur décoche celles à garder ; résumé (nombre,
+  espace libéré).
+- **Suppression** : confirmation dans l'appli, revérification en base juste avant (copie modifiée,
+  ré-identifiée ou élément OneDrive disparu : écartée et signalée), puis
+  `MediaStore.createTrashRequest` par lots de 1 000 URI (une demande passe dans une seule transaction
+  Binder), chaque lot confirmé par la boîte système. **Toujours la corbeille Android** (récupérable
+  30 jours), quel que soit le réglage de suppression. Un refus arrête les lots suivants. Ensuite :
+  relecture de MediaStore et de la liste.
+
 ---
 
 ## Configuration Microsoft Entra et paramétrage MSAL
@@ -851,6 +894,8 @@ CloudGallery.
 | `data/local/RemovalPlanTest` | Plan de suppression : accès partiel, masquage, frein anti-suppression massive, délai de grâce de 30 jours |
 | `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue, « Afficher les éléments OneDrive dans Photos » et « Charger les originaux sur réseau mobile » désactivés par défaut, « Wi-Fi uniquement » activé par défaut (DataStore vide) |
 | `data/repository/AlbumSortingTest` | Tri des albums |
+| `data/search/SearchLogicTest` | Expression FTS sûre (préfixes, ET implicite, aucune syntaxe FTS ni opérateur, bornes), libellés de date conformes au SQL de l'index, correspondance des noms (accents, casse, débuts de mots), historique des recherches |
+| `ui/search/SearchUiLogicTest` | Albums proposés (correspondance, albums vides exclus, borne), recherches récentes filtrées, saisie sans mot refusée |
 | `ui/albums/AlbumsLogicTest` | Colonnes, masquage des dossiers vides, actions de sélection (renommer, supprimer, épingler), noms |
 | `ui/grid/GridSelectionLogicTest` | Sélection (plages, jour/mois), cibles des actions sur fichiers locaux (éléments OneDrive exclus, nombres des confirmations), Partager actif pour les éléments OneDrive, entrées « Conserver hors ligne » / « Libérer » |
 | `ui/offline/OfflineUiLogicTest` | Suites de « Conserver hors ligne » (message, attente du Wi-Fi, gros lot, espace insuffisant), confirmation de « Libérer » pour une dernière copie seulement, abandon si le compte des dernières copies échoue, confirmations de purge (bouton désactivé pendant la lecture, avertissement prudent si elle échoue), entrées de menu |
@@ -893,6 +938,9 @@ CloudGallery.
 - `data/db/MigrationTest` : migrations 2→3, 1→3, 3→4, 2→4 et 1→4 avec `MigrationTestHelper`
   (schémas exportés ajoutés aux assets des tests instrumentés) ; en 3→4, lignes conservées,
   nouvelles colonnes nulles et `attempts` à 0.
+- `data/db/SearchDaoTest` : index de recherche (nom, dossier, album, dates et jour de la semaine,
+  type, accents), mise à jour incrémentale (renommage, album, suppression), résultats limités aux
+  médias visibles (OneDrive compris, sources masquées exclues).
 - `data/db/CachedFileDaoTest` : remplacement d'une copie (même ligne, ancienne ligne renvoyée),
   date d'accès, suppressions, totaux, cascade, nombre d'éléments partageables, suppression
   conditionnelle du nettoyage (ligne rouverte ou remplacée gardée).
@@ -1033,18 +1081,19 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
 - **Copies hors ligne** : téléchargées uniquement quand l'application les lance au premier plan
   (tâche lancée par l'utilisateur) ; une nouvelle version détectée par la synchro attend le
   prochain passage au premier plan. Après un redémarrage du téléphone, la file reprend à la
-  prochaine ouverture. Un élément conservé hors ligne qui existe aussi sur le téléphone apparaît
-  deux fois dans Photos (jusqu'au dédoublonnage de la phase 6). L'appartenance aux albums OneDrive
+  prochaine ouverture. Un élément conservé hors ligne qui existe aussi sur le téléphone est fusionné
+  avec lui une fois l'empreinte locale calculée. L'appartenance aux albums OneDrive
   d'une copie conservée après suppression de OneDrive est perdue (favoris et albums personnels
   gardés). L'image d'aperçu d'une copie de vidéo vient du fichier (aucune miniature OneDrive) ;
   les couvertures d'album n'utilisent pas encore les copies hors ligne.
 - **Comptes Microsoft personnels uniquement**, un seul compte à la fois. Le contenu du Coffre-fort
   personnel (Personal Vault) n'est pas pris en charge (comportement de la requête delta non
   vérifié) ; les éléments partagés par d'autres personnes sont ignorés.
-- **Doublons** : un média présent sur le téléphone et sur OneDrive est deux médias distincts. Le
-  réglage « Afficher les éléments OneDrive dans Photos » est désactivé par défaut pour éviter les
-  doublons dans Photos et Vidéos ; ils restent possibles dans les Favoris et les albums
-  personnalisés. Fusion prévue en phase 6 (sur empreinte de contenu, jamais sur le nom).
+- **Doublons** : un fichier du téléphone et son élément OneDrive ne sont fusionnés qu'après le
+  calcul de l'empreinte locale, fait en charge seulement (premier calcul étalé sur plusieurs
+  charges pour une grande bibliothèque). D'ici là ce sont deux médias ; le réglage « Afficher les
+  éléments OneDrive dans Photos » reste désactivé par défaut. Un fichier modifié après sa
+  sauvegarde (contenu différent) n'est jamais fusionné.
 - **OneDrive sans permission médias** : sans accès aux photos du téléphone, l'application affiche
   l'écran d'autorisation et rien d'autre ; un usage « OneDrive seul » est reporté en phase 5.
 - **Dates OneDrive** : `photo.takenDateTime` peut être l'heure locale EXIF présentée comme UTC ; un
@@ -1058,9 +1107,18 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
 - **Favoris et albums personnalisés propres à l'application** : ils ne sont pas lus depuis Samsung
   Galerie ni écrits dans le champ `IS_FAVORITE` de MediaStore, et la base est exclue des sauvegardes.
   Une désinstallation ou un changement d'appareil les perd.
-- **Pas de recherche** (ni par nom, ni par lieu, ni par contenu).
-- **Pas de dédoublonnage** : `contentHash` n'est renseigné que pour OneDrive (`qxh:<quickXorHash>`) ;
-  l'empreinte des fichiers locaux n'est pas calculée.
+- **Recherche** par nom, dossier, album, date et type seulement (ni par lieu, ni par contenu).
+- **Dédoublonnage** : empreinte QuickXorHash (`data/dedup/QuickXorHash`, même format que
+  `file.hashes.quickXorHash` de Graph) calculée pour chaque fichier du téléphone par
+  `LocalHashWorker` (WorkManager, **en charge** et batterie non faible, lots de 100 fichiers / 1 Go,
+  8 min par passage, lecture seule), enregistrée avec la signature du fichier (`hashSignature`) :
+  un fichier modifié est recalculé. `MediaMerger` fusionne un élément OneDrive et un fichier local
+  de **même empreinte et même taille** (jamais par le nom ou la date) : le média du fichier local
+  reçoit la source OneDrive, sa copie hors ligne, ses favoris, albums, fichiers en cache,
+  téléchargements et position de lecture ; il garde les métadonnées et la date du fichier local.
+  Si les contenus divergent ensuite (taille, ou empreintes différentes), la source OneDrive repart
+  dans son propre média ; favoris et albums restent sur celui du fichier local. Aucun fichier n'est
+  jamais modifié ni supprimé par le dédoublonnage.
 - **Cache des miniatures OneDrive** : borné à 256 Mo et géré par Coil (éviction LRU), sans réglage
   ni page Stockage. Les tailles personnalisées de miniatures sont documentées par Microsoft mais pas
   encore vérifiées sur l'appareil (repli automatique sur les tailles standard).

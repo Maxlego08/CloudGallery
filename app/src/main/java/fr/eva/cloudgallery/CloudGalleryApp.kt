@@ -15,6 +15,7 @@ import fr.eva.cloudgallery.data.cloud.stream.RedactingMedia3Logger
 import fr.eva.cloudgallery.data.cloud.sync.BackgroundSyncScheduler
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailFetcher
 import fr.eva.cloudgallery.data.cloud.thumb.ThumbnailCacheLimit
+import fr.eva.cloudgallery.data.search.SearchIndexer
 import fr.eva.cloudgallery.ui.image.buildAppImageLoader
 import fr.eva.cloudgallery.ui.main.MediaSyncCoordinator
 import javax.inject.Inject
@@ -48,6 +49,10 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
     @Inject
     lateinit var backgroundSync: BackgroundSyncScheduler
 
+    /** Index de recherche tenu à jour d'après la base (toutes les écritures, quelle qu'en soit l'origine). */
+    @Inject
+    lateinit var searchIndexer: SearchIndexer
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
@@ -58,6 +63,7 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
         RedactingMedia3Logger.install()
         thumbnailCacheLimit.preload()
         backgroundSync.start()
+        searchIndexer.start()
         // Synchro incrémentale MediaStore -> Room à chaque retour de l'appli au premier plan.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {

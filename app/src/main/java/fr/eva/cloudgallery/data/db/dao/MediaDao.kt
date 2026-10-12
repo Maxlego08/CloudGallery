@@ -10,27 +10,41 @@ import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import kotlinx.coroutines.flow.Flow
 
-private const val ROW_COLUMNS = """
+internal const val ROW_COLUMNS = """
     m.id, m.mediaType, m.mimeType, m.dateTaken, m.dateModified, m.durationMs, m.width, m.height,
     m.orientation, m.primaryUri, m.hasLocal, m.hasCloud, m.hasOffline,
     EXISTS(SELECT 1 FROM favorite f WHERE f.mediaId = m.id) AS isFavorite,
     m.cloudItemId, m.cloudCTag
 """
 
+/**
+ * Source qui fait d'un média un membre du dossier de sa `bucketKey` : source visible, ou source
+ * masquée d'un média qui n'a aucune source visible rattachée à un dossier (média à une seule
+ * source, ou copie hors ligne d'un élément masqué : il reste dans son dossier tant qu'il est
+ * affiché). Un média fusionné (fichier local + élément OneDrive) n'apparaît ainsi que dans les
+ * dossiers de ses sources visibles. Même règle dans ALBUM_ROWS (AlbumDao).
+ */
+internal const val FOLDER_MEMBER_SOURCE = """
+    (s.missingSince IS NULL OR NOT EXISTS(
+        SELECT 1 FROM media_source v WHERE v.mediaId = s.mediaId AND v.missingSince IS NULL AND v.bucketKey IS NOT NULL
+    ))
+"""
+
 /** Membres d'un album : dossier (via media_source.bucketKey) ou album virtuel (album_media). */
 private const val ALBUM_MEMBERS = """
-    SELECT s.mediaId FROM media_source s JOIN album a ON a.sourceKey = s.bucketKey WHERE a.id = :albumId
+    SELECT s.mediaId FROM media_source s JOIN album a ON a.sourceKey = s.bucketKey
+    WHERE a.id = :albumId AND $FOLDER_MEMBER_SOURCE
     UNION
     SELECT am.mediaId FROM album_media am WHERE am.albumId = :albumId
 """
 
-private const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
+internal const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
 
 /**
  * Médias affichables : au moins une source présente. Un média dont toutes les sources sont
  * masquées (missingSince, voir MediaSourceEntity) reste en base avec favoris et albums.
  */
-private const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
+internal const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
 
 /**
  * Photos et Vidéos (réglage « Afficher les éléments OneDrive dans Photos ») : sans
@@ -41,12 +55,12 @@ private const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline =
 private const val LIBRARY = "(m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1))"
 
 /** Eléments situés entre deux éléments de la liste triée (bornes incluses). */
-private const val BETWEEN = """
+internal const val BETWEEN = """
     (m.dateTaken < :newerDate OR (m.dateTaken = :newerDate AND m.id <= :newerId))
     AND (m.dateTaken > :olderDate OR (m.dateTaken = :olderDate AND m.id >= :olderId))
 """
 
-private const val IN_PERIOD = "m.dateTaken >= :startMs AND m.dateTaken < :endMs"
+internal const val IN_PERIOD = "m.dateTaken >= :startMs AND m.dateTaken < :endMs"
 
 @Dao
 interface MediaDao {
