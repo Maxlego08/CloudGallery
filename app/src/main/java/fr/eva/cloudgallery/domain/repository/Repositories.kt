@@ -88,6 +88,14 @@ interface AlbumRepository {
     suspend fun setPinned(albumId: Long, pinned: Boolean)
 }
 
+/** Recherches récentes (sur l'appareil seulement), la plus récente en tête. */
+interface SearchHistoryRepository {
+    val recent: Flow<List<String>>
+    suspend fun add(query: String)
+    suspend fun remove(query: String)
+    suspend fun clear()
+}
+
 /** Indexation incrémentale de MediaStore vers la base Room. */
 interface LocalMediaIndexer {
     val state: StateFlow<IndexState>

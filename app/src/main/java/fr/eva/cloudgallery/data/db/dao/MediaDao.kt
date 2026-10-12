@@ -10,7 +10,7 @@ import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import kotlinx.coroutines.flow.Flow
 
-private const val ROW_COLUMNS = """
+internal const val ROW_COLUMNS = """
     m.id, m.mediaType, m.mimeType, m.dateTaken, m.dateModified, m.durationMs, m.width, m.height,
     m.orientation, m.primaryUri, m.hasLocal, m.hasCloud, m.hasOffline,
     EXISTS(SELECT 1 FROM favorite f WHERE f.mediaId = m.id) AS isFavorite,
@@ -24,13 +24,13 @@ private const val ALBUM_MEMBERS = """
     SELECT am.mediaId FROM album_media am WHERE am.albumId = :albumId
 """
 
-private const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
+internal const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
 
 /**
  * Médias affichables : au moins une source présente. Un média dont toutes les sources sont
  * masquées (missingSince, voir MediaSourceEntity) reste en base avec favoris et albums.
  */
-private const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
+internal const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
 
 /**
  * Photos et Vidéos (réglage « Afficher les éléments OneDrive dans Photos ») : sans
@@ -41,12 +41,12 @@ private const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline =
 private const val LIBRARY = "(m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1))"
 
 /** Eléments situés entre deux éléments de la liste triée (bornes incluses). */
-private const val BETWEEN = """
+internal const val BETWEEN = """
     (m.dateTaken < :newerDate OR (m.dateTaken = :newerDate AND m.id <= :newerId))
     AND (m.dateTaken > :olderDate OR (m.dateTaken = :olderDate AND m.id >= :olderId))
 """
 
-private const val IN_PERIOD = "m.dateTaken >= :startMs AND m.dateTaken < :endMs"
+internal const val IN_PERIOD = "m.dateTaken >= :startMs AND m.dateTaken < :endMs"
 
 @Dao
 interface MediaDao {

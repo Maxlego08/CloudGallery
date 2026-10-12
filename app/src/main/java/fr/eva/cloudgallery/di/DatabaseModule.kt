@@ -31,4 +31,5 @@ object DatabaseModule {
     @Provides fun cachedFileDao(db: AppDatabase) = db.cachedFileDao()
     @Provides fun downloadTaskDao(db: AppDatabase) = db.downloadTaskDao()
     @Provides fun cloudFolderDao(db: AppDatabase) = db.cloudFolderDao()
+    @Provides fun searchDao(db: AppDatabase) = db.searchDao()
 }

@@ -5,6 +5,7 @@
    aussi : chiffré par une clé Keystore, il ne peut pas être restauré sur un autre appareil.
    Même chose pour la clé MSAL enveloppée par le Keystore (app_<paquet>/adalks, répertoire
    utilisé uniquement par MSAL) et pour l'état de synchronisation OneDrive (cloud_sync.xml).
+   Les recherches récentes (search_history.xml) restent sur l'appareil.
    Les copies hors ligne OneDrive (files/offline/) sont exclues (téléchargeables de nouveau).
    Les autres préférences restent sauvegardées.
 -->
@@ -13,6 +14,7 @@
         <exclude domain="database" path="." />
         <exclude domain="root" path="app_fr.eva.cloudgallery/" />
         <exclude domain="sharedpref" path="cloud_sync.xml" />
+        <exclude domain="sharedpref" path="search_history.xml" />
         <exclude domain="file" path="offline/" />
         <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.xml" />
         <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.foci.xml" />
@@ -24,6 +26,7 @@
         <exclude domain="database" path="." />
         <exclude domain="root" path="app_fr.eva.cloudgallery/" />
         <exclude domain="sharedpref" path="cloud_sync.xml" />
+        <exclude domain="sharedpref" path="search_history.xml" />
         <exclude domain="file" path="offline/" />
         <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.xml" />
         <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.foci.xml" />
