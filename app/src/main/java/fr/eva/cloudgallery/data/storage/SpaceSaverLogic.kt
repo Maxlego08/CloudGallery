@@ -1,6 +1,7 @@
 package fr.eva.cloudgallery.data.storage
 
 import fr.eva.cloudgallery.data.db.dao.SpaceSaverRow
+import fr.eva.cloudgallery.data.dedup.localHashSignature
 import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SpaceSaverCandidate
 import fr.eva.cloudgallery.domain.model.SpaceSaverList
@@ -11,10 +12,11 @@ import fr.eva.cloudgallery.domain.model.SpaceSaverList
 
 /**
  * Signature d'un fichier local au calcul de son empreinte, telle que comparée en SQL par
- * `SPACE_SAVER_SELECT` : `"<sizeBytes>:<dateModified>:<generation>"`.
+ * `SPACE_SAVER_SELECT` : `"<sizeBytes>:<dateModified>:<generation>"`. C'est celle qu'écrit le
+ * calcul des empreintes ([localHashSignature]) : une seule définition du format.
  */
 internal fun spaceSaverSignature(sizeBytes: Long, dateModified: Long, generation: Long): String =
-    "$sizeBytes:$dateModified:$generation"
+    localHashSignature(sizeBytes, dateModified, generation)
 
 /**
  * Copies proposées : une copie dont le média porte un favori ou un album de l'utilisateur n'est

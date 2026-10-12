@@ -18,6 +18,7 @@ import fr.eva.cloudgallery.data.db.entity.FavoriteEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.data.db.entity.SyncCursorEntity
+import fr.eva.cloudgallery.data.dedup.MediaMerger
 import fr.eva.cloudgallery.data.local.MISSING_GRACE_MS
 import fr.eva.cloudgallery.domain.model.AlbumType
 import fr.eva.cloudgallery.domain.model.MediaType
@@ -48,7 +49,7 @@ class CloudSyncWriterTest {
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
-        writer = CloudSyncWriter(db, Dispatchers.IO)
+        writer = CloudSyncWriter(db, Dispatchers.IO, MediaMerger(db, Dispatchers.IO))
     }
 
     @After

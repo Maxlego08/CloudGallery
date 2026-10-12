@@ -17,9 +17,23 @@ internal const val ROW_COLUMNS = """
     m.cloudItemId, m.cloudCTag
 """
 
+/**
+ * Source qui fait d'un média un membre du dossier de sa `bucketKey` : source visible, ou source
+ * masquée d'un média qui n'a aucune source visible rattachée à un dossier (média à une seule
+ * source, ou copie hors ligne d'un élément masqué : il reste dans son dossier tant qu'il est
+ * affiché). Un média fusionné (fichier local + élément OneDrive) n'apparaît ainsi que dans les
+ * dossiers de ses sources visibles. Même règle dans ALBUM_ROWS (AlbumDao).
+ */
+internal const val FOLDER_MEMBER_SOURCE = """
+    (s.missingSince IS NULL OR NOT EXISTS(
+        SELECT 1 FROM media_source v WHERE v.mediaId = s.mediaId AND v.missingSince IS NULL AND v.bucketKey IS NOT NULL
+    ))
+"""
+
 /** Membres d'un album : dossier (via media_source.bucketKey) ou album virtuel (album_media). */
 private const val ALBUM_MEMBERS = """
-    SELECT s.mediaId FROM media_source s JOIN album a ON a.sourceKey = s.bucketKey WHERE a.id = :albumId
+    SELECT s.mediaId FROM media_source s JOIN album a ON a.sourceKey = s.bucketKey
+    WHERE a.id = :albumId AND $FOLDER_MEMBER_SOURCE
     UNION
     SELECT am.mediaId FROM album_media am WHERE am.albumId = :albumId
 """

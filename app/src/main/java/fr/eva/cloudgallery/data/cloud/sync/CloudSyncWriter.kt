@@ -1,5 +1,6 @@
 package fr.eva.cloudgallery.data.cloud.sync
 
+import android.util.Log
 import androidx.room.withTransaction
 import fr.eva.cloudgallery.data.cloud.graph.DriveItemDto
 import fr.eva.cloudgallery.data.db.AppDatabase
@@ -12,9 +13,11 @@ import fr.eva.cloudgallery.data.db.entity.DownloadState
 import fr.eva.cloudgallery.data.db.entity.DownloadTaskEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
+import fr.eva.cloudgallery.data.dedup.MediaMerger
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AlbumType
 import fr.eva.cloudgallery.domain.model.SourceKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -106,9 +109,11 @@ internal data class CloudFolderLabels(val root: String, val unnamed: String)
  * Ecriture de la synchronisation OneDrive dans l'index (base Room uniquement, aucun accès
  * réseau ni fichier). Chaque page est appliquée en une transaction : média, source et
  * indicateurs dénormalisés sont toujours cohérents (le nettoyage des orphelins de l'indexation
- * locale est global). Un élément OneDrive = un média : jamais de rapprochement par nom ou
- * empreinte avec un fichier local. Rien n'est supprimé directement : une source disparue est
- * masquée, puis purgée après le délai de grâce.
+ * locale est global). Un nouvel élément OneDrive crée son propre média ; le rattachement à un
+ * fichier local identique (même QuickXorHash et même taille, jamais par le nom) est fait en fin
+ * de passage par [MediaMerger]. Un média fusionné garde les métadonnées de son fichier local.
+ * Rien n'est supprimé directement : une source disparue est masquée, puis purgée après le délai
+ * de grâce.
  *
  * Copies hors ligne (OFFLINE_COPY) : masquées et réaffichées avec leur élément OneDrive ; un
  * élément supprimé qui a une copie n'est pas purgé au bout du délai (décision de l'utilisateur
@@ -119,7 +124,9 @@ internal data class CloudFolderLabels(val root: String, val unnamed: String)
 class CloudSyncWriter @Inject constructor(
     private val db: AppDatabase,
     @param:IoDispatcher private val io: CoroutineDispatcher,
+    private val merger: MediaMerger,
 ) {
+    private val dedupDao = db.dedupDao()
     private val mediaDao = db.mediaDao()
     private val sourceDao = db.mediaSourceDao()
     private val albumDao = db.albumDao()
@@ -220,6 +227,9 @@ class CloudSyncWriter @Inject constructor(
             val offline = sourceDao.findAll(SourceKind.OFFLINE_COPY, itemIds).associateBy { it.externalId }
             val medias = mediaDao.getByIds((sources.values.map { it.mediaId } + offline.values.map { it.mediaId }).distinct())
                 .associateBy { it.id }
+            // Médias fusionnés avec un fichier local : leurs métadonnées (date EXIF, dimensions,
+            // nom) restent celles du fichier local, jamais remplacées par celles de Graph.
+            val merged = if (medias.isEmpty()) emptySet() else dedupDao.withLocalSource(medias.keys.toList()).toSet()
             val redownload = ArrayList<DownloadTaskEntity>()
             for (fields in chunk) {
                 val source = sources[fields.itemId]
@@ -227,7 +237,7 @@ class CloudSyncWriter @Inject constructor(
                 val copy = offline[fields.itemId]
                 if (source != null && media != null) {
                     val updatedMedia = fields.applyTo(media)
-                    if (updatedMedia != media) mediaDao.update(updatedMedia)
+                    if (media.id !in merged && updatedMedia != media) mediaDao.update(updatedMedia)
                     val updatedSource = fields.applyTo(source)
                     if (updatedSource != source) {
                         sourceDao.update(updatedSource)
@@ -252,7 +262,7 @@ class CloudSyncWriter @Inject constructor(
                         // Elément revenu sur OneDrive alors que sa copie hors ligne a été conservée :
                         // rattaché au même média (favoris, albums), jamais dupliqué.
                         val updatedMedia = fields.applyTo(copyMedia)
-                        if (updatedMedia != copyMedia) mediaDao.update(updatedMedia)
+                        if (copyMedia.id !in merged && updatedMedia != copyMedia) mediaDao.update(updatedMedia)
                         if (requeueOnCTagChange(true, copy.cTag, fields.cTag)) {
                             redownload += redownloadTask(copyMedia.id, fields, now)
                         }
@@ -275,6 +285,19 @@ class CloudSyncWriter @Inject constructor(
      * OneDrive.
      */
     internal suspend fun finishSync(run: CloudSyncRun, now: Long, labels: CloudFolderLabels) = withContext(io) {
+        applyFinish(run, now, labels)
+        // Fusion des éléments OneDrive avec les fichiers locaux identiques (et défusion de ceux
+        // dont le contenu a changé) : hors de la transaction du passage, qui reste valide si elle échoue.
+        try {
+            merger.reconcile()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Dédoublonnage après la synchronisation OneDrive impossible", e)
+        }
+    }
+
+    private suspend fun applyFinish(run: CloudSyncRun, now: Long, labels: CloudFolderLabels) {
         db.withTransaction {
             val touched = HashSet<Long>()
 
@@ -378,6 +401,7 @@ class CloudSyncWriter @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "CloudSyncWriter"
         const val CHUNK = 500
 
         fun CloudFolderEntity.toFields() = CloudFolderFields(itemId = itemId, parentId = parentId, name = name, isRoot = isRoot)

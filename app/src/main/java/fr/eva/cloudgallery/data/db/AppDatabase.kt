@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import fr.eva.cloudgallery.data.db.dao.AlbumDao
 import fr.eva.cloudgallery.data.db.dao.CachedFileDao
 import fr.eva.cloudgallery.data.db.dao.CloudFolderDao
+import fr.eva.cloudgallery.data.db.dao.DedupDao
 import fr.eva.cloudgallery.data.db.dao.DownloadTaskDao
 import fr.eva.cloudgallery.data.db.dao.FavoriteDao
 import fr.eva.cloudgallery.data.db.dao.MediaDao
@@ -62,6 +63,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun downloadTaskDao(): DownloadTaskDao
     abstract fun cloudFolderDao(): CloudFolderDao
     abstract fun searchDao(): SearchDao
+    abstract fun dedupDao(): DedupDao
 
     companion object {
         const val NAME = "cloudgallery.db"
