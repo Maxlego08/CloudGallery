@@ -115,21 +115,14 @@ internal fun thumbnailContentUrl(itemId: String, size: String): String =
         .toString()
 
 /**
- * Champs demandés pour un téléchargement : l'annotation `@microsoft.graph.downloadUrl` n'est
- * renvoyée que si elle est sélectionnée. `parentReference` donne le lecteur de l'élément.
+ * URL de `GET /me/drive/items/{id}` (l'identifiant est encodé comme un segment de chemin). Sans
+ * `$select` : l'annotation `@microsoft.graph.downloadUrl` fait partie de la réponse complète d'un
+ * fichier, alors qu'avec `$select` OneDrive personnel peut ne pas la renvoyer (originaux, lecture
+ * vidéo et téléchargements tous en échec sur appareil).
  */
-internal const val DOWNLOAD_SELECT = "id,size,cTag,eTag,parentReference,@microsoft.graph.downloadUrl"
-
-/**
- * URL de `GET /me/drive/items/{id}?$select=…` ([DOWNLOAD_SELECT]). L'identifiant est encodé comme
- * un segment de chemin ; `$select`, les virgules et `@` restent littéraux. [selectParam] permet de
- * passer à `select` (forme sans `$` de l'exemple de la documentation) si l'appareil montre que
- * `$select` ne renvoie pas l'annotation.
- */
-internal fun downloadInfoUrl(itemId: String, selectParam: String = "\$select"): String =
+internal fun downloadInfoUrl(itemId: String): String =
     "${GraphApi.GRAPH_BASE}/me/drive/items".toHttpUrl().newBuilder()
         .addPathSegment(itemId)
-        .addEncodedQueryParameter(selectParam, DOWNLOAD_SELECT)
         .build()
         .toString()
 

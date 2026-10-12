@@ -2,6 +2,7 @@ package fr.eva.cloudgallery.ui.viewer
 
 import android.content.IntentSender
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
@@ -380,6 +381,7 @@ class ViewerViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 val error = downloadErrorOf(e) ?: DownloadError.SERVER
+                Log.w(TAG, "Original OneDrive indisponible : $error", e)
                 _cloudOriginal.update { if (it.mediaId == id) CloudOriginalState(id, CloudOriginalUi.Failed(error)) else it }
             }
         }
@@ -521,7 +523,9 @@ class ViewerViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                send(ViewerEvent.Toast(downloadErrorMessage(downloadErrorOf(e) ?: DownloadError.SERVER)))
+                val error = downloadErrorOf(e) ?: DownloadError.SERVER
+                Log.w(TAG, "Partage OneDrive impossible : $error", e)
+                send(ViewerEvent.Toast(downloadErrorMessage(error)))
             } finally {
                 _sharePreparation.value = null
             }
@@ -692,6 +696,7 @@ class ViewerViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "ViewerViewModel"
         const val KEY_CURRENT = "viewer_current_id"
     }
 }
