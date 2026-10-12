@@ -247,8 +247,10 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       fonction de fond qui lirait l'index local.
 - [x] Afficher l'état de synchro OneDrive dans Paramètres (dernier delta, erreurs, nombre
       d'éléments) : fait en phase 3.
-- [ ] Première énumération OneDrive reprenable après un arrêt du processus (aujourd'hui elle
-      recommence depuis le début, sans perte de données).
+- [x] Énumération complète OneDrive reprenable après un arrêt du processus ou une erreur : nextLink
+      et nombre de pages dans `cloud_sync.xml`, éléments vus journalisés page par page
+      (`noBackupFilesDir/onedrive_enumeration_seen.log`, `EnumerationResumeLogic`) ; reprise
+      refusée (départ du début) si autre lecteur, plus de 24 h, journal incomplet ou lien refusé.
 - [ ] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : aujourd'hui, sans permission
       médias, l'application n'affiche que l'écran d'autorisation. Permettre de parcourir OneDrive
       sans accès aux photos du téléphone.
@@ -266,6 +268,10 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       prochain passage, qui vérifie.
 
 ### Vérifications sur l'appareil (phase 5)
+- [ ] Énumération reprise : première connexion sur un gros OneDrive, arrêt forcé après quelques
+      pages (logcat « Reprise de l'énumération complète après N pages » au redémarrage) ; à la
+      fin, aucun élément des premières pages masqué, nombre d'éléments identique à une
+      énumération sans arrêt ; logcat sans nextLink.
 - [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
       le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
       plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
