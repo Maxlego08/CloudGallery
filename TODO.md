@@ -251,9 +251,11 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       et nombre de pages dans `cloud_sync.xml`, éléments vus journalisés page par page
       (`noBackupFilesDir/onedrive_enumeration_seen.log`, `EnumerationResumeLogic`) ; reprise
       refusée (départ du début) si autre lecteur, plus de 24 h, journal incomplet ou lien refusé.
-- [ ] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : aujourd'hui, sans permission
-      médias, l'application n'affiche que l'écran d'autorisation. Permettre de parcourir OneDrive
-      sans accès aux photos du téléphone.
+- [x] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : « Utiliser OneDrive
+      seulement » sur l'écran d'autorisation (choix mémorisé, oublié dès qu'un accès est accordé) ;
+      onglets complets, OneDrive d'office dans Photos et Vidéos (`includeCloudOnlyInLibrary`,
+      `MediaAccessState`), bandeau « Photos du téléphone non autorisées — Autoriser », état vide
+      « Se connecter à OneDrive » sans compte.
 - [ ] Copies hors ligne : relancer automatiquement un nouveau téléchargement détecté par une synchro
       en arrière-plan (aujourd'hui au premier plan seulement : la tâche lancée par l'utilisateur ne
       peut être planifiée qu'appli visible) ; couvertures d'album et EXIF depuis la copie hors ligne.
@@ -274,6 +276,10 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       pages (logcat « Reprise de l'énumération complète après N pages » au redémarrage) ; à la
       fin, aucun élément des premières pages masqué, nombre d'éléments identique à une
       énumération sans arrêt ; logcat sans nextLink.
+- [ ] « OneDrive seul » : refuser l'accès, « Utiliser OneDrive seulement » ; sans compte, Photos
+      propose la connexion ; connecté, Photos/Vidéos montrent OneDrive sans le réglage ; bandeau
+      « Autoriser » (demande, puis paramètres après un refus définitif) ; accès accordé puis retiré
+      dans les paramètres : l'écran d'autorisation revient.
 - [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
       le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
       plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
@@ -389,7 +395,8 @@ animations :
       dossier du téléphone, même conservé hors ligne (copie de l'appli, lecture seule).
 - [ ] Doublons : un média présent sur le téléphone et sur OneDrive est deux médias (réglage
       « Afficher les éléments OneDrive dans Photos » désactivé par défaut ; fusion en phase 6).
-- [ ] Sans permission médias, OneDrive n'est pas consultable (écran d'autorisation seul ; phase 5).
+- [ ] Sans permission médias, OneDrive est consultable seulement après « Utiliser OneDrive
+      seulement » (phase 5) ; un build sans OneDrive n'affiche que l'écran d'autorisation.
 - [ ] Pas de synchro en arrière-plan : `work-runtime-ktx` et `hilt-work` sont présents mais ne
       servent pas.
 - [ ] Les favoris et albums personnalisés sont propres à l'application. Ils sont perdus à la

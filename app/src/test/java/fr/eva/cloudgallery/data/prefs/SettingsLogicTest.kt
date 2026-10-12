@@ -135,6 +135,17 @@ class SettingsLogicTest {
     }
 
     @Test
+    fun oneDriveOnlyChosen_isOffByDefault_andRemembered() = runTest {
+        assertFalse(AppSettings().oneDriveOnlyChosen)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertFalse(repository.settings.first().oneDriveOnlyChosen)
+        repository.setOneDriveOnlyChosen(true)
+        assertTrue(repository.settings.first().oneDriveOnlyChosen)
+        repository.setOneDriveOnlyChosen(false)
+        assertFalse(repository.settings.first().oneDriveOnlyChosen)
+    }
+
+    @Test
     fun choiceParsingFallsBackToDefault() {
         val choices = listOf(1L, 2L)
         assertEquals(2L, choiceOrDefault(2L, choices, 1L))

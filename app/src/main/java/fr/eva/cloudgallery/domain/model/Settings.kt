@@ -61,6 +61,12 @@ data class AppSettings(
     val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.EVERY_6_HOURS,
     /** Synchronisation en arrière-plan uniquement sur un réseau non facturé (Wi-Fi). */
     val backgroundSyncWifiOnly: Boolean = false,
+    /**
+     * « Utiliser OneDrive seulement » choisi sur l'écran d'autorisation : sans accès aux photos du
+     * téléphone, l'appli s'ouvre sur OneDrive au lieu de redemander l'autorisation. Effacé dès
+     * qu'un accès est accordé (un retrait ultérieur de l'accès redemande).
+     */
+    val oneDriveOnlyChosen: Boolean = false,
 )
 
 /** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */

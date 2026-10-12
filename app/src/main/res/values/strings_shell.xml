@@ -18,6 +18,16 @@
     <string name="perm_allow">Autoriser l\'accès</string>
     <string name="perm_partial_banner">Accès limité à certaines photos</string>
     <string name="perm_partial_manage">Gérer</string>
+    <!-- Usage « OneDrive seul » (aucun accès aux photos du téléphone) -->
+    <string name="perm_use_onedrive_only">Utiliser OneDrive seulement</string>
+    <string name="perm_no_local_banner">Photos du téléphone non autorisées</string>
+    <string name="perm_no_local_allow">Autoriser</string>
+    <string name="perm_onedrive_only_empty_title">Aucune photo à afficher</string>
+    <string name="perm_onedrive_only_empty_message">Connectez-vous à OneDrive pour parcourir vos photos et vidéos, ou autorisez l\'accès aux photos du téléphone.</string>
+    <string name="perm_onedrive_only_sign_in">Se connecter à OneDrive</string>
+    <string name="perm_onedrive_only_allow_photos">Autoriser les photos du téléphone</string>
+    <string name="perm_onedrive_only_synced_empty_title">Aucun élément OneDrive</string>
+    <string name="perm_onedrive_only_synced_empty_message">Les photos et vidéos de OneDrive apparaissent ici après la synchronisation.</string>
 
     <!-- Menu -->
     <string name="menu_title">Menu</string>

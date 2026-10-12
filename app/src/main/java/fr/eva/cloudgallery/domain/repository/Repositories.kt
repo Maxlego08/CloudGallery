@@ -150,6 +150,7 @@ interface SettingsRepository {
     suspend fun setThumbnailCacheMaxBytes(bytes: Long)
     suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     suspend fun setBackgroundSyncWifiOnly(enabled: Boolean)
+    suspend fun setOneDriveOnlyChosen(chosen: Boolean)
 }
 
 /** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */

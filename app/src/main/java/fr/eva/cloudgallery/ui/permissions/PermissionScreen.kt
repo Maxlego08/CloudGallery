@@ -50,12 +50,14 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 /**
  * Ecran d'accueil / d'autorisation affiché tant qu'aucun accès aux médias n'est accordé.
  * Explique pourquoi l'accès est nécessaire, puis lance la demande système ; en cas de refus
- * définitif, propose d'ouvrir les paramètres de l'appli.
+ * définitif, propose d'ouvrir les paramètres de l'appli. [onUseOneDriveOnly] (OneDrive présent
+ * dans ce build) : « Utiliser OneDrive seulement », parcourir OneDrive sans accès local.
  */
 @Composable
 fun PermissionScreen(
     controller: MediaPermissionController,
     modifier: Modifier = Modifier,
+    onUseOneDriveOnly: (() -> Unit)? = null,
 ) {
     val colors = OneUiTheme.colors
     Column(
@@ -146,6 +148,14 @@ fun PermissionScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            if (onUseOneDriveOnly != null) {
+                OneUiPillButton(
+                    text = stringResource(R.string.perm_use_onedrive_only),
+                    onClick = onUseOneDriveOnly,
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -174,6 +184,39 @@ fun PartialAccessBanner(
     onManage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    AccessBanner(
+        text = stringResource(R.string.perm_partial_banner),
+        action = stringResource(R.string.perm_partial_manage),
+        onClick = onManage,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Bandeau fin de l'usage « OneDrive seul » au-dessus de la barre d'onglets : « Photos du
+ * téléphone non autorisées — Autoriser ». [onAllow] relance la demande système, ou ouvre les
+ * paramètres de l'appli après un refus définitif.
+ */
+@Composable
+fun NoLocalAccessBanner(
+    onAllow: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AccessBanner(
+        text = stringResource(R.string.perm_no_local_banner),
+        action = stringResource(R.string.perm_no_local_allow),
+        onClick = onAllow,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun AccessBanner(
+    text: String,
+    action: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = OneUiTheme.colors
     Row(
         modifier = modifier
@@ -181,13 +224,13 @@ fun PartialAccessBanner(
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(colors.card)
-            .clickable(role = Role.Button, onClick = onManage)
+            .clickable(role = Role.Button, onClick = onClick)
             .heightIn(min = 48.dp)
             .padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = stringResource(R.string.perm_partial_banner),
+            text = text,
             style = OneUiTheme.typography.listSubtitle,
             color = colors.textPrimary,
             maxLines = 2,
@@ -195,7 +238,7 @@ fun PartialAccessBanner(
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = stringResource(R.string.perm_partial_manage),
+            text = action,
             style = OneUiTheme.typography.button,
             color = colors.accent,
             modifier = Modifier.padding(horizontal = 8.dp),

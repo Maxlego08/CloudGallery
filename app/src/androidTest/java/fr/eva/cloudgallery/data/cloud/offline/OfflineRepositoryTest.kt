@@ -76,6 +76,7 @@ class OfflineRepositoryTest {
         override suspend fun setThumbnailCacheMaxBytes(bytes: Long) = Unit
         override suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = Unit
         override suspend fun setBackgroundSyncWifiOnly(enabled: Boolean) = Unit
+        override suspend fun setOneDriveOnlyChosen(chosen: Boolean) = Unit
     }
 
     @Before

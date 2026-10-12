@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,21 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-
-/** Niveau d'accès aux médias de l'appareil. */
-enum class MediaAccess {
-    /** Photos et vidéos : accès complet. */
-    FULL,
-
-    /** Android 14+ : seulement les éléments choisis par l'utilisateur (READ_MEDIA_VISUAL_USER_SELECTED). */
-    PARTIAL,
-
-    /** Aucun accès. */
-    NONE,
-}
+import fr.eva.cloudgallery.data.local.readMediaAccess
+import fr.eva.cloudgallery.domain.model.MediaAccess
 
 object MediaPermissions {
     /**
@@ -48,23 +36,11 @@ object MediaPermissions {
         Manifest.permission.ACCESS_MEDIA_LOCATION,
     )
 
-    fun currentAccess(context: Context): MediaAccess {
-        val images = context.isGranted(Manifest.permission.READ_MEDIA_IMAGES)
-        val videos = context.isGranted(Manifest.permission.READ_MEDIA_VIDEO)
-        val selected = context.isGranted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-        return when {
-            images && videos -> MediaAccess.FULL
-            images || videos || selected -> MediaAccess.PARTIAL
-            else -> MediaAccess.NONE
-        }
-    }
+    fun currentAccess(context: Context): MediaAccess = readMediaAccess(context)
 
     fun appSettingsIntent(context: Context): Intent =
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-    private fun Context.isGranted(permission: String): Boolean =
-        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 /** Etat observable des autorisations médias, revérifié à chaque ON_RESUME. */
@@ -91,8 +67,26 @@ class MediaPermissionController internal constructor(
 
     internal var launch: (() -> Unit)? = null
 
+    /** Refus définitif constaté au retour de la demande : ouvrir alors les paramètres de l'appli. */
+    private var openSettingsIfDenied = false
+
     /** Lance la demande système (ou le sélecteur de photos en mode partiel). */
     fun request() {
+        openSettingsIfDenied = false
+        launch?.invoke()
+    }
+
+    /**
+     * Demande système, ou paramètres de l'appli si le système ne la montre plus (refus
+     * définitif, déjà connu ou constaté au retour de la demande) : « Autoriser » du bandeau
+     * « OneDrive seul » n'est ainsi jamais sans effet.
+     */
+    fun requestOrOpenSettings() {
+        if (permanentlyDenied) {
+            openAppSettings()
+            return
+        }
+        openSettingsIfDenied = true
         launch?.invoke()
     }
 
@@ -113,7 +107,9 @@ class MediaPermissionController internal constructor(
             // Après un refus, l'absence de « rationale » signifie que le système ne redemandera plus.
             permanentlyDenied = activity != null &&
                 !activity.shouldShowRequestPermissionRationale(Manifest.permission.READ_MEDIA_IMAGES)
+            if (permanentlyDenied && openSettingsIfDenied) openAppSettings()
         }
+        openSettingsIfDenied = false
     }
 }
 

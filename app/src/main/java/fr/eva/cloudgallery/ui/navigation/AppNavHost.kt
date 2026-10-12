@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -39,6 +40,7 @@ import fr.eva.cloudgallery.ui.components.SystemBarsAppearance
 import fr.eva.cloudgallery.ui.main.MainEvent
 import fr.eva.cloudgallery.ui.main.MainScreen
 import fr.eva.cloudgallery.ui.main.MainViewModel
+import fr.eva.cloudgallery.ui.main.mainScreenMode
 import fr.eva.cloudgallery.ui.permissions.rememberMediaPermissionController
 import fr.eva.cloudgallery.ui.settings.SettingsScreen
 import fr.eva.cloudgallery.ui.storage.StorageScreen
@@ -157,8 +159,13 @@ fun AppNavHost(
         popExitTransition = { popExit() },
     ) {
         composable<MainRoute> {
+            val oneDriveOnlyChosen by mainViewModel.oneDriveOnlyChosen.collectAsStateWithLifecycle()
+            val cloudSignedIn by mainViewModel.cloudSignedIn.collectAsStateWithLifecycle()
             MainScreen(
                 permissions = permissions,
+                mode = mainScreenMode(permissions.access, mainViewModel.cloudAvailable, oneDriveOnlyChosen),
+                cloudSignedIn = cloudSignedIn,
+                onUseOneDriveOnly = if (mainViewModel.cloudAvailable) mainViewModel::chooseOneDriveOnly else null,
                 onOpenMedia = openMedia,
                 onOpenAlbum = { id -> navController.navigate(AlbumRoute(id)) },
                 onOpenFavorites = { navController.navigate(FavoritesRoute) },
