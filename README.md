@@ -531,7 +531,8 @@ OneDrive d'une sélection mixte sont signalés comme non partagés.
 `onedrive://item/<id>`. Un `ResolvingDataSource` la remplace, à chaque ouverture (lecture, seek,
 nouvelle tentative), par l'URL temporaire, lue ensuite par `DefaultHttpDataSource` (requêtes Range
 pour le seek, aucun en-tête d'authentification).
-- L'URL est demandée à Graph (`GET /me/drive/items/{id}?$select=…,@microsoft.graph.downloadUrl`),
+- L'URL est demandée à Graph (`GET /me/drive/items/{id}` sans `$select`, qui sur OneDrive personnel omettrait
+  `@microsoft.graph.downloadUrl`),
   gardée **en mémoire seulement**, deux minutes au plus (`CloudDownloadUrlProvider`), et oubliée à
   la déconnexion ou à la purge.
 - Un statut 401/403/404/410 de l'hôte de téléchargement fait oublier l'URL : la tentative suivante en
@@ -864,7 +865,7 @@ CloudGallery.
 | `ui/viewer/ViewerSummaryTest` | Bande de miniatures : mise à jour du résumé (favori, version, miniature OneDrive, copie hors ligne) |
 | `data/cloud/auth/CloudAuthLogicTest` | Validation du client ID et du hachage, URI de redirection encodée, configuration MSAL JSON, fraîcheur du jeton, classement des erreurs MSAL (hors ligne ≠ reconnexion) |
 | `data/cloud/graph/GraphCallerTest` | Boucle de requête Graph avec transport factice : jeton uniquement vers Graph, 401, 429/503 avec Retry-After ou attente exponentielle, 410, erreurs réseau, pause globale (appliquée même après abandon, échec immédiat au-delà de 10 min), jeton renouvelé refusé signalé, en-tête Accept, budget de tentatives des miniatures |
-| `data/cloud/graph/GraphRetryLogicTest` | Classement des statuts HTTP, Retry-After, attente exponentielle, URL de reprise, URL de confiance, URL delta initiale, URL des miniatures et de l'URL de téléchargement (`$select` littéral), URL de téléchargement HTTPS hors Graph |
+| `data/cloud/graph/GraphRetryLogicTest` | Classement des statuts HTTP, Retry-After, attente exponentielle, URL de reprise, URL de confiance, URL delta initiale, URL des miniatures et de l'URL de téléchargement (sans `$select`), URL de téléchargement HTTPS hors Graph |
 | `data/cloud/graph/GraphDtoParsingTest` | Lecture des réponses Graph (pages delta, éléments supprimés, dossiers, packages, champs inconnus, `@microsoft.graph.downloadUrl` jamais affiché par `toString`) |
 | `data/cloud/stream/CloudStreamLogicTest` | Causes d'échec du streaming (Graph, MSAL, réseau), décision de nouvelle tentative (URL expirée, échec immédiat), chaîne des causes bornée, URI stable, expurgation des URL et de `tempauth` dans les journaux |
 | `data/cloud/transfer/TransferLogicTest` | Durée de réutilisation d'une URL de téléchargement, statuts d'URL expirée, `Content-Range`, classement des réponses Range (206, 200, 416), plan de reprise (version inconnue jamais identique), noms de fichiers opaques et extensions, nom affiché sûr (séparateurs, caractères réservés et de contrôle, Unicode, longueur, vide), cadence de progression, même lecteur OneDrive (casse ignorée), nettoyage des dossiers de copies (fichiers enregistrés ou en cours jamais touchés, partiels après 24 h, orphelins après 1 h) |
@@ -965,7 +966,7 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
 
 | Vérification | Résultat attendu |
 |---|---|
-| Lecture d'une vidéo uniquement OneDrive | Lecture en streaming ; si l'URL n'arrive pas, vérifier que `$select` renvoie bien `@microsoft.graph.downloadUrl` (sinon `downloadInfoUrl(selectParam = "select")`) |
+| Lecture d'une vidéo uniquement OneDrive | Lecture en streaming ; en cas d'échec, message d'erreur du lecteur (réseau, lien, connexion requise…) |
 | Seek dans une longue vidéo | Reprise rapide (réponse 206 de l'hôte de téléchargement aux requêtes Range) |
 | Pause de plus de deux minutes puis seek | Nouvelle URL obtenue sans erreur ; noter le statut renvoyé pour une URL expirée |
 | Mode avion pendant la lecture | Message « Connexion impossible », « Réessayer » relance à la même position |

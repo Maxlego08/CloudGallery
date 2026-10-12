@@ -172,8 +172,8 @@ Détail dans le README (« Vérifications sur l'appareil : OneDrive ») :
 
 ### Vérifications sur l'appareil (phase 4)
 Détail dans le README (« Vérifications sur l'appareil : streaming OneDrive ») :
-- [ ] `$select=id,size,cTag,eTag,parentReference,@microsoft.graph.downloadUrl` accepté avec `$` et
-      annotation renvoyée (sinon `downloadInfoUrl(selectParam = "select")`, forme de la doc).
+- [x] `@microsoft.graph.downloadUrl` absent avec `$select` sur OneDrive personnel : requête sans
+      `$select` (réponse complète), originaux, vidéo et téléchargements vérifiés sur l'appareil.
 - [ ] Réponse 206 de l'hôte de téléchargement aux requêtes Range (seek rapide).
 - [ ] Statut HTTP renvoyé pour une URL expirée (401, 403, 404 ou 410 attendus) et durée de
       validité réelle (URL réutilisée deux minutes au plus).
