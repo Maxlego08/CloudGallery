@@ -7,10 +7,10 @@ import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.CloudSyncReason
+import fr.eva.cloudgallery.domain.model.MediaAccess
 import fr.eva.cloudgallery.domain.repository.CloudMediaSyncer
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.domain.repository.OfflineRepository
-import fr.eva.cloudgallery.ui.permissions.MediaAccess
 import fr.eva.cloudgallery.ui.permissions.MediaPermissions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher

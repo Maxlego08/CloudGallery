@@ -2,6 +2,14 @@ package fr.eva.cloudgallery.domain.model
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** Fréquence de la synchronisation OneDrive en arrière-plan ([hours] : null si désactivée). */
+enum class BackgroundSyncInterval(val hours: Long?) {
+    OFF(null),
+    HOURLY(1),
+    EVERY_6_HOURS(6),
+    DAILY(24),
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Index du niveau de zoom de la grille Photos (voir GridZoomLevels). */
@@ -36,7 +44,42 @@ data class AppSettings(
      * hors ligne ») : elle n'est plus redemandée ensuite. Les téléchargements fonctionnent sans.
      */
     val offlineNotificationsAsked: Boolean = false,
+    /**
+     * Plafond du cache temporaire des originaux OneDrive (zoom profond, partage), une des valeurs
+     * de [ORIGINALS_CACHE_CHOICES]. Les copies hors ligne n'y sont jamais comptées.
+     */
+    val originalsCacheMaxBytes: Long = DEFAULT_ORIGINALS_CACHE_BYTES,
+    /**
+     * Plafond du cache disque des miniatures et aperçus OneDrive (Coil), une des valeurs de
+     * [THUMBNAIL_CACHE_CHOICES]. Appliqué à l'ouverture du cache, donc au prochain démarrage.
+     */
+    val thumbnailCacheMaxBytes: Long = DEFAULT_THUMBNAIL_CACHE_BYTES,
+    /**
+     * Synchronisation OneDrive en arrière-plan (WorkManager), en plus de celle du retour au
+     * premier plan. Décision utilisateur : réglable, toutes les 6 h par défaut.
+     */
+    val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.EVERY_6_HOURS,
+    /** Synchronisation en arrière-plan uniquement sur un réseau non facturé (Wi-Fi). */
+    val backgroundSyncWifiOnly: Boolean = false,
+    /**
+     * « Utiliser OneDrive seulement » choisi sur l'écran d'autorisation : sans accès aux photos du
+     * téléphone, l'appli s'ouvre sur OneDrive au lieu de redemander l'autorisation. Effacé dès
+     * qu'un accès est accordé (un retrait ultérieur de l'accès redemande).
+     */
+    val oneDriveOnlyChosen: Boolean = false,
 )
+
+/** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */
+val ORIGINALS_CACHE_CHOICES: List<Long> = listOf(500_000_000L, 1_000_000_000L, 2_000_000_000L, 5_000_000_000L)
+
+/** Plafond par défaut du cache des originaux (décision utilisateur : 1 Go). */
+const val DEFAULT_ORIGINALS_CACHE_BYTES = 1_000_000_000L
+
+/** Plafonds proposés pour le cache des miniatures et aperçus OneDrive (octets décimaux). */
+val THUMBNAIL_CACHE_CHOICES: List<Long> = listOf(100_000_000L, 250_000_000L, 500_000_000L, 1_000_000_000L)
+
+/** Plafond par défaut du cache des miniatures (≈ les 256 Mio des phases 3 et 4). */
+const val DEFAULT_THUMBNAIL_CACHE_BYTES = 250_000_000L
 
 /** Etat de l'indexation des médias locaux. */
 data class IndexState(

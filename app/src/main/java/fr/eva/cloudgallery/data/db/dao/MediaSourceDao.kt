@@ -145,11 +145,24 @@ interface MediaSourceDao {
     suspend fun markMissingInBuckets(keys: List<String>, now: Long)
 
     /**
-     * Dossier restauré possible : vrai si une source OneDrive masquée appartient à l'un des
-     * dossiers [keys] (dossiers nouvellement reçus), ou à un dossier absent de `cloud_folder`.
-     * Ce second cas couvre les sous-dossiers d'un dossier supprimé puis restauré : leurs lignes
-     * ont été retirées avec lui, plus rien ne les rattache au dossier restauré. Les clés suivent
-     * `cloudBucketKey` (« onedrive:<id du dossier> »).
+     * Dossiers (clés `cloudBucketKey`) qui contiennent des sources OneDrive masquées : les
+     * marqueurs de suppression de leurs dossiers et de leurs ancêtres sont gardés.
+     */
+    @Query(
+        """
+        SELECT DISTINCT bucketKey FROM media_source
+        WHERE kind = 'ONEDRIVE' AND missingSince IS NOT NULL AND bucketKey IS NOT NULL
+        """,
+    )
+    suspend fun hiddenCloudBuckets(): List<String>
+
+    /**
+     * Dossier restauré possible sans marqueur : vrai si une source OneDrive masquée appartient à
+     * l'un des dossiers [keys] (dossiers nouvellement reçus), ou à un dossier absent de
+     * `cloud_folder` (ni présent ni marqué). Depuis la v5, un dossier supprimé garde un marqueur
+     * tant que son sous-arbre a des éléments masqués : ce cas ne concerne plus que les dossiers
+     * supprimés avant la v5 (leurs lignes ont été retirées), jusqu'à la purge de leurs éléments.
+     * Les clés suivent `cloudBucketKey` (« onedrive:<id du dossier> »).
      */
     @Query(
         """

@@ -35,13 +35,12 @@ import fr.eva.cloudgallery.domain.model.OfflineThumbnail
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import okio.Path.Companion.toOkioPath
 
-private const val DISK_CACHE_MAX_BYTES = 256L * 1024 * 1024
-
 /**
  * ImageLoader unique de l'application (fourni par CloudGalleryApp via SingletonImageLoader.Factory).
  * - cache mémoire ≈ 25 % de la mémoire de l'appli ;
- * - cache disque borné à 256 Mo : miniatures OneDrive uniquement (les miniatures locales et les
- *   images plein écran locales ne passent pas par lui) ;
+ * - cache disque borné à [diskCacheMaxBytes] (réglage lu à l'ouverture du cache, sur le
+ *   dispatcher d'E/S de Coil) : miniatures et aperçus OneDrive uniquement (les miniatures locales
+ *   et les images plein écran locales ne passent pas par lui) ;
  * - miniatures MediaStore via [LocalThumbnailFetcher] ; images complètes des vidéos via VideoFrameDecoder ;
  * - [extraComponents] : composants fournis par la couche données (miniatures OneDrive, modèle
  *   [CloudThumbnail]).
@@ -49,6 +48,7 @@ private const val DISK_CACHE_MAX_BYTES = 256L * 1024 * 1024
  */
 fun buildAppImageLoader(
     context: Context,
+    diskCacheMaxBytes: () -> Long,
     extraComponents: ComponentRegistry.Builder.() -> Unit = {},
 ): ImageLoader =
     ImageLoader.Builder(context)
@@ -60,7 +60,7 @@ fun buildAppImageLoader(
         .diskCache {
             DiskCache.Builder()
                 .directory(context.cacheDir.resolve("coil").toOkioPath())
-                .maxSizeBytes(DISK_CACHE_MAX_BYTES)
+                .maxSizeBytes(diskCacheMaxBytes())
                 .build()
         }
         .components {

@@ -233,8 +233,9 @@ class CloudSyncWriterTest {
         assertFalse(mediaOf("A")!!.hasCloud)
         assertFalse(mediaOf("B")!!.hasCloud)
         assertTrue(mediaOf("C")!!.hasCloud)
-        val folders = db.cloudFolderDao().getAll().map { it.itemId }.toSet()
-        assertEquals(setOf("ROOT"), folders)
+        assertEquals(setOf("ROOT"), liveFolders())
+        // Dossiers supprimés gardés comme marqueurs : leurs éléments masqués peuvent être restaurés.
+        assertEquals(setOf("PH", "Y24"), markedFolders())
         val albumKeys = db.albumDao().getByType(AlbumType.CLOUD_FOLDER).map { it.sourceKey }.toSet()
         assertEquals(setOf("onedrive:ROOT"), albumKeys)
         assertLocalUntouched(local)
@@ -306,8 +307,8 @@ class CloudSyncWriterTest {
         sync(full = true, listOf(root(), folder("P", "Parent"), folder("C", "Enfant", parent = "P"), image("A", "C")))
         sync(full = false, listOf(deleted("P")))
         assertFalse(mediaOf("A")!!.hasCloud)
-        // Les deux lignes de dossiers sont retirées (plus aucun élément visible).
-        assertTrue(db.cloudFolderDao().getAll().none { it.itemId == "P" || it.itemId == "C" })
+        // Les deux dossiers sont marqués : P (sans élément) rattache C, qui a des éléments masqués.
+        assertEquals(setOf("P", "C"), markedFolders())
         seedCursor()
 
         // Seul P est renvoyé par la requête delta.
@@ -321,6 +322,78 @@ class CloudSyncWriterTest {
         writer.finishSync(run, t0, labels)
         assertTrue(mediaOf("A")!!.hasCloud)
         assertNotNull(db.albumDao().getBySourceKey("onedrive:C"))
+        // Restaurés : de nouveau présents, plus aucun marqueur.
+        assertTrue(markedFolders().isEmpty())
+        assertTrue(liveFolders().containsAll(setOf("P", "C")))
+    }
+
+    /** Dossiers présents (non marqués supprimés). */
+    private suspend fun liveFolders() = db.cloudFolderDao().getAll().filter { it.deletedAt == null }.map { it.itemId }.toSet()
+
+    /** Dossiers marqués supprimés. */
+    private suspend fun markedFolders() = db.cloudFolderDao().getAll().filter { it.deletedAt != null }.map { it.itemId }.toSet()
+
+    @Test
+    fun newFolder_whileADeletedFolderHasHiddenItems_keepsIncrementalSync() = runTest {
+        sync(full = true, listOf(root(), folder("PH", "Photos"), image("A", "PH")))
+        sync(full = false, listOf(deleted("PH")))
+        assertFalse(mediaOf("A")!!.hasCloud)
+        assertEquals(setOf("PH"), markedFolders())
+        seedCursor()
+
+        // Nouveau dossier (aucun marqueur) : pas d'énumération complète, malgré les éléments
+        // masqués du dossier supprimé (avant la v5, chaque nouveau dossier en déclenchait une).
+        val run = CloudSyncRun(full = false)
+        writer.applyPage(listOf(folder("NEW", "Nouveau"), image("B", "NEW")), run, t0)
+        assertFalse(run.restoredFolderWithHiddenItems)
+        assertNotNull(db.syncCursorDao().get(ONEDRIVE_PROVIDER)!!.cursor)
+        writer.finishSync(run, t0, labels)
+        assertTrue(mediaOf("B")!!.hasCloud)
+        assertFalse(mediaOf("A")!!.hasCloud)
+        // Le marqueur n'est jamais montré : pas d'album pour le dossier supprimé.
+        assertNull(db.albumDao().getBySourceKey("onedrive:PH"))
+    }
+
+    @Test
+    fun marker_isRemovedOnceItsHiddenItemsArePurged() = runTest {
+        sync(full = true, listOf(root(), folder("PH", "Photos"), folder("Y24", "2024", parent = "PH"), image("A", "Y24")))
+        sync(full = false, listOf(deleted("PH")))
+        assertEquals(setOf("PH", "Y24"), markedFolders())
+
+        sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS - 1)
+        assertEquals(setOf("PH", "Y24"), markedFolders())
+
+        // Délai de grâce écoulé : éléments purgés, plus rien à restaurer, marqueurs retirés.
+        sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS)
+        assertNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A"))
+        assertTrue(markedFolders().isEmpty())
+        assertEquals(setOf("ROOT"), liveFolders())
+
+        // Le dossier revenu ensuite est un dossier ordinaire : pas d'énumération complète.
+        val run = CloudSyncRun(full = false)
+        writer.applyPage(listOf(folder("PH", "Photos")), run, t0 + MISSING_GRACE_MS)
+        assertFalse(run.restoredFolderWithHiddenItems)
+    }
+
+    @Test
+    fun deletedFolderWithoutItems_isNotKeptAsMarker() = runTest {
+        sync(full = true, listOf(root(), folder("EMPTY", "Vide"), image("A", "ROOT")))
+        sync(full = false, listOf(deleted("EMPTY")))
+        assertTrue(markedFolders().isEmpty())
+        assertEquals(setOf("ROOT"), liveFolders())
+    }
+
+    @Test
+    fun hiddenItemsWithoutAnyFolderRow_stillRequestFullEnumeration() = runTest {
+        // Données d'avant la v5 : dossier supprimé sans marqueur, éléments masqués orphelins.
+        sync(full = true, listOf(root(), folder("PH", "Photos"), image("A", "PH")))
+        sync(full = false, listOf(deleted("PH")))
+        db.cloudFolderDao().deleteByIds(listOf("PH"))
+        seedCursor()
+
+        val run = CloudSyncRun(full = false)
+        writer.applyPage(listOf(folder("NEW", "Nouveau")), run, t0)
+        assertTrue(run.restoredFolderWithHiddenItems)
     }
 
     @Test
@@ -343,8 +416,9 @@ class CloudSyncWriterTest {
         assertTrue(mediaOf("A")!!.hasCloud)
         val b = mediaOf("B")!!
         assertFalse(b.hasCloud)
-        // Dossier non vu et vide : retiré, ainsi que son album sans personnalisation.
-        assertNull(db.cloudFolderDao().getAll().firstOrNull { it.itemId == "OLD" })
+        // Dossier non vu : marqué supprimé (son élément masqué peut revenir), son album sans
+        // personnalisation est retiré.
+        assertEquals(setOf("OLD"), markedFolders())
         assertNull(db.albumDao().getBySourceKey("onedrive:OLD"))
         assertLocalUntouched(local)
     }

@@ -43,19 +43,59 @@ internal class CloudSyncRun(full: Boolean) {
     val removedFolders: MutableSet<String> = HashSet()
 
     /**
-     * Un dossier qui contient des éléments masqués, directement ou dans ses sous-dossiers, est
-     * réapparu (restauré depuis la corbeille) : ses éléments ne sont pas forcément renvoyés un par
+     * Un dossier marqué supprimé qui contient des éléments masqués, directement ou dans ses
+     * sous-dossiers (ou, pour des données d'avant la v5, un nouveau dossier alors que des éléments
+     * masqués n'ont plus de dossier connu), est réapparu (restauré depuis la corbeille) : ses
+     * éléments ne sont pas forcément renvoyés un par
      * un, une énumération complète s'impose. Le deltaLink enregistré est effacé dans la même
      * transaction que la page : même interrompu, le passage suivant sera une énumération complète.
      */
     var restoredFolderWithHiddenItems: Boolean = false
+
+    /**
+     * Opérations sur [seen] / [seenFolders] de la page en cours (énumération complète), pour le
+     * journal de reprise : relevées par [drainPageOps] après la transaction de la page.
+     */
+    private val pageOps = ArrayList<SeenEntry>()
+
+    fun markSeen(itemId: String) {
+        val set = seen ?: return
+        set += itemId
+        pageOps += SeenEntry(SeenOp.MEDIA, itemId)
+    }
+
+    fun markSeenFolder(itemId: String) {
+        val set = seenFolders ?: return
+        set += itemId
+        pageOps += SeenEntry(SeenOp.FOLDER, itemId)
+    }
+
+    /** Elément signalé supprimé : retiré des éléments et dossiers vus. */
+    fun markRemoved(itemId: String) {
+        if (seen == null && seenFolders == null) return
+        seen?.remove(itemId)
+        seenFolders?.remove(itemId)
+        pageOps += SeenEntry(SeenOp.REMOVE, itemId)
+    }
+
+    /** Opérations de la page appliquée (vidées). */
+    fun drainPageOps(): List<SeenEntry> = pageOps.toList().also { pageOps.clear() }
 
     /** Bascule en énumération complète (jeton expiré, dossier restauré). */
     fun restartFull() {
         full = true
         seen = HashSet()
         seenFolders = HashSet()
+        pageOps.clear()
         restoredFolderWithHiddenItems = false
+    }
+
+    companion object {
+        /** Enumération complète reprise : éléments et dossiers vus rejoués depuis le journal. */
+        fun resumed(seen: Set<String>, seenFolders: Set<String>): CloudSyncRun = CloudSyncRun(full = true).apply {
+            this.seen = HashSet(seen)
+            this.seenFolders = HashSet(seenFolders)
+        }
     }
 }
 
@@ -129,25 +169,30 @@ class CloudSyncWriter @Inject constructor(
         for (chunk in folders.chunked(CHUNK)) {
             val ids = chunk.map { it.itemId }
             if (!run.full && !run.restoredFolderWithHiddenItems) {
-                // Dossier inconnu reçu alors que des éléments masqués sont dans ce dossier ou dans
-                // un dossier retiré de l'index (sous-dossier d'un dossier supprimé) : restauration
-                // possible. Les lignes de dossiers retirées ne permettent plus de savoir lesquels
-                // descendaient du dossier restauré, d'où le test large.
+                // Dossier marqué supprimé qui réapparaît (restauré depuis la corbeille) avec des
+                // éléments masqués dans son sous-arbre : ses éléments ne sont pas forcément
+                // renvoyés un par un. Un dossier réellement nouveau (sans marqueur) ne déclenche
+                // rien, sauf s'il reste des éléments masqués sans dossier connu (dossiers supprimés
+                // avant la v5, sans marqueur : test large, comme avant).
+                val markers = folderDao.markedIds(ids).toSet()
+                val restoredWithHidden = markers.isNotEmpty() &&
+                    subtreeHasHiddenItems(markers, folderDao.getAll().map { it.toFields() }, hiddenFolderIds())
                 val known = folderDao.knownIds(ids).toSet()
                 val newKeys = ids.filter { it !in known }.mapNotNull { cloudBucketKey(it) }
-                if (newKeys.isNotEmpty() && sourceDao.existsHiddenCloudInBucketsOrOrphaned(newKeys)) {
+                if (restoredWithHidden || (newKeys.isNotEmpty() && sourceDao.existsHiddenCloudInBucketsOrOrphaned(newKeys))) {
                     run.restoredFolderWithHiddenItems = true
                     // Décision durable : enregistrée avec le dossier, dans la transaction de la page.
                     cursorDao.clearLink(ONEDRIVE_PROVIDER)
                 }
             }
+            // deletedAt null : un dossier marqué qui revient est de nouveau présent.
             folderDao.upsertAll(
                 chunk.map { CloudFolderEntity(itemId = it.itemId, parentId = it.parentId, name = it.name, isRoot = it.isRoot, updatedAt = now) },
             )
         }
         for (f in folders) {
             run.removedFolders.remove(f.itemId)
-            run.seenFolders?.add(f.itemId)
+            run.markSeenFolder(f.itemId)
         }
     }
 
@@ -163,10 +208,7 @@ class CloudSyncWriter @Inject constructor(
                 touched += sources.map { it.mediaId }
             }
         }
-        for (id in ids) {
-            run.seen?.remove(id)
-            run.seenFolders?.remove(id)
-        }
+        for (id in ids) run.markRemoved(id)
     }
 
     private suspend fun applyMedia(items: List<CloudMediaFields>, run: CloudSyncRun, now: Long, touched: MutableSet<Long>) {
@@ -221,7 +263,7 @@ class CloudSyncWriter @Inject constructor(
                     sourceDao.insert(fields.toSourceEntity(mediaId))
                     touched += mediaId
                 }
-                run.seen?.add(fields.itemId)
+                run.markSeen(fields.itemId)
             }
             if (redownload.isNotEmpty()) taskDao.enqueueIfAbsent(redownload)
         }
@@ -251,7 +293,8 @@ class CloudSyncWriter @Inject constructor(
             expiry.purge.mapTo(touched) { it.mediaId }
 
             // 2. Dossiers supprimés (toujours absents en fin de passage) : leur contenu est masqué.
-            val folders = folderDao.getAll().map { it.toFields() }
+            val folderRows = folderDao.getAll()
+            val folders = folderRows.map { it.toFields() }
             val knownIds = folders.mapTo(HashSet()) { it.itemId }
             val seenFolders = run.seenFolders
             val goneFolders: Set<String> = if (seenFolders != null) {
@@ -271,18 +314,33 @@ class CloudSyncWriter @Inject constructor(
             mediaDao.deleteOrphans()
             albumDao.clearDanglingCovers()
 
-            // Un dossier non vu qui garde des éléments visibles (cas limite) conserve son nom.
-            val deletable = goneFolders.filter { id ->
-                cloudBucketKey(id)?.let { !sourceDao.existsVisibleCloudInBucket(it) } ?: true
+            // 3. Marqueurs de suppression : un dossier supprimé (ou déjà marqué) reste marqué tant
+            // que son sous-arbre a des éléments masqués, sinon sa ligne est retirée. Un dossier non
+            // vu qui garde des éléments visibles (cas limite) conserve sa ligne telle quelle.
+            val keepVisible = goneFolders.filterTo(HashSet()) { id ->
+                cloudBucketKey(id)?.let { sourceDao.existsVisibleCloudInBucket(it) } ?: false
             }
-            for (chunk in deletable.chunked(CHUNK)) folderDao.deleteByIds(chunk)
+            val tombstones = planFolderTombstones(
+                folders = folders,
+                markers = folderRows.filter { it.deletedAt != null }.mapTo(HashSet()) { it.itemId },
+                gone = goneFolders,
+                keepVisible = keepVisible,
+                hiddenFolders = hiddenFolderIds(),
+            )
+            for (chunk in tombstones.mark.chunked(CHUNK)) folderDao.markDeleted(chunk, now)
+            for (chunk in tombstones.delete.chunked(CHUNK)) folderDao.deleteByIds(chunk)
 
             syncCloudFolderAlbums(labels, now)
         }
     }
 
+    /** Identifiants des dossiers qui contiennent des sources OneDrive masquées. */
+    private suspend fun hiddenFolderIds(): Set<String> =
+        sourceDao.hiddenCloudBuckets().mapNotNullTo(HashSet()) { folderIdOfCloudBucket(it) }
+
     /**
-     * Albums OneDrive : un par dossier contenant des éléments visibles. Nom et chemin suivent les
+     * Albums OneDrive : un par dossier contenant des éléments visibles (un dossier marqué
+     * supprimé n'en a pas : il n'est donc jamais montré). Nom et chemin suivent les
      * renommages ; un album sans personnalisation de l'utilisateur disparaît avec son dossier.
      */
     private suspend fun syncCloudFolderAlbums(labels: CloudFolderLabels, now: Long) {

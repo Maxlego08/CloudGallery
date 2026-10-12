@@ -71,6 +71,10 @@ data object SettingsRoute
 @Serializable
 data object AccountRoute
 
+/** Stockage : espace occupé, plafonds des caches, vidage du cache. */
+@Serializable
+data object StorageRoute
+
 fun encodeContext(context: MediaContext): Pair<String, Long> = when (context) {
     MediaContext.Timeline -> "timeline" to 0L
     MediaContext.Favorites -> "favorites" to 0L

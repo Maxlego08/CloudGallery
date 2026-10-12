@@ -225,6 +225,12 @@ data class CloudFolderEntity(
     /** Racine du lecteur (facette `root`). */
     val isRoot: Boolean,
     val updatedAt: Long,
+    /**
+     * Marqueur de suppression (v5) : dossier supprimé sur OneDrive, gardé tant que son
+     * sous-arbre contient des éléments masqués (restauration possible depuis la corbeille).
+     * Null : dossier présent. Une ligne marquée n'est jamais montrée.
+     */
+    val deletedAt: Long? = null,
 )
 
 /**

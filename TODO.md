@@ -219,33 +219,83 @@ Détail dans le README (« Vérifications sur l'appareil : streaming OneDrive »
 
 ## Phase 5 — Cache LRU, page Stockage, synchro périodique
 
-- [ ] Recenser chaque fichier de cache dans `cached_file` (`lastAccessAt` mis à jour hors du thread
-      principal).
-- [ ] Éviction LRU sous un plafond configurable. **Les fichiers `pinned` ne sont jamais évincés.**
-- [ ] Page « Stockage » : espace utilisé par niveau (miniatures, aperçus, originaux, hors ligne),
-      plafond, vidage du cache non épinglé avec confirmation.
-- [ ] Coil : décider si son cache disque (256 Mo, qui contient aujourd'hui les miniatures OneDrive)
-      reste séparé du cache géré ou s'il y est intégré.
-- [ ] WorkManager périodique (`@HiltWorker`, `hilt-work` déjà présent) pour le delta OneDrive, avec
-      contrainte réseau et option Wi-Fi seulement. Prévoir aussi un rattrapage MediaStore en arrière-
-      plan, éventuellement avec un `ContentUriTrigger`.
+Décisions (phase 5) : plafond des originaux 1 Go par défaut (500 Mo / 1 Go / 2 Go / 5 Go) ; cache
+Coil (miniatures et aperçus) séparé de `cached_file`, avec son propre plafond réglable ; synchro
+OneDrive de fond réglable (désactivée / 1 h / 6 h / 24 h, 6 h par défaut) ; en « OneDrive seul »,
+l'onglet Photos montre OneDrive quel que soit le réglage.
+
+- [x] Recenser les fichiers de cache : originaux et copies hors ligne dans `cached_file`
+      (`lastAccessAt` rafraîchi sur le dispatcher d'E/S) ; miniatures et aperçus dans le cache
+      disque Coil, qui a sa propre éviction LRU (décision : pas de ligne par miniature).
+- [x] Éviction LRU des originaux sous un plafond réglable (`AppSettings.originalsCacheMaxBytes`),
+      au démarrage et après chaque téléchargement (`CloudOriginalStore.requestTrim`). **Les lignes
+      `pinned` ne sont jamais évincées ni comptées** ; un original utilisé depuis moins de 30 min
+      (affiché, partagé) n'est pas évincé, le plafond pouvant être dépassé un moment.
+- [x] Page « Stockage » (Paramètres > Stockage, `ui/storage/`) : espace mesuré sur le disque par
+      niveau (miniatures et aperçus, originaux, copies hors ligne) et espace libre, plafonds des
+      originaux et des miniatures, « Vider le cache » (miniatures, aperçus, originaux ; jamais les
+      copies hors ligne) avec confirmation.
+- [x] Coil : cache disque séparé de `cached_file` (décision), plafond réglable 100 / 250 / 500 Mo /
+      1 Go (250 Mo par défaut, `ThumbnailCacheLimit`), appliqué au prochain démarrage.
+- [x] WorkManager périodique pour le delta OneDrive (`OneDriveSyncWorker`, `@HiltWorker`) :
+      Paramètres > Compte « Synchroniser en arrière-plan » (désactivée / 1 h / 6 h / 24 h, 6 h par
+      défaut) et « Synchroniser en Wi-Fi uniquement » ; batterie non faible ; planifié pour un
+      compte connecté, annulé à la déconnexion (`BackgroundSyncScheduler`) ; initialiseur
+      WorkManager par défaut retiré (`Configuration.Provider`).
+- [ ] Rattrapage MediaStore en arrière-plan (`ContentUriTrigger`) : pas fait, l'index local est déjà
+      rattrapé à chaque ouverture (`MediaSyncCoordinator`) ; utile seulement pour une future
+      fonction de fond qui lirait l'index local.
 - [x] Afficher l'état de synchro OneDrive dans Paramètres (dernier delta, erreurs, nombre
       d'éléments) : fait en phase 3.
-- [ ] Première énumération OneDrive reprenable après un arrêt du processus (aujourd'hui elle
-      recommence depuis le début, sans perte de données).
-- [ ] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : aujourd'hui, sans permission
-      médias, l'application n'affiche que l'écran d'autorisation. Permettre de parcourir OneDrive
-      sans accès aux photos du téléphone.
+- [x] Énumération complète OneDrive reprenable après un arrêt du processus ou une erreur : nextLink
+      et nombre de pages dans `cloud_sync.xml`, éléments vus journalisés page par page
+      (`noBackupFilesDir/onedrive_enumeration_seen.log`, `EnumerationResumeLogic`) ; reprise
+      refusée (départ du début) si autre lecteur, plus de 24 h, journal incomplet ou lien refusé.
+- [x] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : « Utiliser OneDrive
+      seulement » sur l'écran d'autorisation (choix mémorisé, oublié dès qu'un accès est accordé) ;
+      onglets complets, OneDrive d'office dans Photos et Vidéos (`includeCloudOnlyInLibrary`,
+      `MediaAccessState`), bandeau « Photos du téléphone non autorisées — Autoriser », état vide
+      « Se connecter à OneDrive » sans compte.
 - [ ] Copies hors ligne : relancer automatiquement un nouveau téléchargement détecté par une synchro
       en arrière-plan (aujourd'hui au premier plan seulement : la tâche lancée par l'utilisateur ne
       peut être planifiée qu'appli visible) ; couvertures d'album et EXIF depuis la copie hors ligne.
-- [ ] Garder les lignes `cloud_folder` des dossiers supprimés (marqueur de suppression) tant que
-      des sources masquées y font référence : la restauration d'un dossier pourrait alors cibler
-      ses seuls descendants, au lieu de déclencher une énumération complète à chaque nouveau
-      dossier pendant les 30 jours qui suivent la suppression d'un dossier (migration de schéma).
-- [ ] Changement de compte détecté dès le démarrage (aujourd'hui au premier passage de synchro) :
-      jusque-là, une miniature non encore en cache d'un élément de l'ancien compte peut encore être
-      demandée avec le jeton du nouveau compte.
+- [x] Marqueur de suppression des dossiers OneDrive (base v5, `cloud_folder.deletedAt`) : un dossier
+      supprimé (et ses dossiers intermédiaires) reste marqué tant que son sous-arbre a des éléments
+      masqués, puis est retiré après leur purge (`planFolderTombstones`). Seul un marqueur restauré
+      avec des éléments masqués déclenche une énumération complète ; un nouveau dossier n'en
+      déclenche plus (sauf éléments masqués orphelins d'avant la v5, jusqu'à leur purge). Le delta
+      limité au dossier restauré n'est pas utilisé (fusion avec le delta du lecteur non vérifiée).
+- [x] Changement de compte bloqué dès le démarrage : compte MSAL vérifié et « autre compte »
+      enregistrés (`CloudSyncThrottleStore`) ; `CloudAccessGuard` refuse tout accès à un compte non
+      vérifié ou après la détection d'un autre lecteur, sans attendre le premier passage, qui part
+      alors sans délai. Données d'avant la phase 5 (aucun compte vérifié) : accès permis jusqu'au
+      prochain passage, qui vérifie.
+
+### Vérifications sur l'appareil (phase 5)
+- [ ] Énumération reprise : première connexion sur un gros OneDrive, arrêt forcé après quelques
+      pages (logcat « Reprise de l'énumération complète après N pages » au redémarrage) ; à la
+      fin, aucun élément des premières pages masqué, nombre d'éléments identique à une
+      énumération sans arrêt ; logcat sans nextLink.
+- [ ] « OneDrive seul » : refuser l'accès, « Utiliser OneDrive seulement » ; sans compte, Photos
+      propose la connexion ; connecté, Photos/Vidéos montrent OneDrive sans le réglage ; bandeau
+      « Autoriser » (demande, puis paramètres après un refus définitif) ; accès accordé puis retiré
+      dans les paramètres : l'écran d'autorisation revient.
+- [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
+      le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
+      plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
+      arrêt forcé.
+- [ ] Synchro en arrière-plan : `adb shell dumpsys jobscheduler | grep -A5 onedrive` (ou App
+      Inspection > Background Task Inspector) montre le travail périodique ; désactivée : annulé ;
+      déconnexion : annulé ; passage forcé (`adb shell cmd jobscheduler run -f fr.eva.cloudgallery
+      <id>`) appli fermée : nouveaux éléments visibles à l'ouverture sans attendre.
+- [ ] Autre compte : déconnexion sans purge impossible, donc tester avec « Données restantes »
+      puis connexion à un autre compte ; arrêt forcé avant la fin du premier passage : au
+      redémarrage, aucune miniature de l'ancien compte demandée, carte « Autre compte OneDrive ».
+- [ ] Dossiers supprimés (OneDrive web) : dossier de photos supprimé puis, avant 30 jours, nouveau
+      dossier créé (synchro incrémentale, pas d'énumération complète dans le logcat `OneDriveSync`),
+      puis dossier restauré depuis la corbeille (énumération complète, photos et album de retour).
+- [ ] Plafond des originaux à 500 Mo avec 1 Go d'originaux : les moins récents partent aussitôt,
+      sauf ceux ouverts depuis moins de 30 min ; un original partagé vers Gmail reste lisible.
 
 ## Phase 6 — Dédoublonnage, économiseur d'espace, recherche, albums mixtes
 
@@ -345,7 +395,8 @@ animations :
       dossier du téléphone, même conservé hors ligne (copie de l'appli, lecture seule).
 - [ ] Doublons : un média présent sur le téléphone et sur OneDrive est deux médias (réglage
       « Afficher les éléments OneDrive dans Photos » désactivé par défaut ; fusion en phase 6).
-- [ ] Sans permission médias, OneDrive n'est pas consultable (écran d'autorisation seul ; phase 5).
+- [ ] Sans permission médias, OneDrive est consultable seulement après « Utiliser OneDrive
+      seulement » (phase 5) ; un build sans OneDrive n'affiche que l'écran d'autorisation.
 - [ ] Pas de synchro en arrière-plan : `work-runtime-ktx` et `hilt-work` sont présents mais ne
       servent pas.
 - [ ] Les favoris et albums personnalisés sont propres à l'application. Ils sont perdus à la

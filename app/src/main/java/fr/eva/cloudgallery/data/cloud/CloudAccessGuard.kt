@@ -51,8 +51,10 @@ class CloudAccessGuard @Inject constructor(
                 // compte MSAL pour tous les appelants simultanés.
                 accountMutex.withLock { service.refreshIfNeeded() }
             }
-            if (service.state.value !is CloudAccountState.SignedIn) throw CloudAuthRequiredException()
-            if (syncer.get().state.value.accountMismatch) throw CloudAuthRequiredException()
+            val signedIn = service.state.value as? CloudAccountState.SignedIn ?: throw CloudAuthRequiredException()
+            // Autre lecteur détecté, ou compte pas encore vérifié par une synchro (état conservé :
+            // vrai dès le démarrage du processus, sans attendre le premier passage).
+            if (!syncer.get().accountAllowed(signedIn.account.id)) throw CloudAuthRequiredException()
         }
     }
 

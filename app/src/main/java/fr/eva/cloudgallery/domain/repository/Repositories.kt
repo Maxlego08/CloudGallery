@@ -7,6 +7,7 @@ import androidx.paging.PagingData
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 import fr.eva.cloudgallery.domain.model.CloudAuthRequiredException
 import fr.eva.cloudgallery.domain.model.CloudException
@@ -22,6 +23,7 @@ import fr.eva.cloudgallery.domain.model.KeepOfflineResult
 import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
+import fr.eva.cloudgallery.domain.model.StorageUsage
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -140,6 +142,30 @@ interface SettingsRepository {
     suspend fun setLoadOriginalsOnMobileData(enabled: Boolean)
     suspend fun setOfflineWifiOnly(enabled: Boolean)
     suspend fun setOfflineNotificationsAsked(asked: Boolean)
+
+    /** [bytes] : une des valeurs de `ORIGINALS_CACHE_CHOICES`. */
+    suspend fun setOriginalsCacheMaxBytes(bytes: Long)
+
+    /** [bytes] : une des valeurs de `THUMBNAIL_CACHE_CHOICES` (appliquée au prochain démarrage). */
+    suspend fun setThumbnailCacheMaxBytes(bytes: Long)
+    suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
+    suspend fun setBackgroundSyncWifiOnly(enabled: Boolean)
+    suspend fun setOneDriveOnlyChosen(chosen: Boolean)
+}
+
+/** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */
+interface StorageRepository {
+    /** Mesure sur le disque (dispatcher d'E/S). */
+    suspend fun usage(): StorageUsage
+
+    /**
+     * Vide le cache non épinglé : miniatures et aperçus OneDrive, originaux temporaires (sauf
+     * téléchargements en cours). Les copies hors ligne ne sont jamais touchées.
+     */
+    suspend fun clearCache()
+
+    /** Nouveau plafond des originaux (déjà enregistré) : nettoyage aussitôt (dispatcher d'E/S). */
+    suspend fun applyOriginalsCap()
 }
 
 /**
@@ -204,6 +230,19 @@ interface CloudMediaSyncer {
 
     /** Demande une synchronisation (sans attendre). Sans effet si OneDrive est indisponible. */
     fun requestSync(reason: CloudSyncReason)
+
+    /**
+     * Synchronisation dont on attend la fin (travail de fond) : regroupée avec les demandes en
+     * cours comme [requestSync]. Vrai si OneDrive a été interrogé (même en échec).
+     */
+    suspend fun syncAndWait(reason: CloudSyncReason): Boolean
+
+    /**
+     * Le compte MSAL [accountId] peut accéder aux données de l'index : aucun autre lecteur
+     * détecté, et compte vérifié par le dernier passage (ou aucun compte encore vérifié).
+     * Valeurs conservées hors de la mémoire : vrai dès le démarrage du processus.
+     */
+    suspend fun accountAllowed(accountId: String?): Boolean
 
     /**
      * Interrompt la synchronisation en cours et exécute [block] en exclusion mutuelle avec toute

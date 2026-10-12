@@ -362,4 +362,79 @@ class OneDriveLogicTest {
         assertEquals(0L, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS + 1, now))
         assertEquals(now + MAX_STORED_THROTTLE_MS, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS, now))
     }
+
+    @Test
+    fun accountAllowed_onlyForTheVerifiedAccount_andNeverAfterAMismatch() {
+        // Index lié au compte A par le dernier passage.
+        assertTrue(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = false))
+        // Autre compte connecté : bloqué jusqu'à ce qu'un passage vérifie son lecteur.
+        assertFalse(cloudAccountAllowed("B", verifiedAccountId = "A", mismatch = false))
+        assertFalse(cloudAccountAllowed(null, verifiedAccountId = "A", mismatch = false))
+        // Aucun compte vérifié (index vide, ou données d'avant la vérification) : permis.
+        assertTrue(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = false))
+        // Autre lecteur détecté : bloqué même pour le compte vérifié, jusqu'à la purge.
+        assertFalse(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = true))
+        assertFalse(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = true))
+    }
+
+    // --- Marqueurs de suppression des dossiers ---------------------------------------------
+
+    /** ROOT > P > C > G ; ROOT > Q. */
+    private val tree = listOf(
+        CloudFolderFields("ROOT", null, "root", isRoot = true),
+        CloudFolderFields("P", "ROOT", "Parent", isRoot = false),
+        CloudFolderFields("C", "P", "Enfant", isRoot = false),
+        CloudFolderFields("G", "C", "Petit-enfant", isRoot = false),
+        CloudFolderFields("Q", "ROOT", "Autre", isRoot = false),
+    )
+
+    @Test
+    fun tombstones_goneFolderWithHiddenItemsInSubtree_isMarkedWithItsAncestors() {
+        val plan = planFolderTombstones(tree, markers = emptySet(), gone = setOf("P", "C", "G"), keepVisible = emptySet(), hiddenFolders = setOf("G"))
+        // P et C n'ont pas d'élément mais rattachent G au dossier restauré.
+        assertEquals(setOf("P", "C", "G"), plan.mark)
+        assertTrue(plan.delete.isEmpty())
+    }
+
+    @Test
+    fun tombstones_goneFolderWithoutHiddenItems_isDeleted() {
+        val plan = planFolderTombstones(tree, markers = emptySet(), gone = setOf("Q"), keepVisible = emptySet(), hiddenFolders = setOf("G"))
+        assertTrue(plan.mark.isEmpty())
+        assertEquals(setOf("Q"), plan.delete)
+    }
+
+    @Test
+    fun tombstones_existingMarkers_areDeletedOnceNothingHiddenRemains_andNeverRemarked() {
+        val kept = planFolderTombstones(tree, markers = setOf("P", "C", "G"), gone = emptySet(), keepVisible = emptySet(), hiddenFolders = setOf("C"))
+        // P et C restent (déjà marqués : rien à remarquer) ; G n'a plus rien sous lui.
+        assertTrue(kept.mark.isEmpty())
+        assertEquals(setOf("G"), kept.delete)
+
+        val purged = planFolderTombstones(tree, markers = setOf("P", "C", "G"), gone = emptySet(), keepVisible = emptySet(), hiddenFolders = emptySet())
+        assertEquals(setOf("P", "C", "G"), purged.delete)
+    }
+
+    @Test
+    fun tombstones_goneFolderStillHoldingVisibleItems_isLeftUntouched() {
+        val plan = planFolderTombstones(tree, markers = emptySet(), gone = setOf("Q"), keepVisible = setOf("Q"), hiddenFolders = setOf("Q"))
+        assertTrue(plan.mark.isEmpty())
+        assertTrue(plan.delete.isEmpty())
+    }
+
+    @Test
+    fun subtreeHasHiddenItems_followsDescendantsOnly() {
+        assertTrue(subtreeHasHiddenItems(setOf("P"), tree, hiddenFolders = setOf("G")))
+        assertTrue(subtreeHasHiddenItems(setOf("G"), tree, hiddenFolders = setOf("G")))
+        // Un frère ou un ancêtre masqué ne concerne pas ce dossier.
+        assertFalse(subtreeHasHiddenItems(setOf("Q"), tree, hiddenFolders = setOf("G")))
+        assertFalse(subtreeHasHiddenItems(setOf("C"), tree, hiddenFolders = setOf("P")))
+        assertFalse(subtreeHasHiddenItems(emptySet(), tree, hiddenFolders = setOf("G")))
+    }
+
+    @Test
+    fun subtreeHasHiddenItems_toleratesParentCycles() {
+        val cyclic = listOf(CloudFolderFields("A", "B", "a", isRoot = false), CloudFolderFields("B", "A", "b", isRoot = false))
+        assertTrue(subtreeHasHiddenItems(setOf("A"), cyclic, hiddenFolders = setOf("B")))
+        assertFalse(subtreeHasHiddenItems(setOf("A"), cyclic, hiddenFolders = setOf("Z")))
+    }
 }

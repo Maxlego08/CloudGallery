@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
+import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -88,5 +91,65 @@ class SettingsLogicTest {
         assertTrue(repository.settings.first().offlineNotificationsAsked)
         // Indépendant des autres réglages OneDrive.
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+    }
+
+    /** Décision utilisateur (phase 5) : plafond des originaux à 1 Go par défaut, parmi les choix proposés. */
+    @Test
+    fun originalsCacheMaxBytes_defaultsTo1Gb_andOnlyAcceptsProposedChoices() = runTest {
+        assertEquals(1_000_000_000L, AppSettings().originalsCacheMaxBytes)
+        assertTrue(AppSettings().originalsCacheMaxBytes in ORIGINALS_CACHE_CHOICES)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+        repository.setOriginalsCacheMaxBytes(5_000_000_000L)
+        assertEquals(5_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+        assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setOriginalsCacheMaxBytes(123L) } }
+        assertEquals(5_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+    }
+
+    @Test
+    fun thumbnailCacheMaxBytes_defaultsTo250Mb_andOnlyAcceptsProposedChoices() = runTest {
+        assertEquals(250_000_000L, AppSettings().thumbnailCacheMaxBytes)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        repository.setThumbnailCacheMaxBytes(1_000_000_000L)
+        assertEquals(1_000_000_000L, repository.settings.first().thumbnailCacheMaxBytes)
+        assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setThumbnailCacheMaxBytes(256L * 1024 * 1024) } }
+        // Indépendant du plafond des originaux.
+        assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+    }
+
+    /** Décision utilisateur (phase 5) : synchro de fond réglable, toutes les 6 h par défaut, sur tout réseau. */
+    @Test
+    fun backgroundSync_every6HoursByDefault_onAnyNetwork() = runTest {
+        assertEquals(BackgroundSyncInterval.EVERY_6_HOURS, AppSettings().backgroundSyncInterval)
+        assertFalse(AppSettings().backgroundSyncWifiOnly)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertEquals(BackgroundSyncInterval.EVERY_6_HOURS, repository.settings.first().backgroundSyncInterval)
+        repository.setBackgroundSyncInterval(BackgroundSyncInterval.OFF)
+        repository.setBackgroundSyncWifiOnly(true)
+        assertEquals(BackgroundSyncInterval.OFF, repository.settings.first().backgroundSyncInterval)
+        assertTrue(repository.settings.first().backgroundSyncWifiOnly)
+        // Indépendant du réglage Wi-Fi des copies hors ligne.
+        assertTrue(repository.settings.first().offlineWifiOnly)
+        assertEquals(null, BackgroundSyncInterval.OFF.hours)
+        assertEquals(listOf(1L, 6L, 24L), BackgroundSyncInterval.entries.mapNotNull { it.hours })
+    }
+
+    @Test
+    fun oneDriveOnlyChosen_isOffByDefault_andRemembered() = runTest {
+        assertFalse(AppSettings().oneDriveOnlyChosen)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertFalse(repository.settings.first().oneDriveOnlyChosen)
+        repository.setOneDriveOnlyChosen(true)
+        assertTrue(repository.settings.first().oneDriveOnlyChosen)
+        repository.setOneDriveOnlyChosen(false)
+        assertFalse(repository.settings.first().oneDriveOnlyChosen)
+    }
+
+    @Test
+    fun choiceParsingFallsBackToDefault() {
+        val choices = listOf(1L, 2L)
+        assertEquals(2L, choiceOrDefault(2L, choices, 1L))
+        assertEquals(1L, choiceOrDefault(7L, choices, 1L))
+        assertEquals(1L, choiceOrDefault(null, choices, 1L))
     }
 }

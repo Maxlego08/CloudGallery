@@ -3,7 +3,13 @@ package fr.eva.cloudgallery.domain.model
 import java.io.IOException
 
 /** Compte Microsoft connecté (mode compte unique). Le nom d'utilisateur n'est jamais journalisé. */
-data class CloudAccount(val username: String?)
+/**
+ * Compte Microsoft connecté. [id] : identifiant MSAL opaque (jamais affiché ni journalisé :
+ * [toString] ne le contient pas), qui sert à vérifier que l'index appartient à ce compte.
+ */
+data class CloudAccount(val username: String?, val id: String? = null) {
+    override fun toString(): String = "CloudAccount"
+}
 
 /**
  * Cause d'un échec cloud, indépendante de la langue : le texte affiché est résolu par l'UI
@@ -98,6 +104,9 @@ enum class CloudSyncReason {
 
     /** Connexion (ou reconnexion) réussie. */
     SIGN_IN,
+
+    /** Synchro périodique en arrière-plan (WorkManager) : ignorée si la dernière est récente. */
+    BACKGROUND,
 }
 
 /** Etat de la synchronisation OneDrive -> index local. */

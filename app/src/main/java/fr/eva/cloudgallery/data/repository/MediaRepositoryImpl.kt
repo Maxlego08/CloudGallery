@@ -16,6 +16,7 @@ import fr.eva.cloudgallery.data.db.dao.MediaSourceDao
 import fr.eva.cloudgallery.data.db.entity.CacheKind
 import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
+import fr.eva.cloudgallery.data.local.MediaAccessState
 import fr.eva.cloudgallery.data.local.externalIdCandidatesFromMediaStorePath
 import fr.eva.cloudgallery.data.local.orderedByListPosition
 import fr.eva.cloudgallery.data.local.externalIdFromMediaDocumentId
@@ -27,6 +28,7 @@ import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.model.OfflineFile
 import fr.eva.cloudgallery.domain.model.SourceKind
+import fr.eva.cloudgallery.domain.model.includeCloudOnlyInLibrary
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.domain.repository.MediaRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
@@ -45,7 +47,8 @@ import javax.inject.Singleton
 
 /**
  * Photos (Timeline) et Vidéos suivent le réglage « Afficher les éléments OneDrive dans Photos »
- * (grille, identifiants, nombres) ; Favoris, albums et média unique montrent tout le visible.
+ * (grille, identifiants, nombres), et montrent OneDrive d'office sans accès aux photos du
+ * téléphone ; Favoris, albums et média unique montrent tout le visible.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -56,12 +59,15 @@ class MediaRepositoryImpl @Inject constructor(
     private val offlineStore: OfflineStore,
     private val indexer: LocalMediaIndexer,
     settingsRepository: SettingsRepository,
+    mediaAccess: MediaAccessState,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : MediaRepository {
 
-    /** Réglage « Afficher les éléments OneDrive dans Photos ». */
-    private val includeCloudOnly: Flow<Boolean> = settingsRepository.settings
-        .map { it.showCloudInPhotos }
+    /** Eléments uniquement OneDrive dans Photos et Vidéos ([includeCloudOnlyInLibrary]). */
+    private val includeCloudOnly: Flow<Boolean> = combine(
+        settingsRepository.settings.map { it.showCloudInPhotos },
+        mediaAccess.access,
+    ) { showCloud, access -> includeCloudOnlyInLibrary(showCloud, access) }
         .distinctUntilChanged()
 
     override fun pagedMedia(context: MediaContext): Flow<PagingData<MediaSummary>> = when (context) {
