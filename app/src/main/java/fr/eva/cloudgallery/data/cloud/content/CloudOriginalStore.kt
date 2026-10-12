@@ -10,6 +10,7 @@ import fr.eva.cloudgallery.data.cloud.offline.OfflineSpace
 import fr.eva.cloudgallery.data.cloud.offline.SpaceAction
 import fr.eva.cloudgallery.data.cloud.offline.spaceAction
 import fr.eva.cloudgallery.data.cloud.transfer.CloudFileDownloader
+import fr.eva.cloudgallery.data.cloud.transfer.ORPHAN_MIN_AGE_MS
 import fr.eva.cloudgallery.data.cloud.transfer.PART_SUFFIX
 import fr.eva.cloudgallery.data.cloud.transfer.SweepEntry
 import fr.eva.cloudgallery.data.cloud.transfer.cacheFileName
@@ -380,13 +381,28 @@ class CloudOriginalStore internal constructor(
         trimLock.withLock { trimNow(maxBytes ?: maxBytesSetting(), maxAgeMs) }
     }
 
-    private suspend fun trimNow(maxBytes: Long, maxAgeMs: Long) {
+    /**
+     * « Vider le cache » (page Stockage, confirmé par l'utilisateur) : tous les originaux, même
+     * récemment utilisés, et les fichiers sans ligne de plus d'une minute (une ligne retirée par
+     * la synchro laisse son fichier), sauf les téléchargements en cours et leurs fichiers
+     * partiels récents. Retéléchargés au besoin.
+     */
+    suspend fun clearCache(): Unit = withContext(io) {
+        trimLock.withLock { trimNow(maxBytes = 0L, maxAgeMs = 0L, inUseGraceMs = 0L, orphanMinAgeMs = CLEAR_ORPHAN_MIN_AGE_MS) }
+    }
+
+    private suspend fun trimNow(
+        maxBytes: Long,
+        maxAgeMs: Long,
+        inUseGraceMs: Long = ORIGINAL_IN_USE_GRACE_MS,
+        orphanMinAgeMs: Long = ORPHAN_MIN_AGE_MS,
+    ) {
         val now = clock()
         val busy = synchronized(lock) { flights.values.map { it.name }.toSet() }
         val rows = cachedFiles.listByKind(CacheKind.ORIGINAL).map { row ->
             TrimRow(row.id, row.path, row.sizeBytes, row.lastAccessAt, fileExists = resolve(row.path)?.isFile == true, pinned = row.pinned)
         }
-        val plan = planOriginalTrim(rows, busy, now, maxBytes, maxAgeMs)
+        val plan = planOriginalTrim(rows, busy, now, maxBytes, maxAgeMs, inUseGraceMs)
         // Suppression ligne par ligne, seulement si la ligne n'a pas changé depuis sa lecture :
         // un original rouvert (date d'accès), remplacé par une nouvelle version (autre fichier)
         // ou en cours de lecture ([accessLock]) entre-temps est gardé.
@@ -405,7 +421,7 @@ class CloudOriginalStore internal constructor(
         val known = plan.keep.map { it.path }.toSet() + keptAnyway
         val files = root.listFiles().orEmpty().associateBy { it.name }
         val entries = files.values.map { SweepEntry(it.name, it.isFile, now - it.lastModified()) }
-        filesToSweep(entries, known, busy).forEach { files[it]?.delete() }
+        filesToSweep(entries, known, busy, orphanMinAgeMs = orphanMinAgeMs).forEach { files[it]?.delete() }
     }
 
     /**
@@ -442,6 +458,9 @@ class CloudOriginalStore internal constructor(
         /** Originaux inutilisés depuis plus de 7 jours supprimés au démarrage. */
         const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
         private const val CLEAR_JOIN_TIMEOUT_MS = 5_000L
+
+        /** « Vider le cache » : un original juste renommé est enregistré en quelques millisecondes. */
+        private const val CLEAR_ORPHAN_MIN_AGE_MS = 60_000L
     }
 }
 

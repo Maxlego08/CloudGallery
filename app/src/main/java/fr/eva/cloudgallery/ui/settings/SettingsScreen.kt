@@ -64,6 +64,7 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenStorage: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -114,6 +115,7 @@ fun SettingsScreen(
                         cloudState = if (viewModel.cloudAvailable) cloudState else null,
                         cloudSyncState = cloudSyncState,
                         onOpenAccount = onOpenAccount,
+                        onOpenStorage = onOpenStorage,
                         onShowCloudInPhotos = viewModel::setShowCloudInPhotos,
                         onLoadOriginalsOnMobileData = viewModel::setLoadOriginalsOnMobileData,
                         onOfflineWifiOnly = viewModel::setOfflineWifiOnly,
@@ -162,6 +164,7 @@ private fun SettingsContent(
     cloudState: CloudAccountState?,
     cloudSyncState: CloudSyncState,
     onOpenAccount: () -> Unit,
+    onOpenStorage: () -> Unit,
     onShowCloudInPhotos: (Boolean) -> Unit,
     onLoadOriginalsOnMobileData: (Boolean) -> Unit,
     onOfflineWifiOnly: (Boolean) -> Unit,
@@ -212,6 +215,16 @@ private fun SettingsContent(
                     subtitle = stringResource(R.string.settings_offline_wifi_only_summary),
                     checked = settings.offlineWifiOnly,
                     onCheckedChange = onOfflineWifiOnly,
+                )
+            }
+
+            // Stockage : caches et copies OneDrive (rien à y voir sans OneDrive).
+            OneUiCategoryHeader(stringResource(R.string.storage_title))
+            OneUiCard {
+                OneUiListItem(
+                    title = stringResource(R.string.storage_title),
+                    subtitle = stringResource(R.string.storage_settings_summary),
+                    onClick = onOpenStorage,
                 )
             }
         }

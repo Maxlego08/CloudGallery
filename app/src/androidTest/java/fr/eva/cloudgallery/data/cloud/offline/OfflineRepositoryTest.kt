@@ -72,6 +72,7 @@ class OfflineRepositoryTest {
         override suspend fun setOfflineWifiOnly(enabled: Boolean) = Unit
         override suspend fun setOfflineNotificationsAsked(asked: Boolean) = Unit
         override suspend fun setOriginalsCacheMaxBytes(bytes: Long) = Unit
+        override suspend fun setThumbnailCacheMaxBytes(bytes: Long) = Unit
     }
 
     @Before

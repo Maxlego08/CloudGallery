@@ -41,6 +41,11 @@ data class AppSettings(
      * de [ORIGINALS_CACHE_CHOICES]. Les copies hors ligne n'y sont jamais comptées.
      */
     val originalsCacheMaxBytes: Long = DEFAULT_ORIGINALS_CACHE_BYTES,
+    /**
+     * Plafond du cache disque des miniatures et aperçus OneDrive (Coil), une des valeurs de
+     * [THUMBNAIL_CACHE_CHOICES]. Appliqué à l'ouverture du cache, donc au prochain démarrage.
+     */
+    val thumbnailCacheMaxBytes: Long = DEFAULT_THUMBNAIL_CACHE_BYTES,
 )
 
 /** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */
@@ -48,6 +53,12 @@ val ORIGINALS_CACHE_CHOICES: List<Long> = listOf(500_000_000L, 1_000_000_000L, 2
 
 /** Plafond par défaut du cache des originaux (décision utilisateur : 1 Go). */
 const val DEFAULT_ORIGINALS_CACHE_BYTES = 1_000_000_000L
+
+/** Plafonds proposés pour le cache des miniatures et aperçus OneDrive (octets décimaux). */
+val THUMBNAIL_CACHE_CHOICES: List<Long> = listOf(100_000_000L, 250_000_000L, 500_000_000L, 1_000_000_000L)
+
+/** Plafond par défaut du cache des miniatures (≈ les 256 Mio des phases 3 et 4). */
+const val DEFAULT_THUMBNAIL_CACHE_BYTES = 250_000_000L
 
 /** Etat de l'indexation des médias locaux. */
 data class IndexState(

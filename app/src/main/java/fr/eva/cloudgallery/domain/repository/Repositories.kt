@@ -22,6 +22,7 @@ import fr.eva.cloudgallery.domain.model.KeepOfflineResult
 import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
+import fr.eva.cloudgallery.domain.model.StorageUsage
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -143,6 +144,24 @@ interface SettingsRepository {
 
     /** [bytes] : une des valeurs de `ORIGINALS_CACHE_CHOICES`. */
     suspend fun setOriginalsCacheMaxBytes(bytes: Long)
+
+    /** [bytes] : une des valeurs de `THUMBNAIL_CACHE_CHOICES` (appliquée au prochain démarrage). */
+    suspend fun setThumbnailCacheMaxBytes(bytes: Long)
+}
+
+/** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */
+interface StorageRepository {
+    /** Mesure sur le disque (dispatcher d'E/S). */
+    suspend fun usage(): StorageUsage
+
+    /**
+     * Vide le cache non épinglé : miniatures et aperçus OneDrive, originaux temporaires (sauf
+     * téléchargements en cours). Les copies hors ligne ne sont jamais touchées.
+     */
+    suspend fun clearCache()
+
+    /** Nouveau plafond des originaux (déjà enregistré) : nettoyage aussitôt (dispatcher d'E/S). */
+    suspend fun applyOriginalsCap()
 }
 
 /**

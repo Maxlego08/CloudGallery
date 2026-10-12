@@ -106,6 +106,17 @@ class SettingsLogicTest {
     }
 
     @Test
+    fun thumbnailCacheMaxBytes_defaultsTo250Mb_andOnlyAcceptsProposedChoices() = runTest {
+        assertEquals(250_000_000L, AppSettings().thumbnailCacheMaxBytes)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        repository.setThumbnailCacheMaxBytes(1_000_000_000L)
+        assertEquals(1_000_000_000L, repository.settings.first().thumbnailCacheMaxBytes)
+        assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setThumbnailCacheMaxBytes(256L * 1024 * 1024) } }
+        // Indépendant du plafond des originaux.
+        assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+    }
+
+    @Test
     fun choiceParsingFallsBackToDefault() {
         val choices = listOf(1L, 2L)
         assertEquals(2L, choiceOrDefault(2L, choices, 1L))

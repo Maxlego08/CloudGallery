@@ -21,7 +21,7 @@ interface CloudThumbnailCache {
 
 /**
  * Les miniatures OneDrive sont écrites dans le cache disque de l'ImageLoader Coil unique
- * (`cacheDir/coil`, 256 Mo) : c'est son seul contenu (miniatures locales chargées par MediaStore,
+ * (`cacheDir/coil`, plafond réglable : [ThumbnailCacheLimit]) : c'est son seul contenu (miniatures locales chargées par MediaStore,
  * images plein écran locales sans cache disque), il est donc vidé entièrement. En mémoire, seules
  * les entrées OneDrive sont retirées.
  */

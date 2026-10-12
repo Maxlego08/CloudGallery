@@ -41,6 +41,7 @@ import fr.eva.cloudgallery.ui.main.MainScreen
 import fr.eva.cloudgallery.ui.main.MainViewModel
 import fr.eva.cloudgallery.ui.permissions.rememberMediaPermissionController
 import fr.eva.cloudgallery.ui.settings.SettingsScreen
+import fr.eva.cloudgallery.ui.storage.StorageScreen
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.video.VideoPlayerScreen
 import fr.eva.cloudgallery.ui.viewer.ExternalImageScreen
@@ -215,10 +216,17 @@ fun AppNavHost(
             SettingsScreen(
                 onBack = dropUnlessResumed { navController.popBackStack() },
                 onOpenAccount = openAccount,
+                onOpenStorage = { navController.navigate(StorageRoute) { launchSingleTop = true } },
             )
         }
         composable<AccountRoute> {
             AccountScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+        }
+        composable<StorageRoute> {
+            StorageScreen(
+                onBack = dropUnlessResumed { navController.popBackStack() },
+                onOpenAccount = openAccount,
+            )
         }
     }
 }

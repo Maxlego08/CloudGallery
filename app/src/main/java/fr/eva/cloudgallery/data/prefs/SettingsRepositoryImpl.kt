@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
 import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
+import fr.eva.cloudgallery.domain.model.THUMBNAIL_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -69,6 +70,10 @@ class SettingsRepositoryImpl @Inject constructor(
         require(bytes in ORIGINALS_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
         set(Keys.ORIGINALS_CACHE_MAX_BYTES, bytes)
     }
+    override suspend fun setThumbnailCacheMaxBytes(bytes: Long) {
+        require(bytes in THUMBNAIL_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
+        set(Keys.THUMBNAIL_CACHE_MAX_BYTES, bytes)
+    }
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
@@ -90,6 +95,7 @@ class SettingsRepositoryImpl @Inject constructor(
             offlineWifiOnly = this[Keys.OFFLINE_WIFI_ONLY] ?: d.offlineWifiOnly,
             offlineNotificationsAsked = this[Keys.OFFLINE_NOTIFICATIONS_ASKED] ?: d.offlineNotificationsAsked,
             originalsCacheMaxBytes = choiceOrDefault(this[Keys.ORIGINALS_CACHE_MAX_BYTES], ORIGINALS_CACHE_CHOICES, d.originalsCacheMaxBytes),
+            thumbnailCacheMaxBytes = choiceOrDefault(this[Keys.THUMBNAIL_CACHE_MAX_BYTES], THUMBNAIL_CACHE_CHOICES, d.thumbnailCacheMaxBytes),
         )
     }
 
@@ -107,6 +113,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val OFFLINE_WIFI_ONLY = booleanPreferencesKey("offline_wifi_only")
         val OFFLINE_NOTIFICATIONS_ASKED = booleanPreferencesKey("offline_notifications_asked")
         val ORIGINALS_CACHE_MAX_BYTES = longPreferencesKey("originals_cache_max_bytes")
+        val THUMBNAIL_CACHE_MAX_BYTES = longPreferencesKey("thumbnail_cache_max_bytes")
     }
 
     private companion object {

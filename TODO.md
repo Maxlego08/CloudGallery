@@ -231,10 +231,12 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       au démarrage et après chaque téléchargement (`CloudOriginalStore.requestTrim`). **Les lignes
       `pinned` ne sont jamais évincées ni comptées** ; un original utilisé depuis moins de 30 min
       (affiché, partagé) n'est pas évincé, le plafond pouvant être dépassé un moment.
-- [ ] Page « Stockage » : espace utilisé par niveau (miniatures, aperçus, originaux, hors ligne),
-      plafond, vidage du cache non épinglé avec confirmation.
-- [ ] Coil : décider si son cache disque (256 Mo, qui contient aujourd'hui les miniatures OneDrive)
-      reste séparé du cache géré ou s'il y est intégré.
+- [x] Page « Stockage » (Paramètres > Stockage, `ui/storage/`) : espace mesuré sur le disque par
+      niveau (miniatures et aperçus, originaux, copies hors ligne) et espace libre, plafonds des
+      originaux et des miniatures, « Vider le cache » (miniatures, aperçus, originaux ; jamais les
+      copies hors ligne) avec confirmation.
+- [x] Coil : cache disque séparé de `cached_file` (décision), plafond réglable 100 / 250 / 500 Mo /
+      1 Go (250 Mo par défaut, `ThumbnailCacheLimit`), appliqué au prochain démarrage.
 - [ ] WorkManager périodique (`@HiltWorker`, `hilt-work` déjà présent) pour le delta OneDrive, avec
       contrainte réseau et option Wi-Fi seulement. Prévoir aussi un rattrapage MediaStore en arrière-
       plan, éventuellement avec un `ContentUriTrigger`.
@@ -255,6 +257,14 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
 - [ ] Changement de compte détecté dès le démarrage (aujourd'hui au premier passage de synchro) :
       jusque-là, une miniature non encore en cache d'un élément de l'ancien compte peut encore être
       demandée avec le jeton du nouveau compte.
+
+### Vérifications sur l'appareil (phase 5)
+- [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
+      le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
+      plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
+      arrêt forcé.
+- [ ] Plafond des originaux à 500 Mo avec 1 Go d'originaux : les moins récents partent aussitôt,
+      sauf ceux ouverts depuis moins de 30 min ; un original partagé vers Gmail reste lisible.
 
 ## Phase 6 — Dédoublonnage, économiseur d'espace, recherche, albums mixtes
 
