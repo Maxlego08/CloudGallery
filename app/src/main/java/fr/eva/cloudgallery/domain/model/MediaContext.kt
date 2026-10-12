@@ -20,6 +20,10 @@ sealed interface MediaContext {
     @Serializable
     data class Album(val albumId: Long) : MediaContext
 
+    /** Résultats d'une recherche plein texte (saisie de l'utilisateur, telle quelle). */
+    @Serializable
+    data class Search(val query: String) : MediaContext
+
     /** Un seul média ouvert depuis une autre application (intent VIEW). */
     @Serializable
     data class Single(val mediaId: Long) : MediaContext

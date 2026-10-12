@@ -12,6 +12,7 @@ import fr.eva.cloudgallery.data.db.dao.FavoriteDao
 import fr.eva.cloudgallery.data.db.dao.MediaDao
 import fr.eva.cloudgallery.data.db.dao.MediaSourceDao
 import fr.eva.cloudgallery.data.db.dao.PlaybackPositionDao
+import fr.eva.cloudgallery.data.db.dao.SearchDao
 import fr.eva.cloudgallery.data.db.dao.SyncCursorDao
 import fr.eva.cloudgallery.data.db.dao.UserSettingDao
 import fr.eva.cloudgallery.data.db.entity.AlbumEntity
@@ -60,6 +61,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedFileDao(): CachedFileDao
     abstract fun downloadTaskDao(): DownloadTaskDao
     abstract fun cloudFolderDao(): CloudFolderDao
+    abstract fun searchDao(): SearchDao
 
     companion object {
         const val NAME = "cloudgallery.db"

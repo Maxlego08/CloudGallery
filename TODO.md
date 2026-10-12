@@ -308,8 +308,13 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       et vérifiées par hash**, avec une liste revue par l'utilisateur, un résumé de l'espace libéré et
       une confirmation explicite, puis `MediaStore.createTrashRequest` (corbeille récupérable par
       défaut). Ne jamais le déclencher automatiquement.
-- [ ] Recherche plein texte : table FTS Room (`@Fts4`) sur le nom, le dossier et la date (puis le
-      lieu si on ajoute le géocodage). Écran de recherche et suggestions.
+- [x] Recherche plein texte : index `media_fts` (FTS4 unicode61) sur le nom, les dossiers (sources
+      visibles, albums virtuels, noms personnalisés) et les libellés de date et de type (année, mois
+      et jour de la semaine en français et en anglais, « vidéo », « photo »), tenu à jour par
+      `SearchIndexer` (toute écriture dans media / media_source / album / album_media, mise à jour
+      incrémentale). Écran Rechercher (icône de l'onglet Photos) : suggestions (albums, recherches
+      récentes effaçables), résultats en grille (médias visibles, OneDrive compris), visionneuse
+      dans les résultats (`MediaContext.Search`). Le lieu reste à faire avec le géocodage.
 - [ ] Albums virtuels mêlant sources locales et OneDrive (les références `album_media` pointent déjà
       vers le média logique). Vérifier le comportement quand une source disparaît.
 - [ ] Albums-dossiers : `ALBUM_MEMBERS` / `ALBUM_ROWS` comptent encore les sources masquées comme
@@ -318,6 +323,14 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       prendre en compte pour rapprocher un élément OneDrive de sa copie locale.
 - [ ] Éventuellement, synchroniser les favoris avec `MediaStore.createFavoriteRequest` (avec la
       confirmation système), à condition que cela n'écrase pas les favoris Samsung existants.
+
+### Vérifications sur l'appareil (phase 6)
+- [ ] Recherche : premier lancement après la mise à jour (logcat `SearchIndexer` : index rempli, durée
+      sur la vraie bibliothèque) ; « août 2026 », un nom de dossier, un album renommé, « vidéo »,
+      un élément uniquement OneDrive ; nouvelle photo prise puis recherchée (index à jour quelques
+      secondes après) ; visionneuse ouverte depuis les résultats (balayage limité aux résultats) ;
+      recherches récentes retirées une à une et effacées ; saisies spéciales (`"`, `*`, `-`, `OR`)
+      sans erreur.
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 
@@ -404,8 +417,8 @@ animations :
 - [ ] `media.contentHash` n'est renseigné que pour OneDrive (`qxh:`) : pas de dédoublonnage.
 - [ ] Table `user_settings` inutilisée (les réglages sont dans DataStore) : l'utiliser ou la
       supprimer par migration.
-- [ ] Pas de recherche, pas de GIF animés, pas de Motion Photos, pas de pleine résolution au-delà
-      d'environ 24 MP.
+- [ ] Pas de recherche par lieu ni par contenu, pas de GIF animés, pas de Motion Photos, pas de
+      pleine résolution au-delà d'environ 24 MP.
 - [ ] Fidélité visuelle One UI non vérifiée sur des captures de référence.
 - [ ] Visionneuse : la date de la barre supérieure (« Aujourd'hui », « Hier ») n'est pas recalculée
       au passage de minuit tant que la visionneuse reste ouverte.

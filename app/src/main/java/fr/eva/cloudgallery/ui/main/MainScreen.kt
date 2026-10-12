@@ -61,6 +61,7 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
     onOpenAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     when (mode) {
         MainScreenMode.LOADING -> {
@@ -106,6 +107,7 @@ fun MainScreen(
                     onOpenMedia = onOpenMedia,
                     onSelectionModeChange = { photosSelecting = it },
                     onOpenSettings = onOpenSettings,
+                    onOpenSearch = onOpenSearch,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                     noLocalAccess = if (oneDriveOnly) {

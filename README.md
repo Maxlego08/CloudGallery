@@ -658,6 +658,25 @@ jamais touchés, et aucune confirmation système n'est nécessaire.
   (fichiers non épinglés). Ce cache ne contient que des copies de fichiers OneDrive : les fichiers de
   l'utilisateur ne sont jamais concernés.
 
+### Recherche (phase 6)
+
+- Index plein texte `media_fts` (FTS4, tokeniseur unicode61 : casse et accents ignorés), une entrée
+  par média logique (`rowid` = `media.id`) : nom du fichier ; dossiers des sources visibles, albums
+  virtuels qui le contiennent et noms personnalisés des albums-dossiers ; année, mois et jour de la
+  semaine en français et en anglais, jour du mois, « vidéo video » ou « photo image ».
+- `SearchIndexer` suit les tables `media`, `media_source`, `album` et `album_media` (InvalidationTracker
+  de Room) : 2 s après la dernière écriture, quelle qu'en soit l'origine (indexation MediaStore,
+  synchro OneDrive, purge, renommage), une mise à jour incrémentale en une transaction retire les
+  entrées supprimées ou périmées et ajoute les manquantes. Pour 100 000 médias, de l'ordre d'une à
+  quelques secondes sur le dispatcher d'E/S (le premier remplissage, après la migration v6, écrit
+  toutes les entrées).
+- Saisie → expression FTS sûre (`ftsMatchExpression`) : mots (lettres et chiffres) en minuscules,
+  chacun en préfixe (`mot*`), ET implicite ; aucun caractère de la syntaxe FTS ni opérateur ne passe.
+- Résultats : médias visibles (au moins une source présente), éléments uniquement sur OneDrive
+  compris quel que soit le réglage de Photos, du plus récent au plus ancien ; grille commune
+  (sélection, partage, albums…) et visionneuse limitée aux résultats (`MediaContext.Search`).
+- Recherches récentes (10 au plus) dans `search_history.xml`, exclu des sauvegardes.
+
 ---
 
 ## Configuration Microsoft Entra et paramétrage MSAL
@@ -851,6 +870,8 @@ CloudGallery.
 | `data/local/RemovalPlanTest` | Plan de suppression : accès partiel, masquage, frein anti-suppression massive, délai de grâce de 30 jours |
 | `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue, « Afficher les éléments OneDrive dans Photos » et « Charger les originaux sur réseau mobile » désactivés par défaut, « Wi-Fi uniquement » activé par défaut (DataStore vide) |
 | `data/repository/AlbumSortingTest` | Tri des albums |
+| `data/search/SearchLogicTest` | Expression FTS sûre (préfixes, ET implicite, aucune syntaxe FTS ni opérateur, bornes), libellés de date conformes au SQL de l'index, correspondance des noms (accents, casse, débuts de mots), historique des recherches |
+| `ui/search/SearchUiLogicTest` | Albums proposés (correspondance, albums vides exclus, borne), recherches récentes filtrées, saisie sans mot refusée |
 | `ui/albums/AlbumsLogicTest` | Colonnes, masquage des dossiers vides, actions de sélection (renommer, supprimer, épingler), noms |
 | `ui/grid/GridSelectionLogicTest` | Sélection (plages, jour/mois), cibles des actions sur fichiers locaux (éléments OneDrive exclus, nombres des confirmations), Partager actif pour les éléments OneDrive, entrées « Conserver hors ligne » / « Libérer » |
 | `ui/offline/OfflineUiLogicTest` | Suites de « Conserver hors ligne » (message, attente du Wi-Fi, gros lot, espace insuffisant), confirmation de « Libérer » pour une dernière copie seulement, abandon si le compte des dernières copies échoue, confirmations de purge (bouton désactivé pendant la lecture, avertissement prudent si elle échoue), entrées de menu |
@@ -893,6 +914,9 @@ CloudGallery.
 - `data/db/MigrationTest` : migrations 2→3, 1→3, 3→4, 2→4 et 1→4 avec `MigrationTestHelper`
   (schémas exportés ajoutés aux assets des tests instrumentés) ; en 3→4, lignes conservées,
   nouvelles colonnes nulles et `attempts` à 0.
+- `data/db/SearchDaoTest` : index de recherche (nom, dossier, album, dates et jour de la semaine,
+  type, accents), mise à jour incrémentale (renommage, album, suppression), résultats limités aux
+  médias visibles (OneDrive compris, sources masquées exclues).
 - `data/db/CachedFileDaoTest` : remplacement d'une copie (même ligne, ancienne ligne renvoyée),
   date d'accès, suppressions, totaux, cascade, nombre d'éléments partageables, suppression
   conditionnelle du nettoyage (ligne rouverte ou remplacée gardée).
@@ -1058,7 +1082,7 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
 - **Favoris et albums personnalisés propres à l'application** : ils ne sont pas lus depuis Samsung
   Galerie ni écrits dans le champ `IS_FAVORITE` de MediaStore, et la base est exclue des sauvegardes.
   Une désinstallation ou un changement d'appareil les perd.
-- **Pas de recherche** (ni par nom, ni par lieu, ni par contenu).
+- **Recherche** par nom, dossier, album, date et type seulement (ni par lieu, ni par contenu).
 - **Pas de dédoublonnage** : `contentHash` n'est renseigné que pour OneDrive (`qxh:<quickXorHash>`) ;
   l'empreinte des fichiers locaux n'est pas calculée.
 - **Cache des miniatures OneDrive** : borné à 256 Mo et géré par Coil (éviction LRU), sans réglage

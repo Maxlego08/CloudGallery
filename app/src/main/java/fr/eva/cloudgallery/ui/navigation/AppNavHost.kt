@@ -42,6 +42,7 @@ import fr.eva.cloudgallery.ui.main.MainScreen
 import fr.eva.cloudgallery.ui.main.MainViewModel
 import fr.eva.cloudgallery.ui.main.mainScreenMode
 import fr.eva.cloudgallery.ui.permissions.rememberMediaPermissionController
+import fr.eva.cloudgallery.ui.search.SearchScreen
 import fr.eva.cloudgallery.ui.settings.SettingsScreen
 import fr.eva.cloudgallery.ui.storage.StorageScreen
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
@@ -172,6 +173,14 @@ fun AppNavHost(
                 onOpenVideos = { navController.navigate(VideosRoute) },
                 onOpenSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
                 onOpenAccount = openAccount,
+                onOpenSearch = { navController.navigate(SearchRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<SearchRoute> {
+            SearchScreen(
+                onBack = dropUnlessResumed { navController.popBackStack() },
+                onOpenMedia = openMedia,
+                onOpenAlbum = { id -> navController.navigate(AlbumRoute(id)) },
             )
         }
         composable<AlbumRoute> { entry ->

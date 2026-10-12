@@ -49,6 +49,7 @@ fun MediaCollectionScreen(
         is MediaContext.Album -> album?.name.orEmpty()
         MediaContext.Favorites -> stringResource(R.string.collection_favorites)
         MediaContext.Videos -> stringResource(R.string.collection_videos)
+        is MediaContext.Search -> context.query
         MediaContext.Timeline, is MediaContext.Single -> stringResource(R.string.photos_title)
     }
     val emptyIcon = when (context) {
