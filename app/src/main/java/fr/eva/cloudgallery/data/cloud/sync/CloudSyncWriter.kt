@@ -50,12 +50,50 @@ internal class CloudSyncRun(full: Boolean) {
      */
     var restoredFolderWithHiddenItems: Boolean = false
 
+    /**
+     * Opérations sur [seen] / [seenFolders] de la page en cours (énumération complète), pour le
+     * journal de reprise : relevées par [drainPageOps] après la transaction de la page.
+     */
+    private val pageOps = ArrayList<SeenEntry>()
+
+    fun markSeen(itemId: String) {
+        val set = seen ?: return
+        set += itemId
+        pageOps += SeenEntry(SeenOp.MEDIA, itemId)
+    }
+
+    fun markSeenFolder(itemId: String) {
+        val set = seenFolders ?: return
+        set += itemId
+        pageOps += SeenEntry(SeenOp.FOLDER, itemId)
+    }
+
+    /** Elément signalé supprimé : retiré des éléments et dossiers vus. */
+    fun markRemoved(itemId: String) {
+        if (seen == null && seenFolders == null) return
+        seen?.remove(itemId)
+        seenFolders?.remove(itemId)
+        pageOps += SeenEntry(SeenOp.REMOVE, itemId)
+    }
+
+    /** Opérations de la page appliquée (vidées). */
+    fun drainPageOps(): List<SeenEntry> = pageOps.toList().also { pageOps.clear() }
+
     /** Bascule en énumération complète (jeton expiré, dossier restauré). */
     fun restartFull() {
         full = true
         seen = HashSet()
         seenFolders = HashSet()
+        pageOps.clear()
         restoredFolderWithHiddenItems = false
+    }
+
+    companion object {
+        /** Enumération complète reprise : éléments et dossiers vus rejoués depuis le journal. */
+        fun resumed(seen: Set<String>, seenFolders: Set<String>): CloudSyncRun = CloudSyncRun(full = true).apply {
+            this.seen = HashSet(seen)
+            this.seenFolders = HashSet(seenFolders)
+        }
     }
 }
 
@@ -147,7 +185,7 @@ class CloudSyncWriter @Inject constructor(
         }
         for (f in folders) {
             run.removedFolders.remove(f.itemId)
-            run.seenFolders?.add(f.itemId)
+            run.markSeenFolder(f.itemId)
         }
     }
 
@@ -163,10 +201,7 @@ class CloudSyncWriter @Inject constructor(
                 touched += sources.map { it.mediaId }
             }
         }
-        for (id in ids) {
-            run.seen?.remove(id)
-            run.seenFolders?.remove(id)
-        }
+        for (id in ids) run.markRemoved(id)
     }
 
     private suspend fun applyMedia(items: List<CloudMediaFields>, run: CloudSyncRun, now: Long, touched: MutableSet<Long>) {
@@ -221,7 +256,7 @@ class CloudSyncWriter @Inject constructor(
                     sourceDao.insert(fields.toSourceEntity(mediaId))
                     touched += mediaId
                 }
-                run.seen?.add(fields.itemId)
+                run.markSeen(fields.itemId)
             }
             if (redownload.isNotEmpty()) taskDao.enqueueIfAbsent(redownload)
         }

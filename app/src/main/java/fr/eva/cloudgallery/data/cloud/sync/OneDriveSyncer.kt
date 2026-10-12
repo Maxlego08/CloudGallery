@@ -8,6 +8,7 @@ import fr.eva.cloudgallery.data.cloud.CloudFeature
 import fr.eva.cloudgallery.data.cloud.auth.MsalAuthService
 import fr.eva.cloudgallery.data.cloud.graph.BACKOFF_CAP_MS
 import fr.eva.cloudgallery.data.cloud.graph.GraphApi
+import fr.eva.cloudgallery.data.cloud.graph.GraphHttpException
 import fr.eva.cloudgallery.data.cloud.graph.GraphResyncRequiredException
 import fr.eva.cloudgallery.data.cloud.graph.resyncStartUrl
 import fr.eva.cloudgallery.data.db.dao.SyncCursorDao
@@ -206,9 +207,23 @@ class OneDriveSyncer @Inject constructor(
 
         val version = cloudCursorVersion(driveId, DELTA_SELECT_VERSION)
         val initialUrl = graph.initialDeltaUrl()
-        val run = CloudSyncRun(full = start is SyncStart.Full)
-        var url = (start as? SyncStart.Incremental)?.deltaLink ?: initialUrl
-        if (run.full) bindDrive(version)
+        // Enumération complète interrompue (arrêt du processus, erreur réseau) : reprise depuis la
+        // dernière page appliquée, avec les éléments vus rejoués depuis le journal.
+        val resume = if (start is SyncStart.Full) loadResume(version) else null
+        val run = resume?.run ?: CloudSyncRun(full = start is SyncStart.Full)
+        var url = resume?.nextLink ?: (start as? SyncStart.Incremental)?.deltaLink ?: initialUrl
+        // Journal de reprise utilisable (désactivé pour ce passage après une erreur d'écriture).
+        var journaling = when {
+            resume != null -> {
+                Log.i(TAG, "Reprise de l'énumération complète après ${resume.pages} pages")
+                true
+            }
+            run.full -> bindDrive(version)
+            else -> false
+        }
+        // Pages appliquées et journalisées de l'énumération complète en cours.
+        var pages = resume?.pages ?: 0
+        var resumedLinkPending = resume != null
         var restarts = 0
         var processed = 0
         while (true) {
@@ -218,14 +233,35 @@ class OneDriveSyncer @Inject constructor(
                 // Jeton delta expiré : nouvelle énumération complète (Location, sinon delta initial).
                 if (++restarts > MAX_FULL_RESTARTS) throw CloudException(CloudErrorCode.SERVER, e)
                 Log.i(TAG, "Jeton delta expiré : énumération complète")
-                bindDrive(version)
+                journaling = bindDrive(version)
                 run.restartFull()
                 url = resyncStartUrl(e.location, initialUrl)
+                pages = 0
+                resumedLinkPending = false
+                continue
+            } catch (e: GraphHttpException) {
+                // Lien de suite repris refusé (expiré, inconnu) : l'énumération repart du début.
+                if (!resumedLinkPending || !isRejectedResumeLink(e.status)) throw e
+                if (++restarts > MAX_FULL_RESTARTS) throw e
+                Log.i(TAG, "Lien de reprise refusé (HTTP ${e.status}) : énumération complète depuis le début")
+                journaling = bindDrive(version)
+                run.restartFull()
+                url = initialUrl
+                pages = 0
+                resumedLinkPending = false
                 continue
             }
+            resumedLinkPending = false
             writer.applyPage(page.value, run, System.currentTimeMillis())
             processed += page.value.size
             _state.update { it.copy(processedItems = processed) }
+            // Page appliquée (transaction terminée) : ses éléments vus sont journalisés avant
+            // l'enregistrement du lien suivant.
+            val ops = run.drainPageOps()
+            if (run.full && journaling) {
+                journaling = journalPage(ops)
+                if (journaling) pages++
+            }
 
             val deltaLink = when (val step = deltaPageStep(run.full, run.restoredFolderWithHiddenItems, page.nextLink, page.deltaLink)) {
                 DeltaPageStep.RestartFull -> {
@@ -233,17 +269,22 @@ class OneDriveSyncer @Inject constructor(
                     // un. Le deltaLink a déjà été effacé avec la page (décision durable : le dossier
                     // étant enregistré, un passage interrompu ne pourrait plus la reprendre) ;
                     // l'énumération complète démarre sans attendre la fin du flux delta.
-                    bindDrive(version)
+                    journaling = bindDrive(version)
                     if (++restarts > MAX_FULL_RESTARTS) {
                         throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Trop d'énumérations complètes"))
                     }
                     Log.i(TAG, "Dossier OneDrive restauré : énumération complète")
                     run.restartFull()
                     url = initialUrl
+                    pages = 0
                     continue
                 }
                 is DeltaPageStep.NextPage -> {
                     url = step.url
+                    if (run.full && journaling) {
+                        journaling = persistResume { throttle.saveNextLink(step.url, pages) }
+                        if (!journaling) persistResume { throttle.clearResume() }
+                    }
                     continue
                 }
                 DeltaPageStep.MissingLink ->
@@ -268,15 +309,72 @@ class OneDriveSyncer @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "Effacement de la pause Microsoft Graph impossible", e)
             }
+            // Enumération terminée : plus rien à reprendre.
+            if (run.full) persistResume { throttle.clearResume() }
             return
         }
+    }
+
+    /** Enumération complète reprise : passage, lien de la page suivante, pages déjà appliquées. */
+    private class Resume(val run: CloudSyncRun, val nextLink: String, val pages: Int)
+
+    /**
+     * Etat de reprise utilisable pour [version] ([canResumeEnumeration]), sinon null : l'état
+     * périmé ou incohérent est alors effacé par la nouvelle énumération (bindDrive).
+     */
+    private suspend fun loadResume(version: String): Resume? = try {
+        val meta = throttle.resumeMeta()
+        val link = meta.nextLink
+        if (link == null || meta.version != version) {
+            null
+        } else {
+            val journal = throttle.readSeenJournal()?.let(::replaySeenJournal)
+            if (journal != null && canResumeEnumeration(meta, version, System.currentTimeMillis(), journal)) {
+                Resume(CloudSyncRun.resumed(journal.seen, journal.seenFolders), link, meta.pages)
+            } else {
+                Log.i(TAG, "Reprise de l'énumération impossible (état périmé ou incomplet) : départ du début")
+                null
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Lecture de l'état de reprise impossible", e)
+        null
+    }
+
+    /**
+     * Journalise les éléments vus d'une page appliquée. Faux si la reprise devient impossible
+     * pour ce passage (identifiant non journalisable, erreur d'écriture) : l'état de reprise est
+     * alors effacé, un arrêt fera repartir l'énumération du début (comme avant).
+     */
+    private suspend fun journalPage(ops: List<SeenEntry>): Boolean {
+        if (ops.any { !isJournalSafeId(it.id) }) {
+            Log.w(TAG, "Identifiant OneDrive non journalisable : reprise désactivée pour ce passage")
+            persistResume { throttle.clearResume() }
+            return false
+        }
+        return persistResume { throttle.appendSeenBlock(encodeSeenBlock(ops)) }.also { ok ->
+            if (!ok) persistResume { throttle.clearResume() }
+        }
+    }
+
+    /** Ecriture de l'état de reprise : un échec n'interrompt jamais la synchronisation. */
+    private suspend fun persistResume(block: suspend () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Enregistrement de l'état de reprise impossible", e)
+        false
     }
 
     /**
      * Lie le curseur au lecteur avant une énumération complète et efface le deltaLink : un passage
      * interrompu reprendra par une énumération complète du même lecteur.
      */
-    private suspend fun bindDrive(version: String) {
+    private suspend fun bindDrive(version: String): Boolean {
         val previous = cursorDao.get(ONEDRIVE_PROVIDER)
         cursorDao.upsert(
             SyncCursorEntity(
@@ -288,6 +386,9 @@ class OneDriveSyncer @Inject constructor(
                 lastError = previous?.lastError,
             ),
         )
+        // Nouvelle énumération : ancien état de reprise et journal effacés. Vrai si la reprise
+        // de celle-ci est possible.
+        return persistResume { throttle.beginEnumeration(version, System.currentTimeMillis()) }
     }
 
     private suspend fun onSyncFailed(error: Exception) {
