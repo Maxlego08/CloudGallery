@@ -369,6 +369,24 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 - [ ] Défusion : photo modifiée (recadrage) sur le téléphone puis indexée et rehachée : deux
       médias, favori resté sur la photo du téléphone ; nouvelle version sur OneDrive : idem.
 
+## Améliorations de navigation (après la phase 6)
+
+- [x] Retour : l'écran sort en glissant entièrement vers la droite (sans fondu), l'écran précédent
+      revient avec un léger décalage ; suit le geste de retour prédictif. La visionneuse et le
+      lecteur gardent leur zoom arrière.
+- [ ] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
+      atteindre n'importe quelle date sans faire défiler toute la grille.
+- [ ] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
+      taille écran de tous les éléments OneDrive, gardés hors du plafond LRU, pour une navigation
+      fluide (zoom maximal et vidéos restent en ligne).
+- [ ] Dossier sécurisé Samsung : action « Déplacer vers le Dossier sécurisé » pour les photos du
+      téléphone (partage Android vers une appli du Dossier sécurisé, puis corbeille des originaux
+      après confirmation). Pas d'API Knox privée.
+
+### Vérifications sur l'appareil (améliorations)
+- [ ] Retour depuis Paramètres, Stockage, un album, la recherche : glissement vers la droite, au
+      bouton et au geste (aperçu prédictif).
+
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 
 ### Visionneuse et formats

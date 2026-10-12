@@ -79,14 +79,18 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(): EnterT
     if (initialState.isFullscreenMedia()) {
         EnterTransition.None
     } else {
-        slideInHorizontally(tween(PUSH_MS, easing = Emphasized)) { -(it * 0.1f).toInt() } + fadeIn(tween(PUSH_MS))
+        // Léger décalage (parallaxe) sous l'écran qui sort vers la droite.
+        slideInHorizontally(tween(PUSH_MS, easing = Emphasized)) { -(it * 0.25f).toInt() } +
+            fadeIn(tween(PUSH_MS), initialAlpha = 0.6f)
     }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit(): ExitTransition =
     if (initialState.isFullscreenMedia()) {
         fadeOut(tween(MEDIA_MS)) + scaleOut(tween(PUSH_MS, easing = Emphasized), targetScale = 0.92f)
     } else {
-        slideOutHorizontally(tween(PUSH_MS, easing = Emphasized)) { (it * 0.3f).toInt() } + fadeOut(tween(PUSH_MS))
+        // Retour : l'écran glisse entièrement vers la droite, sans fondu (suit aussi le geste
+        // de retour prédictif, enableOnBackInvokedCallback).
+        slideOutHorizontally(tween(PUSH_MS, easing = Emphasized)) { it }
     }
 
 /** Graphe de navigation de l'appli (routes typées de Routes.kt). */
