@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -88,5 +90,26 @@ class SettingsLogicTest {
         assertTrue(repository.settings.first().offlineNotificationsAsked)
         // Indépendant des autres réglages OneDrive.
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+    }
+
+    /** Décision utilisateur (phase 5) : plafond des originaux à 1 Go par défaut, parmi les choix proposés. */
+    @Test
+    fun originalsCacheMaxBytes_defaultsTo1Gb_andOnlyAcceptsProposedChoices() = runTest {
+        assertEquals(1_000_000_000L, AppSettings().originalsCacheMaxBytes)
+        assertTrue(AppSettings().originalsCacheMaxBytes in ORIGINALS_CACHE_CHOICES)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+        repository.setOriginalsCacheMaxBytes(5_000_000_000L)
+        assertEquals(5_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+        assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setOriginalsCacheMaxBytes(123L) } }
+        assertEquals(5_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+    }
+
+    @Test
+    fun choiceParsingFallsBackToDefault() {
+        val choices = listOf(1L, 2L)
+        assertEquals(2L, choiceOrDefault(2L, choices, 1L))
+        assertEquals(1L, choiceOrDefault(7L, choices, 1L))
+        assertEquals(1L, choiceOrDefault(null, choices, 1L))
     }
 }

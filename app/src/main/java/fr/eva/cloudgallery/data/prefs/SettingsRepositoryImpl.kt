@@ -7,9 +7,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +27,10 @@ internal const val MIN_ZOOM_LEVEL = 0
 internal const val MAX_ZOOM_LEVEL = 4
 
 internal fun clampZoomLevel(level: Int): Int = level.coerceIn(MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)
+
+/** Valeur stockée seulement si elle fait partie de [choices] (sinon [default]). */
+internal fun choiceOrDefault(value: Long?, choices: List<Long>, default: Long): Long =
+    value?.takeIf { it in choices } ?: default
 
 /** Lecture tolérante d'une énumération stockée par son nom. */
 internal inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
@@ -59,6 +65,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setLoadOriginalsOnMobileData(enabled: Boolean) = set(Keys.LOAD_ORIGINALS_ON_MOBILE_DATA, enabled)
     override suspend fun setOfflineWifiOnly(enabled: Boolean) = set(Keys.OFFLINE_WIFI_ONLY, enabled)
     override suspend fun setOfflineNotificationsAsked(asked: Boolean) = set(Keys.OFFLINE_NOTIFICATIONS_ASKED, asked)
+    override suspend fun setOriginalsCacheMaxBytes(bytes: Long) {
+        require(bytes in ORIGINALS_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
+        set(Keys.ORIGINALS_CACHE_MAX_BYTES, bytes)
+    }
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
@@ -79,6 +89,7 @@ class SettingsRepositoryImpl @Inject constructor(
             loadOriginalsOnMobileData = this[Keys.LOAD_ORIGINALS_ON_MOBILE_DATA] ?: d.loadOriginalsOnMobileData,
             offlineWifiOnly = this[Keys.OFFLINE_WIFI_ONLY] ?: d.offlineWifiOnly,
             offlineNotificationsAsked = this[Keys.OFFLINE_NOTIFICATIONS_ASKED] ?: d.offlineNotificationsAsked,
+            originalsCacheMaxBytes = choiceOrDefault(this[Keys.ORIGINALS_CACHE_MAX_BYTES], ORIGINALS_CACHE_CHOICES, d.originalsCacheMaxBytes),
         )
     }
 
@@ -95,6 +106,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val LOAD_ORIGINALS_ON_MOBILE_DATA = booleanPreferencesKey("load_originals_on_mobile_data")
         val OFFLINE_WIFI_ONLY = booleanPreferencesKey("offline_wifi_only")
         val OFFLINE_NOTIFICATIONS_ASKED = booleanPreferencesKey("offline_notifications_asked")
+        val ORIGINALS_CACHE_MAX_BYTES = longPreferencesKey("originals_cache_max_bytes")
     }
 
     private companion object {

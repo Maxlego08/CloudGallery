@@ -36,7 +36,18 @@ data class AppSettings(
      * hors ligne ») : elle n'est plus redemandée ensuite. Les téléchargements fonctionnent sans.
      */
     val offlineNotificationsAsked: Boolean = false,
+    /**
+     * Plafond du cache temporaire des originaux OneDrive (zoom profond, partage), une des valeurs
+     * de [ORIGINALS_CACHE_CHOICES]. Les copies hors ligne n'y sont jamais comptées.
+     */
+    val originalsCacheMaxBytes: Long = DEFAULT_ORIGINALS_CACHE_BYTES,
 )
+
+/** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */
+val ORIGINALS_CACHE_CHOICES: List<Long> = listOf(500_000_000L, 1_000_000_000L, 2_000_000_000L, 5_000_000_000L)
+
+/** Plafond par défaut du cache des originaux (décision utilisateur : 1 Go). */
+const val DEFAULT_ORIGINALS_CACHE_BYTES = 1_000_000_000L
 
 /** Etat de l'indexation des médias locaux. */
 data class IndexState(

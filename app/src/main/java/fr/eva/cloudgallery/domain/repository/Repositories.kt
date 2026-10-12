@@ -140,6 +140,9 @@ interface SettingsRepository {
     suspend fun setLoadOriginalsOnMobileData(enabled: Boolean)
     suspend fun setOfflineWifiOnly(enabled: Boolean)
     suspend fun setOfflineNotificationsAsked(asked: Boolean)
+
+    /** [bytes] : une des valeurs de `ORIGINALS_CACHE_CHOICES`. */
+    suspend fun setOriginalsCacheMaxBytes(bytes: Long)
 }
 
 /**

@@ -219,9 +219,18 @@ Détail dans le README (« Vérifications sur l'appareil : streaming OneDrive »
 
 ## Phase 5 — Cache LRU, page Stockage, synchro périodique
 
-- [ ] Recenser chaque fichier de cache dans `cached_file` (`lastAccessAt` mis à jour hors du thread
-      principal).
-- [ ] Éviction LRU sous un plafond configurable. **Les fichiers `pinned` ne sont jamais évincés.**
+Décisions (phase 5) : plafond des originaux 1 Go par défaut (500 Mo / 1 Go / 2 Go / 5 Go) ; cache
+Coil (miniatures et aperçus) séparé de `cached_file`, avec son propre plafond réglable ; synchro
+OneDrive de fond réglable (désactivée / 1 h / 6 h / 24 h, 6 h par défaut) ; en « OneDrive seul »,
+l'onglet Photos montre OneDrive quel que soit le réglage.
+
+- [x] Recenser les fichiers de cache : originaux et copies hors ligne dans `cached_file`
+      (`lastAccessAt` rafraîchi sur le dispatcher d'E/S) ; miniatures et aperçus dans le cache
+      disque Coil, qui a sa propre éviction LRU (décision : pas de ligne par miniature).
+- [x] Éviction LRU des originaux sous un plafond réglable (`AppSettings.originalsCacheMaxBytes`),
+      au démarrage et après chaque téléchargement (`CloudOriginalStore.requestTrim`). **Les lignes
+      `pinned` ne sont jamais évincées ni comptées** ; un original utilisé depuis moins de 30 min
+      (affiché, partagé) n'est pas évincé, le plafond pouvant être dépassé un moment.
 - [ ] Page « Stockage » : espace utilisé par niveau (miniatures, aperçus, originaux, hors ligne),
       plafond, vidage du cache non épinglé avec confirmation.
 - [ ] Coil : décider si son cache disque (256 Mo, qui contient aujourd'hui les miniatures OneDrive)

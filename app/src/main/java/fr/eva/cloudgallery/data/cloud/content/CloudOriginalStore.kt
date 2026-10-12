@@ -23,9 +23,12 @@ import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.CloudDownloadException
+import fr.eva.cloudgallery.domain.model.DEFAULT_ORIGINALS_CACHE_BYTES
 import fr.eva.cloudgallery.domain.model.DownloadError
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.SourceKind
+import fr.eva.cloudgallery.domain.repository.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -34,6 +37,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -42,6 +46,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -61,7 +66,8 @@ data class CloudFileTarget(
  * Originaux OneDrive téléchargés à la demande (zoom profond, partage, « Ouvrir avec ») :
  * fichiers temporaires de l'appli dans `cacheDir/onedrive/originals/`, hors du cache Coil, chacun
  * enregistré dans `cached_file` (type ORIGINAL, non épinglé, version = cTag) pour le nettoyage
- * (phase 5 : LRU). Aucun fichier de l'utilisateur n'est concerné.
+ * LRU ([trim]) sous le plafond réglable `AppSettings.originalsCacheMaxBytes`, au démarrage et
+ * après chaque téléchargement. Aucun fichier de l'utilisateur n'est concerné.
  *
  * - Un seul téléchargement par élément et version à la fois, quel que soit le nombre de
  *   demandeurs (visionneuse, partage) ; il tourne dans la portée de l'appli et s'arrête quand le
@@ -90,6 +96,8 @@ class CloudOriginalStore internal constructor(
     /** Espace du volume des originaux ; null : pas de vérification (tests). */
     private val space: OfflineSpace? = null,
     private val nonce: () -> String = { java.lang.Long.toHexString(Random.nextLong()) },
+    /** Plafond courant du cache (réglage), lu à chaque nettoyage. */
+    private val maxBytesSetting: suspend () -> Long = { DEFAULT_ORIGINALS_CACHE_BYTES },
 ) {
 
     @Inject
@@ -102,6 +110,7 @@ class CloudOriginalStore internal constructor(
         generation: CloudDataGeneration,
         @ApplicationScope scope: CoroutineScope,
         @IoDispatcher io: CoroutineDispatcher,
+        settings: SettingsRepository,
     ) : this(
         root = File(context.cacheDir, ORIGINALS_DIR),
         downloader = downloader,
@@ -113,6 +122,7 @@ class CloudOriginalStore internal constructor(
         io = io,
         clock = System::currentTimeMillis,
         space = StorageSpace(context, File(context.cacheDir, ORIGINALS_DIR)),
+        maxBytesSetting = { settings.settings.first().originalsCacheMaxBytes },
     )
 
     /** Espace du volume de [dir] (StorageManager), appels faits sur le dispatcher d'E/S par l'appelant. */
@@ -157,6 +167,10 @@ class CloudOriginalStore internal constructor(
      * en même temps (un fichier renvoyé à la visionneuse ou au partage n'est pas supprimé aussitôt).
      */
     private val accessLock = Mutex()
+
+    /** Un seul nettoyage à la fois ; [trimPending] regroupe les demandes faites pendant ce temps. */
+    private val trimLock = Mutex()
+    private val trimPending = AtomicBoolean(false)
 
     /** Original déjà présent et à jour pour [target] (sa date d'accès est rafraîchie), sinon null. */
     suspend fun existing(target: CloudFileTarget): File? = withContext(io) {
@@ -258,6 +272,7 @@ class CloudOriginalStore internal constructor(
                     is CommitOutcome.Committed -> {
                         // Ancien fichier supprimé seulement maintenant (et seulement s'il diffère).
                         outcome.replacedPath?.let { resolve(it)?.delete() }
+                        requestTrim()
                         dest
                     }
                     is CommitOutcome.Failed -> {
@@ -335,16 +350,41 @@ class CloudOriginalStore internal constructor(
     }
 
     /**
-     * Nettoyage au démarrage (phase 4, en attendant la LRU de la phase 5) : originaux inutilisés
-     * depuis plus de [maxAgeMs], puis les plus anciens au-delà de [maxBytes] ; lignes sans
-     * fichier ; fichiers sans ligne (plus d'une heure) et fichiers partiels abandonnés (plus de
-     * 24 h). Les téléchargements en cours ne sont jamais touchés.
+     * Nettoyage en arrière-plan (portée de l'appli), après un téléchargement ou un changement de
+     * plafond. Une demande faite pendant un nettoyage en relance un seul à la fin.
      */
-    suspend fun trim(maxBytes: Long = MAX_BYTES, maxAgeMs: Long = MAX_AGE_MS): Unit = withContext(io) {
+    fun requestTrim() {
+        if (!trimPending.compareAndSet(false, true)) return
+        scope.launch(io) {
+            try {
+                trimLock.withLock {
+                    trimPending.set(false)
+                    trimNow(maxBytesSetting(), MAX_AGE_MS)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Nettoyage des originaux impossible", e)
+            }
+        }
+    }
+
+    /**
+     * Nettoyage LRU ([planOriginalTrim]) : lignes sans fichier, originaux inutilisés depuis plus
+     * de [maxAgeMs], puis les moins récemment utilisés au-delà de [maxBytes] (par défaut le
+     * réglage), sauf ceux utilisés depuis moins de 30 min ; fichiers sans ligne (plus d'une heure)
+     * et fichiers partiels abandonnés (plus de 24 h). Les téléchargements en cours ne sont jamais
+     * touchés.
+     */
+    suspend fun trim(maxBytes: Long? = null, maxAgeMs: Long = MAX_AGE_MS): Unit = withContext(io) {
+        trimLock.withLock { trimNow(maxBytes ?: maxBytesSetting(), maxAgeMs) }
+    }
+
+    private suspend fun trimNow(maxBytes: Long, maxAgeMs: Long) {
         val now = clock()
         val busy = synchronized(lock) { flights.values.map { it.name }.toSet() }
         val rows = cachedFiles.listByKind(CacheKind.ORIGINAL).map { row ->
-            TrimRow(row.id, row.path, row.sizeBytes, row.lastAccessAt, fileExists = resolve(row.path)?.isFile == true)
+            TrimRow(row.id, row.path, row.sizeBytes, row.lastAccessAt, fileExists = resolve(row.path)?.isFile == true, pinned = row.pinned)
         }
         val plan = planOriginalTrim(rows, busy, now, maxBytes, maxAgeMs)
         // Suppression ligne par ligne, seulement si la ligne n'a pas changé depuis sa lecture :
@@ -398,9 +438,6 @@ class CloudOriginalStore internal constructor(
         /** Dossier des originaux sous `cacheDir` (exposé au partage par FileProvider). */
         const val ORIGINALS_DIR = "onedrive/originals"
         private const val TAG = "CloudOriginalStore"
-
-        /** Plafond du cache temporaire (décision utilisateur : 1 Go). */
-        const val MAX_BYTES = 1_000_000_000L
 
         /** Originaux inutilisés depuis plus de 7 jours supprimés au démarrage. */
         const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
