@@ -203,6 +203,101 @@ class MigrationTest {
         }
     }
 
+    /** Dossier OneDrive tel qu'en v4 (avant le marqueur de suppression). */
+    private fun SupportSQLiteDatabase.insertV4Folder() {
+        execSQL("INSERT INTO cloud_folder (itemId, parentId, name, isRoot, updatedAt) VALUES ('PH', 'ROOT', 'Photos', 0, 7)")
+    }
+
+    private fun SupportSQLiteDatabase.assertMigratedTo5() {
+        // Dossier existant : présent (aucun marqueur).
+        query("SELECT name, parentId, deletedAt FROM cloud_folder WHERE itemId = 'PH'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Photos", c.getString(0))
+            assertEquals("ROOT", c.getString(1))
+            assertTrue(c.isNull(2))
+        }
+        execSQL("UPDATE cloud_folder SET deletedAt = 42 WHERE itemId = 'PH'")
+        query("SELECT deletedAt FROM cloud_folder WHERE itemId = 'PH'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(42L, c.getLong(0))
+        }
+    }
+
+    @Test
+    fun migrate4To5_addsFolderTombstoneColumn() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            insertLocalMedia()
+            insertV4Folder()
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, AppDatabase.MIGRATION_4_5).use { db ->
+            db.assertMigratedTo5()
+            db.query("SELECT displayName FROM media WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("IMG_1.jpg", c.getString(0))
+            }
+        }
+    }
+
+    @Test
+    fun migrate3To5_chainsMigrations() {
+        helper.createDatabase(TEST_DB, 3).apply {
+            insertLocalMedia()
+            insertV3CacheRows()
+            insertV4Folder()
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5).use { db ->
+            db.assertMigratedTo4()
+            db.assertMigratedTo5()
+        }
+    }
+
+    @Test
+    fun migrate2To5_chainsMigrations() {
+        helper.createDatabase(TEST_DB, 2).apply {
+            insertLocalMedia()
+            insertV3CacheRows()
+            close()
+        }
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            5,
+            true,
+            AppDatabase.MIGRATION_2_3,
+            AppDatabase.MIGRATION_3_4,
+            AppDatabase.MIGRATION_4_5,
+        ).use { db ->
+            db.assertMigratedTo3()
+            db.assertMigratedTo4()
+            db.insertV4Folder()
+            db.assertMigratedTo5()
+        }
+    }
+
+    @Test
+    fun migrate1To5_chainsMigrations() {
+        helper.createDatabase(TEST_DB, 1).apply {
+            insertLocalMedia()
+            insertV3CacheRows()
+            close()
+        }
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            5,
+            true,
+            AppDatabase.MIGRATION_1_2,
+            AppDatabase.MIGRATION_2_3,
+            AppDatabase.MIGRATION_3_4,
+            AppDatabase.MIGRATION_4_5,
+        ).use { db ->
+            db.assertMigratedTo3()
+            db.assertMigratedTo4()
+            db.insertV4Folder()
+            db.assertMigratedTo5()
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
     }
