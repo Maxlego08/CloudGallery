@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dossiers exposés par CloudGalleryFileProvider (lecture seule, partage et « Ouvrir avec »).
+    Uniquement des copies de fichiers OneDrive créées par l'appli, jamais un fichier de l'utilisateur.
+-->
+<paths>
+    <!-- Originaux OneDrive téléchargés à la demande (cache temporaire). -->
+    <cache-path name="originals" path="onedrive/originals/" />
+    <!-- Copies hors ligne (fichiers privés de l'appli, partagés sans nouvelle copie). -->
+    <files-path name="offline" path="offline/" />
+</paths>

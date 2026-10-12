@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.OfflinePin
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +60,7 @@ internal fun DetailsSheet(
     media: MediaDetails,
     exif: ExifState?,
     onDismiss: () -> Unit,
+    offlineStatus: String? = null,
 ) {
     val colors = OneUiTheme.colors
     val radius = OneUiTheme.dimens.sheetRadius
@@ -82,12 +84,12 @@ internal fun DetailsSheet(
             )
         },
     ) {
-        DetailsContent(media = media, exif = exif)
+        DetailsContent(media = media, exif = exif, offlineStatus = offlineStatus)
     }
 }
 
 @Composable
-private fun DetailsContent(media: MediaDetails, exif: ExifState?) {
+private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus: String?) {
     val context = LocalContext.current
     val typography = OneUiTheme.typography
     val colors = OneUiTheme.colors
@@ -115,7 +117,10 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?) {
         }
 
         // Fichier
-        val path = media.localSource?.relativePath ?: media.sources.firstOrNull()?.relativePath
+        // Chemin du fichier local, sinon de l'élément OneDrive (une copie hors ligne n'en a pas).
+        val path = media.localSource?.relativePath
+            ?: media.cloudSource?.relativePath
+            ?: media.sources.firstNotNullOfOrNull { it.relativePath }
         DetailRow(
             icon = Icons.Outlined.InsertDriveFile,
             primary = media.displayName,
@@ -191,6 +196,11 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?) {
                 primary = provenance.joinToString(" · "),
                 secondary = stringResource(R.string.viewer_details_source),
             )
+        }
+
+        // Copie hors ligne : état du téléchargement, copie présente (taille) ou dernière copie.
+        if (offlineStatus != null) {
+            DetailRow(icon = Icons.Outlined.OfflinePin, primary = offlineStatus)
         }
     }
 }

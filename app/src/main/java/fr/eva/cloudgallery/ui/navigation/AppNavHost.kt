@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.ui.account.AccountScreen
 import fr.eva.cloudgallery.domain.model.MediaContext
 import androidx.core.net.toUri
 import fr.eva.cloudgallery.ui.collection.MediaCollectionScreen
@@ -141,6 +142,7 @@ fun AppNavHost(
     val openMedia: (MediaContext, Long) -> Unit = { mediaContext, mediaId ->
         navController.navigate(ViewerRoute.of(mediaContext, mediaId))
     }
+    val openAccount: () -> Unit = { navController.navigate(AccountRoute) { launchSingleTop = true } }
 
     NavHost(
         navController = navController,
@@ -161,6 +163,7 @@ fun AppNavHost(
                 onOpenFavorites = { navController.navigate(FavoritesRoute) },
                 onOpenVideos = { navController.navigate(VideosRoute) },
                 onOpenSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
+                onOpenAccount = openAccount,
             )
         }
         composable<AlbumRoute> { entry ->
@@ -194,7 +197,10 @@ fun AppNavHost(
         }
         composable<VideoPlayerRoute> { entry ->
             val route = entry.toRoute<VideoPlayerRoute>()
-            VideoPlayerScreen(onBack = rememberBackAction(navController, route.exitOnBack))
+            VideoPlayerScreen(
+                onBack = rememberBackAction(navController, route.exitOnBack),
+                onOpenAccount = openAccount,
+            )
         }
         composable<ExternalImageRoute> { entry ->
             val route = entry.toRoute<ExternalImageRoute>()
@@ -206,7 +212,13 @@ fun AppNavHost(
             )
         }
         composable<SettingsRoute> {
-            SettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            SettingsScreen(
+                onBack = dropUnlessResumed { navController.popBackStack() },
+                onOpenAccount = openAccount,
+            )
+        }
+        composable<AccountRoute> {
+            AccountScreen(onBack = dropUnlessResumed { navController.popBackStack() })
         }
     }
 }

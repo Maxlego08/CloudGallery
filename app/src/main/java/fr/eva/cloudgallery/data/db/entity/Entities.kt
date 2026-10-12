@@ -10,8 +10,9 @@ import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 
 /**
- * Média logique. Les colonnes `hasLocal`, `hasCloud`, `hasOffline` et `primaryUri` sont
- * dénormalisées depuis `media_source` pour que la grille n'ait aucune jointure à faire.
+ * Média logique. Les colonnes `hasLocal`, `hasCloud`, `hasOffline`, `primaryUri`, `cloudItemId`
+ * et `cloudCTag` sont dénormalisées depuis `media_source` (sources visibles uniquement) pour que
+ * la grille n'ait aucune jointure à faire.
  */
 @Entity(
     tableName = "media",
@@ -42,6 +43,10 @@ data class MediaEntity(
     val hasOffline: Boolean,
     /** Empreinte de contenu (ex. SHA-1/QuickXorHash) lorsqu'elle est connue. Sert au dédoublonnage. */
     val contentHash: String? = null,
+    /** Identifiant de l'élément OneDrive visible (miniatures Graph), null sans source OneDrive. */
+    val cloudItemId: String? = null,
+    /** cTag de cet élément OneDrive : change avec le contenu (clé de cache des miniatures). */
+    val cloudCTag: String? = null,
 )
 
 @Entity(
@@ -162,9 +167,19 @@ data class CachedFileEntity(
     val lastAccessAt: Long,
     /** Fichier conservé explicitement hors connexion : jamais supprimé par le nettoyage LRU. */
     val pinned: Boolean,
+    /**
+     * Version du contenu copié (cTag OneDrive) : une copie dont la version diffère de celle de
+     * l'élément OneDrive est périmée. Null si inconnue (jamais considérée comme à jour).
+     */
+    val version: String? = null,
 )
 
-enum class DownloadState { QUEUED, RUNNING, DONE, FAILED, CANCELLED }
+/**
+ * Etat d'une copie hors ligne à télécharger (stocké par son nom, colonne TEXT : ajouter une valeur
+ * ne change pas le schéma). PAUSED : arrêtée par l'utilisateur (Gestionnaire de tâches, arrêt
+ * forcé), reprise uniquement à sa demande.
+ */
+enum class DownloadState { QUEUED, RUNNING, DONE, FAILED, CANCELLED, PAUSED }
 
 @Entity(
     tableName = "download_task",
@@ -183,10 +198,39 @@ data class DownloadTaskEntity(
     val keepOffline: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    /** Nom d'un code d'erreur (DownloadError), jamais de texte libre ni d'URL. */
     val error: String? = null,
+    /** Identifiant de l'élément OneDrive au moment de la mise en file. */
+    val cloudItemId: String? = null,
+    /** Version du contenu (cTag) à laquelle appartient le fichier partiel `.part`. */
+    val cTag: String? = null,
+    /** Tentatives déjà faites (reprises après erreur). */
+    @ColumnInfo(defaultValue = "0") val attempts: Int = 0,
 )
 
-/** Curseur de synchronisation par fournisseur ("mediastore", "onedrive"). */
+/**
+ * Dossier OneDrive connu (tous les dossiers du lecteur, renvoyés par la requête delta). Sert au
+ * nom et au chemin des albums OneDrive et au masquage du contenu d'un dossier supprimé.
+ */
+@Entity(
+    tableName = "cloud_folder",
+    indices = [Index(value = ["parentId"])],
+)
+data class CloudFolderEntity(
+    /** Identifiant d'élément OneDrive du dossier. */
+    @PrimaryKey val itemId: String,
+    /** Dossier parent (null pour la racine ou si inconnu). */
+    val parentId: String?,
+    val name: String,
+    /** Racine du lecteur (facette `root`). */
+    val isRoot: Boolean,
+    val updatedAt: Long,
+)
+
+/**
+ * Curseur de synchronisation par fournisseur ("mediastore", "onedrive"). Pour OneDrive :
+ * `cursor` = deltaLink, `version` = « <drive.id>|<version de $select> » (voir OneDriveLogic).
+ */
 @Entity(tableName = "sync_cursor")
 data class SyncCursorEntity(
     @PrimaryKey val provider: String,
@@ -234,6 +278,8 @@ data class MediaRow(
     val hasCloud: Boolean,
     val hasOffline: Boolean,
     @ColumnInfo(name = "isFavorite") val isFavorite: Boolean,
+    val cloudItemId: String?,
+    val cloudCTag: String?,
 )
 
 /** Ligne de liste d'albums avec statistiques et couverture. */
@@ -251,5 +297,7 @@ data class AlbumRow(
     val coverUri: String?,
     val coverType: MediaType?,
     val coverDateModified: Long?,
+    val coverCloudItemId: String?,
+    val coverCloudCTag: String?,
     val latestDate: Long?,
 )

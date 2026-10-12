@@ -1,11 +1,33 @@
 package fr.eva.cloudgallery.data.prefs
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import fr.eva.cloudgallery.domain.model.AlbumSort
+import fr.eva.cloudgallery.domain.model.AppSettings
 import fr.eva.cloudgallery.domain.model.ThemeMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsLogicTest {
+
+    /** DataStore en mémoire (JVM), vide au départ comme après une première installation. */
+    private class InMemoryDataStore : DataStore<Preferences> {
+        private val mutex = Mutex()
+        private val state = MutableStateFlow(emptyPreferences())
+        override val data: Flow<Preferences> = state
+
+        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
+            mutex.withLock { transform(state.value).also { state.value = it } }
+    }
 
     @Test
     fun zoomLevelIsClamped() {
@@ -22,5 +44,49 @@ class SettingsLogicTest {
         assertEquals(ThemeMode.SYSTEM, enumOrDefault("PURPLE", ThemeMode.SYSTEM))
         assertEquals(ThemeMode.SYSTEM, enumOrDefault<ThemeMode>(null, ThemeMode.SYSTEM))
         assertEquals(AlbumSort.COUNT, enumOrDefault("COUNT", AlbumSort.CUSTOM))
+    }
+
+    /** Décision utilisateur : « Afficher les éléments OneDrive dans Photos » est désactivé par défaut. */
+    @Test
+    fun showCloudInPhotos_isOffByDefault() = runTest {
+        assertFalse(AppSettings().showCloudInPhotos)
+
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        // Clé absente (première installation) : repli sur la valeur par défaut.
+        assertFalse(repository.settings.first().showCloudInPhotos)
+
+        repository.setShowCloudInPhotos(true)
+        assertTrue(repository.settings.first().showCloudInPhotos)
+        repository.setShowCloudInPhotos(false)
+        assertFalse(repository.settings.first().showCloudInPhotos)
+    }
+
+    /** Décision utilisateur (D2) : sur réseau facturé, l'original est proposé, pas chargé, par défaut. */
+    @Test
+    fun loadOriginalsOnMobileData_isOffByDefault() = runTest {
+        assertFalse(AppSettings().loadOriginalsOnMobileData)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+        repository.setLoadOriginalsOnMobileData(true)
+        assertTrue(repository.settings.first().loadOriginalsOnMobileData)
+        // Indépendant de l'autre réglage OneDrive.
+        assertFalse(repository.settings.first().showCloudInPhotos)
+        repository.setLoadOriginalsOnMobileData(false)
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+    }
+
+    /** Décision utilisateur (D2) : copies hors ligne en Wi-Fi uniquement par défaut. */
+    @Test
+    fun offlineWifiOnly_isOnByDefault_andNotificationsNotYetAsked() = runTest {
+        assertTrue(AppSettings().offlineWifiOnly)
+        assertFalse(AppSettings().offlineNotificationsAsked)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertTrue(repository.settings.first().offlineWifiOnly)
+        repository.setOfflineWifiOnly(false)
+        assertFalse(repository.settings.first().offlineWifiOnly)
+        repository.setOfflineNotificationsAsked(true)
+        assertTrue(repository.settings.first().offlineNotificationsAsked)
+        // Indépendant des autres réglages OneDrive.
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
     }
 }

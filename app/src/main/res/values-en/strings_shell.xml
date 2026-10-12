@@ -46,7 +46,12 @@
     <string name="settings_reindex_title">Re-index the library?</string>
     <string name="settings_reindex_message">Every file on the device will be read again. This may take a few minutes; your favorites and albums are kept.</string>
     <string name="settings_reindex_confirm">Re-index</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_cloud_sync_state">OneDrive sync</string>
+    <string name="settings_show_cloud_in_photos">Show OneDrive items in Photos</string>
+    <string name="settings_originals_mobile_title">Load originals on mobile data</string>
+    <string name="settings_originals_mobile_summary">When you zoom in, downloads the OneDrive original without asking, even on mobile data or with Data Saver on. Off: it\'s offered to you with its size. On Wi-Fi, it always loads automatically.</string>
+    <string name="settings_show_cloud_in_photos_summary">Off: items only on OneDrive appear only in their OneDrive albums, Favorites and your albums; items kept offline always appear in Photos. On: a photo stored both on the phone and on OneDrive appears twice.</string>
     <string name="settings_section_about">About</string>
     <string name="settings_version">Version %1$s</string>
-    <string name="settings_onedrive_soon">Available in a future version</string>
 </resources>

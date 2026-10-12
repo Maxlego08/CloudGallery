@@ -30,6 +30,7 @@ import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
+import fr.eva.cloudgallery.ui.image.offlineThumbnail
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.abs
 import kotlin.math.max
@@ -99,6 +100,8 @@ internal fun Filmstrip(
                     uri = summary?.uri,
                     isVideo = summary?.type == MediaType.VIDEO,
                     version = summary?.dateModified ?: 0L,
+                    cloud = summary?.cloudThumb,
+                    offline = summary?.offlineThumbnail(),
                     modifier = Modifier
                         .size(CellSize)
                         .clip(CellShape)

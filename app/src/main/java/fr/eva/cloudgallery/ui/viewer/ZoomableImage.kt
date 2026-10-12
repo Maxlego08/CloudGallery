@@ -1,5 +1,6 @@
 package fr.eva.cloudgallery.ui.viewer
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.DecayAnimationSpec
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,11 +53,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import fr.eva.cloudgallery.domain.model.MediaDetails
+import fr.eva.cloudgallery.ui.image.CloudPreviewImage
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
 import fr.eva.cloudgallery.ui.image.fullImageRequest
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -372,8 +377,15 @@ private suspend fun PointerInputScope.detectViewerGestures(
 }
 
 /**
- * Page image zoomable : miniature MediaStore instantanée, puis image bornée à 2 x l'écran (≤ 4096 px),
- * puis rechargement haute résolution (≤ ~24 MP, plafond Coil relevé en conséquence) au-delà de 2,5x.
+ * Page image zoomable. Selon [source] :
+ * - fichier local MediaStore : miniature MediaStore instantanée, puis image bornée à 2 x l'écran
+ *   (≤ 4096 px), puis rechargement haute résolution (≤ ~24 MP, plafond Coil relevé en
+ *   conséquence) au-delà de 2,5x ;
+ * - fichier de l'appli (original OneDrive téléchargé) : même chose, avec l'aperçu OneDrive en
+ *   attendant le décodage ;
+ * - aperçu OneDrive : zoomable ; [onHiResWanted] signale l'entrée et la sortie du zoom profond
+ *   (avec le grand côté demandé en px) pour proposer ou charger l'original.
+ * L'état de zoom est propre au média : passer de l'aperçu à l'original garde le cadrage.
  *
  * TODO(viewer): décodage par tuiles (BitmapRegionDecoder) pour afficher les très grandes images
  *  (> 24 MP, panoramas) à pleine résolution sans risque d'OOM.
@@ -381,34 +393,62 @@ private suspend fun PointerInputScope.detectViewerGestures(
 @Composable
 internal fun ZoomableImage(
     media: MediaDetails,
-    uri: Uri,
+    source: ViewerImageSource,
     isCurrentPage: Boolean,
     callbacks: PageGestureCallbacks,
     onZoomChanged: (Boolean) -> Unit,
     onLoadError: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onHiResWanted: (wanted: Boolean, requestedLongPx: Int) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
-    val state = remember { ZoomState(scope) }
+    val state = remember(media.id) { ZoomState(scope) }
     val context = LocalContext.current
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
-    val version = media.dateModified
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
+    val currentOnHiResWanted by rememberUpdatedState(onHiResWanted)
+
+    // Fichier décodé par Coil (local ou original téléchargé) ; null pour un aperçu OneDrive seul.
+    val fileUri: Uri? = when (source) {
+        is ViewerImageSource.MediaStore -> source.uri
+        is ViewerImageSource.File -> source.uri
+        is ViewerImageSource.CloudPreview -> null
+    }
+    val version: String = when (source) {
+        is ViewerImageSource.MediaStore -> source.dateModified.toString()
+        is ViewerImageSource.File -> source.versionKey
+        is ViewerImageSource.CloudPreview -> "p${source.side}"
+    }
 
     val baseSide = remember(configuration.screenWidthDp, configuration.screenHeightDp, density.density) {
         val longDp = max(configuration.screenWidthDp, configuration.screenHeightDp)
         ZoomMath.baseMaxSide((longDp * density.density).toInt())
     }
-    val hiResSide = remember(media.width, media.height, baseSide) {
-        ZoomMath.hiResMaxSide(media.width, media.height, baseSide)
+    // Dimensions inconnues dans l'index (OneDrive peut renvoyer 0 x 0) : lues dans le fichier
+    // téléchargé ou la copie hors ligne (en-tête seulement, sur le dispatcher d'E/S).
+    val fileBounds by produceState<Pair<Int, Int>?>(null, source) {
+        value = if (source is ViewerImageSource.File && (media.width <= 0 || media.height <= 0)) {
+            withContext(Dispatchers.IO) { imageFileBounds(source.uri) }
+        } else {
+            null
+        }
     }
-    val baseRequest = remember(uri, version, baseSide) { fullImageRequest(context, uri, version, baseSide) }
+    val (imageW, imageH) = ZoomMath.imageDimensions(media.width, media.height, fileBounds)
+    val hiResSide = remember(imageW, imageH, baseSide) {
+        ZoomMath.hiResMaxSide(imageW, imageH, baseSide)
+    }
+    val baseRequest = remember(fileUri, version, baseSide) {
+        fileUri?.let { fullImageRequest(context, it, version, baseSide) }
+    }
 
-    var loadedSize by remember(uri, version) { mutableStateOf<Size?>(null) }
-    var baseLoaded by remember(uri, version) { mutableStateOf(false) }
-    var hiResWanted by remember(uri, version) { mutableStateOf(false) }
-    var hiResLoaded by remember(uri, version) { mutableStateOf(false) }
+    // Taille du contenu gardée d'une source à l'autre (aperçu puis original OneDrive) : pas de
+    // saut. Fichier local modifié (rotation sans perte : même média, nouvelle date) : taille relue.
+    val localVersion = (source as? ViewerImageSource.MediaStore)?.dateModified
+    var loadedSize by remember(media.id, localVersion) { mutableStateOf<Size?>(null) }
+    var baseLoaded by remember(fileUri, version) { mutableStateOf(false) }
+    var hiResWanted by remember(fileUri, version) { mutableStateOf(false) }
+    var hiResLoaded by remember(fileUri, version) { mutableStateOf(false) }
 
     // Taille du contenu : celle de l'image décodée (orientation EXIF appliquée), sinon les métadonnées.
     val size = loadedSize
@@ -432,46 +472,90 @@ internal fun ZoomableImage(
             snapshotFlow { state.isZoomed }.collect { currentOnZoomChanged(it) }
         }
     }
-    LaunchedEffect(state, isCurrentPage, hiResSide) {
-        if (isCurrentPage && hiResSide != null) {
+    LaunchedEffect(state, isCurrentPage, hiResSide, fileUri) {
+        if (isCurrentPage && fileUri != null && hiResSide != null) {
             snapshotFlow { state.scale > ZoomMath.HI_RES_THRESHOLD }.collect { if (it) hiResWanted = true }
+        }
+    }
+    val isCloudPreview = source is ViewerImageSource.CloudPreview
+    LaunchedEffect(state, isCurrentPage, isCloudPreview) {
+        if (isCurrentPage && isCloudPreview) {
+            // Entrée / sortie du zoom profond (pas chaque image du pincement).
+            snapshotFlow { state.scale > ZoomMath.HI_RES_THRESHOLD }.collect { deep ->
+                val (fw, fh) = state.fitted
+                currentOnHiResWanted(deep, (state.scale * max(fw, fh)).toInt())
+            }
         }
     }
 
     ZoomableBox(state = state, zoomEnabled = true, callbacks = callbacks, modifier = modifier) {
-        if (!baseLoaded && !hiResLoaded) {
-            ThumbnailImage(
-                uri = uri,
-                isVideo = false,
-                version = version,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Fit,
-            )
-        }
-        if (!hiResLoaded) {
-            AsyncImage(
-                model = baseRequest,
+        when (source) {
+            is ViewerImageSource.CloudPreview -> CloudPreviewImage(
+                ref = source.ref,
+                side = source.side,
                 contentDescription = media.displayName,
                 modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Fit,
-                onSuccess = { success ->
-                    baseLoaded = true
-                    onLoadError(false)
-                    val intrinsic = success.painter.intrinsicSize
-                    if (intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f) loadedSize = intrinsic
-                },
-                onError = { onLoadError(true) },
+                onError = onLoadError,
+                onLoaded = { loadedSize = it },
             )
-        }
-        if (hiResWanted && hiResSide != null) {
-            val hiResRequest = remember(uri, version, hiResSide) { fullImageRequest(context, uri, version, hiResSide) }
-            AsyncImage(
-                model = hiResRequest,
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Fit,
-                onSuccess = { hiResLoaded = true },
-            )
+            is ViewerImageSource.MediaStore, is ViewerImageSource.File -> {
+                if (!baseLoaded && !hiResLoaded) {
+                    if (source is ViewerImageSource.MediaStore) {
+                        ThumbnailImage(
+                            uri = source.uri,
+                            isVideo = false,
+                            version = source.dateModified,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    } else if (source is ViewerImageSource.File && source.cloud != null) {
+                        // Aperçu OneDrive pendant le décodage du fichier (copie hors ligne : cache seulement).
+                        CloudPreviewImage(
+                            ref = source.cloud,
+                            side = source.previewSide,
+                            modifier = Modifier.matchParentSize(),
+                            cacheOnly = source.previewFromCacheOnly,
+                            onLoaded = { if (loadedSize == null) loadedSize = it },
+                        )
+                    }
+                }
+                if (!hiResLoaded && baseRequest != null) {
+                    AsyncImage(
+                        model = baseRequest,
+                        contentDescription = media.displayName,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Fit,
+                        onSuccess = { success ->
+                            baseLoaded = true
+                            onLoadError(false)
+                            val intrinsic = success.painter.intrinsicSize
+                            if (intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f) loadedSize = intrinsic
+                        },
+                        onError = { onLoadError(true) },
+                    )
+                }
+                if (hiResWanted && hiResSide != null && fileUri != null) {
+                    val hiResRequest = remember(fileUri, version, hiResSide) { fullImageRequest(context, fileUri, version, hiResSide) }
+                    AsyncImage(
+                        model = hiResRequest,
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Fit,
+                        onSuccess = { hiResLoaded = true },
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * Dimensions d'une image de l'appli ([uri] `file://`) lues dans son en-tête, sans décoder les
+ * pixels ; null si illisibles. Appel bloquant : dispatcher d'E/S uniquement.
+ */
+private fun imageFileBounds(uri: Uri): Pair<Int, Int>? {
+    val path = uri.path ?: return null
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, options)
+    return if (options.outWidth > 0 && options.outHeight > 0) options.outWidth to options.outHeight else null
 }

@@ -68,6 +68,16 @@ object ZoomMath {
      * nécessaire pour ne pas dépasser [maxPixels]. Renvoie null si l'image n'est pas plus grande
      * que le décodage de base (aucun rechargement utile) ou si ses dimensions sont inconnues.
      */
+    /**
+     * Dimensions de l'image pour le rechargement haute résolution : celles de l'index si elles
+     * sont connues, sinon celles lues dans le fichier ([fileBounds]), sinon 0 x 0 (inconnues).
+     */
+    fun imageDimensions(metaW: Int, metaH: Int, fileBounds: Pair<Int, Int>?): Pair<Int, Int> = when {
+        metaW > 0 && metaH > 0 -> metaW to metaH
+        fileBounds != null && fileBounds.first > 0 && fileBounds.second > 0 -> fileBounds
+        else -> 0 to 0
+    }
+
     fun hiResMaxSide(imageW: Int, imageH: Int, baseMaxSide: Int, maxPixels: Long = HI_RES_MAX_PIXELS): Int? {
         if (imageW <= 0 || imageH <= 0) return null
         val longSide = max(imageW, imageH)

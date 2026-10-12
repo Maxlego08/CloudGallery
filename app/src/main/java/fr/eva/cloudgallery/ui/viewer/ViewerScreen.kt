@@ -1,5 +1,6 @@
 package fr.eva.cloudgallery.ui.viewer
 
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -71,12 +72,17 @@ import fr.eva.cloudgallery.ui.components.OneUiDialog
 import fr.eva.cloudgallery.ui.components.OneUiIconButton
 import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiOverflowMenu
+import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
 import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
+import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
+import fr.eva.cloudgallery.ui.offline.offlineStatusText
+import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
 import fr.eva.cloudgallery.ui.theme.OneUiFavoriteRed
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.theme.ViewerColors
 import fr.eva.cloudgallery.ui.util.Formatters
 import fr.eva.cloudgallery.ui.util.openWithExternalApp
+import fr.eva.cloudgallery.ui.util.progressPercent
 import fr.eva.cloudgallery.ui.util.shareMedia
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -105,6 +111,16 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
     val exif by viewModel.exif.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val folders by viewModel.localFolders.collectAsStateWithLifecycle()
+    val cloudOriginal by viewModel.cloudOriginal.collectAsStateWithLifecycle()
+    val costlyNetwork by viewModel.costlyNetwork.collectAsStateWithLifecycle()
+    val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
+    val offlineState by viewModel.offlineState.collectAsStateWithLifecycle()
+    val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
+    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    val withNotificationPermission = rememberNotificationPermissionGate(
+        alreadyAsked = settings.offlineNotificationsAsked,
+        onAsked = viewModel::markNotificationsAsked,
+    )
     val context = LocalContext.current
     val resources = LocalResources.current
     val currentId by viewModel.currentId.collectAsStateWithLifecycle()
@@ -129,7 +145,16 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     val text = if (event.arg != null) resources.getString(event.message, event.arg) else resources.getString(event.message)
                     Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
                 }
+                is ViewerEvent.PluralToast -> Toast.makeText(
+                    context,
+                    resources.getQuantityString(event.message, event.count, event.count),
+                    Toast.LENGTH_SHORT,
+                ).show()
                 ViewerEvent.CropSaved -> showCropEditor = false
+                is ViewerEvent.Share -> runCatching { shareMedia(context, event.uris, event.mimeTypes) }
+                    .onFailure { Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show() }
+                is ViewerEvent.OpenWith -> runCatching { openWithExternalApp(context, event.uri, event.mimeType) }
+                    .onFailure { Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -142,6 +167,11 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
     val current = media
     val isLocal = current != null && current.hasLocal && current.uri != null
+    // Sans fichier local (OneDrive ou copie hors ligne) : les actions d'écriture (modifier,
+    // supprimer, rogner, pivoter, copier) restent réservées aux fichiers de l'appareil ; partager
+    // et « Ouvrir avec » utilisent la copie hors ligne ou téléchargent l'original (lecture seule).
+    val cloudOnly = current != null && !isLocal
+    val canRead = isLocal || current?.hasCloud == true || current?.hasOffline == true
     val isImage = current?.type == MediaType.IMAGE
     val chromeShown = chromeVisible && dismissProgress < 0.02f && !showCropEditor
     ImmersiveSystemBars(visible = chromeShown || showCropEditor)
@@ -194,6 +224,11 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     callbacks = callbacks,
                     onZoomChanged = { zoomed -> if (page == pagerState.settledPage) currentZoomed = zoomed },
                     onPlayVideo = onPlayVideo,
+                    cloudOriginal = cloudOriginal,
+                    costlyNetwork = costlyNetwork,
+                    onHiResWanted = viewModel::onHiResWanted,
+                    onLoadOriginal = viewModel::loadOriginal,
+                    onCancelOriginal = viewModel::cancelOriginal,
                 )
             }
 
@@ -235,13 +270,12 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     ViewerActionBar(
                         media = current,
                         isLocal = isLocal,
+                        cloudOnly = cloudOnly,
+                        canShare = canRead && sharePreparation == null,
                         isImage = isImage,
                         onFavorite = viewModel::toggleFavorite,
                         onEdit = { showCropEditor = true },
-                        onShare = {
-                            val m = current
-                            if (m?.uri != null && isLocal) shareMedia(context, listOf(m.uri), listOf(m.mimeType))
-                        },
+                        onShare = viewModel::shareCurrent,
                         onDelete = {
                             if (settings.confirmBeforeDelete) showDeleteConfirm = true else viewModel.requestDelete()
                         },
@@ -263,7 +297,7 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                 onMenuExpandedChange = { menuExpanded = it },
                 menuItems = buildList {
                     add(OneUiMenuItem(stringResource(R.string.common_details)) { showDetails = true })
-                    if (isImage) {
+                    if (isImage && !cloudOnly) {
                         // Rotation sans perte : seulement pour les formats dont l'orientation EXIF est modifiable.
                         if (viewModel.canRotate(current)) {
                             add(OneUiMenuItem(stringResource(R.string.viewer_rotate_left), enabled = isLocal && !busy) { viewModel.requestRotate(270) })
@@ -272,13 +306,38 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                         add(OneUiMenuItem(stringResource(R.string.viewer_crop), enabled = isLocal) { showCropEditor = true })
                     }
                     add(OneUiMenuItem(stringResource(R.string.common_add_to_album), enabled = current != null) { showAlbumPicker = true })
-                    add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
+                    if (!cloudOnly) {
+                        add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
+                    }
                     add(
-                        OneUiMenuItem(stringResource(R.string.common_open_with), enabled = isLocal) {
-                            val m = current
-                            if (m?.uri != null) openWithExternalApp(context, m.uri, m.mimeType)
+                        OneUiMenuItem(stringResource(R.string.common_open_with), enabled = canRead && sharePreparation == null) {
+                            viewModel.openCurrentWith()
                         },
                     )
+                    // Copie hors ligne (éléments OneDrive, ou copie conservée d'un élément supprimé de OneDrive).
+                    if (current != null && (current.hasCloud || current.hasOffline)) {
+                        when {
+                            offlineState.active -> add(
+                                OneUiMenuItem(stringResource(R.string.offline_cancel_download)) { viewModel.cancelOfflineDownload() },
+                            )
+                            offlineState.stopped -> {
+                                add(
+                                    OneUiMenuItem(stringResource(R.string.offline_resume_download)) {
+                                        withNotificationPermission { viewModel.keepOffline() }
+                                    },
+                                )
+                                add(OneUiMenuItem(stringResource(R.string.offline_cancel_download)) { viewModel.cancelOfflineDownload() })
+                            }
+                            current.hasCloud && !current.hasOffline -> add(
+                                OneUiMenuItem(stringResource(R.string.offline_keep)) {
+                                    withNotificationPermission { viewModel.keepOffline() }
+                                },
+                            )
+                        }
+                        if (current.hasOffline) {
+                            add(OneUiMenuItem(stringResource(R.string.offline_release)) { viewModel.releaseOffline() })
+                        }
+                    }
                 },
             )
         }
@@ -311,7 +370,16 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
     if (showDetails && current != null) {
         LaunchedEffect(current.id, current.dateModified) { viewModel.loadExif(current) }
-        DetailsSheet(media = current, exif = exif, onDismiss = { showDetails = false })
+        DetailsSheet(
+            media = current,
+            exif = exif,
+            onDismiss = { showDetails = false },
+            offlineStatus = offlineStatusText(
+                state = offlineState,
+                deletedOnOneDrive = current.hasOffline && !current.hasCloud,
+                offlineBytes = current.offlineCopy?.sizeBytes ?: current.offlineSource?.sizeBytes ?: 0L,
+            ),
+        )
     }
 
     if (showAlbumPicker) {
@@ -333,6 +401,20 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                 showFolderPicker = false
                 viewModel.copyToFolder(folder)
             },
+        )
+    }
+
+    sharePreparation?.let { preparation ->
+        SharePreparationDialog(preparation = preparation, onCancel = viewModel::cancelSharePreparation)
+    }
+
+    offlinePrompt?.let { prompt ->
+        OfflinePromptDialog(
+            prompt = prompt,
+            onConfirmLargeBatch = viewModel::confirmLargeBatch,
+            onDownloadNow = viewModel::downloadOfflineNow,
+            onConfirmRelease = viewModel::confirmRelease,
+            onDismiss = viewModel::dismissOfflinePrompt,
         )
     }
 
@@ -453,11 +535,17 @@ private fun ViewerTopBar(
     }
 }
 
-/** Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager, Supprimer. */
+/**
+ * Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager,
+ * Supprimer. Elément uniquement sur OneDrive ([cloudOnly]) : Favori et Partager (original
+ * téléchargé) ; modifier et supprimer restent réservés aux fichiers de l'appareil.
+ */
 @Composable
 private fun ViewerActionBar(
     media: MediaDetails?,
     isLocal: Boolean,
+    cloudOnly: Boolean,
+    canShare: Boolean,
     isImage: Boolean,
     onFavorite: () -> Unit,
     onEdit: () -> Unit,
@@ -484,6 +572,18 @@ private fun ViewerActionBar(
                 tint = if (favorite) OneUiFavoriteRed else ViewerColors.content,
             )
         }
+        if (cloudOnly) {
+            ActionSlot {
+                OneUiIconButton(
+                    icon = Icons.Outlined.Share,
+                    contentDescription = stringResource(R.string.common_share),
+                    onClick = onShare,
+                    enabled = canShare,
+                    tint = ViewerColors.content,
+                )
+            }
+            return@Row
+        }
         ActionSlot {
             OneUiIconButton(
                 icon = Icons.Outlined.Edit,
@@ -499,7 +599,7 @@ private fun ViewerActionBar(
                 icon = Icons.Outlined.Share,
                 contentDescription = stringResource(R.string.common_share),
                 onClick = onShare,
-                enabled = isLocal,
+                enabled = isLocal && canShare,
                 tint = ViewerColors.content,
             )
         }
@@ -518,4 +618,29 @@ private fun ViewerActionBar(
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ActionSlot(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
+}
+
+/**
+ * Téléchargement d'un original OneDrive avant un partage ou un « Ouvrir avec » : progression et
+ * annulation (aussi par retour ou toucher hors de la boîte).
+ */
+@Composable
+private fun SharePreparationDialog(preparation: SharePreparation, onCancel: () -> Unit) {
+    val context = LocalContext.current
+    val percent = progressPercent(preparation.done, preparation.total)
+    OneUiProgressDialog(
+        title = stringResource(R.string.share_preparing),
+        message = if (preparation.total > 0) {
+            stringResource(
+                R.string.share_preparing_progress,
+                Formatter.formatShortFileSize(context, preparation.done),
+                Formatter.formatShortFileSize(context, preparation.total),
+            )
+        } else {
+            null
+        },
+        progress = if (percent >= 0) percent / 100f else null,
+        cancelLabel = stringResource(R.string.common_cancel),
+        onCancel = onCancel,
+    )
 }

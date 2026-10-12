@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Offline copies of OneDrive items (offline_ prefix). -->
+<resources>
+    <!-- Actions -->
+    <string name="offline_keep">Keep offline</string>
+    <string name="offline_release">Free up space</string>
+    <string name="offline_cancel_download">Cancel download</string>
+    <string name="offline_resume_download">Resume download</string>
+
+    <!-- Item status (viewer, Details) -->
+    <string name="offline_status_queued">Offline download pending</string>
+    <string name="offline_status_waiting_wifi">Offline download waiting for Wi-Fi</string>
+    <string name="offline_status_downloading">Offline download: %1$s of %2$s</string>
+    <string name="offline_status_downloading_unknown">Offline download in progress…</string>
+    <string name="offline_status_paused">Offline download paused</string>
+    <string name="offline_status_failed">Offline download failed. %1$s</string>
+    <string name="offline_status_available">Available offline (%1$s)</string>
+    <string name="offline_status_updating">Available offline · downloading a new version</string>
+    <string name="offline_status_update_paused">Available offline · new version download paused</string>
+    <string name="offline_status_update_failed">Available offline · new version not downloaded. %1$s</string>
+    <string name="offline_status_deleted_on_onedrive">Offline copy: item deleted from OneDrive</string>
+    <string name="offline_caption">Offline copy</string>
+    <string name="offline_caption_deleted">Offline copy · deleted from OneDrive</string>
+    <string name="offline_badge_a11y">available offline</string>
+
+    <!-- Results -->
+    <plurals name="offline_enqueued">
+        <item quantity="one">%d item will be downloaded for offline access.</item>
+        <item quantity="other">%d items will be downloaded for offline access.</item>
+    </plurals>
+    <string name="offline_nothing_to_do">These items are already available offline, or are not on OneDrive.</string>
+    <string name="offline_not_signed_in">Sign in to OneDrive to keep items offline.</string>
+    <string name="offline_scheduling_refused">Download queued: it will start the next time you open CloudGallery.</string>
+    <plurals name="offline_released">
+        <item quantity="one">%d offline copy removed from the device</item>
+        <item quantity="other">%d offline copies removed from the device</item>
+    </plurals>
+    <string name="offline_cancelled">Offline download cancelled</string>
+    <string name="offline_release_check_failed">Couldn\'t check these offline copies. Nothing was deleted: try again.</string>
+    <string name="offline_resumed">Offline downloads resumed</string>
+
+    <!-- Not enough space -->
+    <string name="offline_no_space_title">Not enough space</string>
+    <string name="offline_no_space_message">%1$s more is needed on the device for these offline copies.</string>
+    <string name="offline_no_space_manage">Free up space</string>
+
+    <!-- Large batch -->
+    <plurals name="offline_large_title">
+        <item quantity="one">Keep %d item offline?</item>
+        <item quantity="other">Keep %d items offline?</item>
+    </plurals>
+    <string name="offline_large_message">%1$s will be downloaded to the device. Available space: %2$s.</string>
+    <string name="offline_large_confirm">Download</string>
+
+    <!-- Waiting for Wi-Fi -->
+    <string name="offline_wifi_title">Waiting for Wi-Fi</string>
+    <plurals name="offline_wifi_message">
+        <item quantity="one">%1$d item (%2$s) will be downloaded as soon as the device is on Wi-Fi.</item>
+        <item quantity="other">%1$d items (%2$s) will be downloaded as soon as the device is on Wi-Fi.</item>
+    </plurals>
+    <string name="offline_download_now">Download now</string>
+    <string name="offline_wait_wifi">Wait for Wi-Fi</string>
+
+    <!-- Releasing a last copy -->
+    <plurals name="offline_release_last_title">
+        <item quantity="one">Delete the last copy?</item>
+        <item quantity="other">Delete the last copies?</item>
+    </plurals>
+    <plurals name="offline_release_last_message">
+        <item quantity="one">%d item no longer exists on OneDrive or on the device: its offline copy is the only one left. It will be permanently deleted and the item will disappear from CloudGallery.</item>
+        <item quantity="other">%d items no longer exist on OneDrive or on the device: their offline copies are the only ones left. They will be permanently deleted and these items will disappear from CloudGallery.</item>
+    </plurals>
+
+    <!-- Queue (Account screen) -->
+    <string name="offline_section_title">Offline</string>
+    <string name="offline_queue_title">Offline copies</string>
+    <plurals name="offline_queue_running">
+        <item quantity="one">%d item downloading</item>
+        <item quantity="other">%d items downloading</item>
+    </plurals>
+    <plurals name="offline_queue_waiting_wifi">
+        <item quantity="one">%d item waiting for Wi-Fi</item>
+        <item quantity="other">%d items waiting for Wi-Fi</item>
+    </plurals>
+    <plurals name="offline_queue_queued">
+        <item quantity="one">%d item pending</item>
+        <item quantity="other">%d items pending</item>
+    </plurals>
+    <plurals name="offline_queue_paused">
+        <item quantity="one">%d item paused</item>
+        <item quantity="other">%d items paused</item>
+    </plurals>
+    <plurals name="offline_queue_failed">
+        <item quantity="one">%d failed</item>
+        <item quantity="other">%d failed</item>
+    </plurals>
+    <plurals name="offline_queue_available">
+        <item quantity="one">%1$d item on the device · %2$s</item>
+        <item quantity="other">%1$d items on the device · %2$s</item>
+    </plurals>
+    <string name="offline_queue_empty">No offline copies. Use “Keep offline” on OneDrive items.</string>
+    <string name="offline_resume_all">Resume downloads</string>
+    <string name="offline_cancel_all">Cancel downloads</string>
+    <string name="offline_cancel_all_title">Cancel offline downloads?</string>
+    <string name="offline_cancel_all_message">Pending items will not be downloaded. Copies already on the device are kept.</string>
+
+    <!-- Copies of items deleted from OneDrive (user decision) -->
+    <plurals name="offline_deleted_title">
+        <item quantity="one">%d offline copy of an item deleted from OneDrive</item>
+        <item quantity="other">%d offline copies of items deleted from OneDrive</item>
+    </plurals>
+    <string name="offline_deleted_message">These items were deleted from OneDrive more than 30 days ago. Their offline copies may be the last ones: delete them or keep them on the device.</string>
+    <string name="offline_deleted_delete">Delete the copies</string>
+    <string name="offline_deleted_keep">Keep them</string>
+    <plurals name="offline_deleted_delete_title">
+        <item quantity="one">Delete %d copy?</item>
+        <item quantity="other">Delete %d copies?</item>
+    </plurals>
+    <string name="offline_deleted_delete_message">These copies are probably the last ones: they will be permanently deleted from the device and these items will disappear from CloudGallery, along with their favorites and album entries.</string>
+    <plurals name="offline_deleted_kept">
+        <item quantity="one">%d item kept offline</item>
+        <item quantity="other">%d items kept offline</item>
+    </plurals>
+    <plurals name="offline_deleted_removed">
+        <item quantity="one">%d copy deleted</item>
+        <item quantity="other">%d copies deleted</item>
+    </plurals>
+    <plurals name="offline_deleted_menu">
+        <item quantity="one">%d offline copy to review</item>
+        <item quantity="other">%d offline copies to review</item>
+    </plurals>
+    <string name="offline_deleted_more">+%1$d</string>
+
+    <!-- Notifications -->
+    <string name="offline_notification_channel">Offline downloads</string>
+    <string name="offline_notification_channel_description">Progress of offline copies of OneDrive items</string>
+    <string name="offline_notification_preparing">Preparing offline copies…</string>
+    <plurals name="offline_notification_title">
+        <item quantity="one">Offline copy: %d item left</item>
+        <item quantity="other">Offline copies: %d items left</item>
+    </plurals>
+    <string name="offline_notification_progress">%1$s · %2$s of %3$s</string>
+    <string name="offline_notification_cancel">Cancel</string>
+    <plurals name="offline_notification_done">
+        <item quantity="one">%d item available offline</item>
+        <item quantity="other">%d items available offline</item>
+    </plurals>
+    <plurals name="offline_notification_failed">
+        <item quantity="one">%d offline copy could not be downloaded</item>
+        <item quantity="other">%d offline copies could not be downloaded</item>
+    </plurals>
+
+    <!-- OneDrive data purge: offline copies removed (sign-out, other account) -->
+    <plurals name="account_offline_purge_notice">
+        <item quantity="one">%d offline copy will be removed from the device.</item>
+        <item quantity="other">%d offline copies will be removed from the device.</item>
+    </plurals>
+    <plurals name="account_offline_last_copies_notice">
+        <item quantity="one">Warning: %d of these copies belongs to an item deleted from OneDrive. It is its last copy and will be lost permanently.</item>
+        <item quantity="other">Warning: %d of these copies belong to items deleted from OneDrive. They are their last copies and will be lost permanently.</item>
+    </plurals>
+
+    <!-- Setting -->
+    <string name="settings_offline_wifi_only_title">Download offline on Wi-Fi only</string>
+    <string name="account_offline_purge_unknown">Offline copies will be deleted from the device. Some may be the last copies of items deleted from OneDrive: they would be permanently lost.</string>
+    <string name="settings_offline_wifi_only_summary">Offline copies wait for an unmetered Wi-Fi network. “Download now” uses mobile data only for downloads that are already pending.</string>
+</resources>

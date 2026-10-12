@@ -474,7 +474,7 @@ class MediaStoreIndexer @Inject constructor(
             val now = System.currentTimeMillis()
             if (fullAccess) {
                 val stale = albums.filter { it.sourceKey == null || it.sourceKey !in buckets }.map { it.id }
-                for (chunk in stale.chunked(BATCH_SIZE)) albumDao.deleteUncustomizedFolders(chunk)
+                for (chunk in stale.chunked(BATCH_SIZE)) albumDao.deleteUncustomizedFolders(chunk, AlbumType.LOCAL_FOLDER)
             }
             val byKey = albums.filter { it.sourceKey != null }.associateBy { it.sourceKey!! }
             for ((key, bucket) in buckets) {

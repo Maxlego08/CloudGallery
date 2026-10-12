@@ -1,6 +1,14 @@
 package fr.eva.cloudgallery.ui.menu
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,6 +23,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
@@ -28,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.ui.account.cloudAccountSummary
+import fr.eva.cloudgallery.ui.account.cloudSyncStatusText
 import fr.eva.cloudgallery.ui.components.OneUiCard
 import fr.eva.cloudgallery.ui.components.OneUiCategoryHeader
 import fr.eva.cloudgallery.ui.components.OneUiDivider
@@ -40,20 +52,24 @@ import fr.eva.cloudgallery.ui.settings.indexStatusText
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Onglet « Menu » : accès aux collections (Favoris, Vidéos), aux paramètres et à l'état de
- * l'indexation locale. Pas d'entrée Corbeille : la corbeille système n'est pas consultable
- * de façon fiable par une appli tierce.
+ * Onglet « Menu » : accès aux collections (Favoris, Vidéos), au compte OneDrive (si ce build
+ * le permet), aux paramètres et à l'état de l'indexation locale. Pas d'entrée Corbeille : la
+ * corbeille système n'est pas consultable de façon fiable par une appli tierce.
  */
 @Composable
 fun MenuScreen(
     onOpenFavorites: () -> Unit,
     onOpenVideos: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     viewModel: MenuViewModel = hiltViewModel(),
 ) {
     val indexState by viewModel.indexState.collectAsStateWithLifecycle()
+    val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val cloudSyncState by viewModel.cloudSyncState.collectAsStateWithLifecycle()
+    val deletedOfflineCopies by viewModel.deletedOfflineCopies.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
     val colors = OneUiTheme.colors
@@ -110,6 +126,29 @@ fun MenuScreen(
                             onClick = if (indexState.running) null else viewModel::syncNow,
                             trailing = if (indexState.running) RunningTrailing else null,
                         )
+                        // Masquée quand ce build n'embarque pas de configuration OneDrive.
+                        if (viewModel.cloudAvailable) {
+                            OneUiDivider(startIndent = dimens.cardPadding + 40.dp)
+                            // Copies hors ligne à vérifier (éléments supprimés de OneDrive) en priorité ;
+                            // sinon, compte connecté : état de la synchronisation ; sinon, état du compte.
+                            val signedIn = cloudState is CloudAccountState.SignedIn
+                            OneUiListItem(
+                                title = stringResource(R.string.common_onedrive),
+                                subtitle = when {
+                                    deletedOfflineCopies > 0 ->
+                                        pluralStringResource(R.plurals.offline_deleted_menu, deletedOfflineCopies, deletedOfflineCopies)
+                                    signedIn -> cloudSyncStatusText(cloudSyncState)
+                                    else -> cloudAccountSummary(cloudState)
+                                },
+                                icon = Icons.Rounded.Cloud,
+                                onClick = onOpenAccount,
+                                trailing = when {
+                                    deletedOfflineCopies > 0 -> { { CountBadge(deletedOfflineCopies) } }
+                                    signedIn && cloudSyncState.running -> RunningTrailing
+                                    else -> null
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -127,3 +166,18 @@ fun MenuScreen(
 }
 
 private val RunningTrailing: @Composable () -> Unit = { IndexRunningIndicator() }
+
+/** Pastille de comptage (éléments qui attendent une décision de l'utilisateur). */
+@Composable
+private fun CountBadge(count: Int) {
+    Box(
+        modifier = Modifier
+            .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+            .clip(CircleShape)
+            .background(OneUiTheme.colors.danger)
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = count.toString(), style = OneUiTheme.typography.badge, color = Color.White)
+    }
+}

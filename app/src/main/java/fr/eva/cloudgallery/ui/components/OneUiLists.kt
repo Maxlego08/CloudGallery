@@ -69,7 +69,10 @@ fun OneUiCategoryHeader(
     )
 }
 
-/** Ligne de liste One UI (à l'intérieur d'une [OneUiCard]). Cliquable si [onClick] est fourni. */
+/**
+ * Ligne de liste One UI (à l'intérieur d'une [OneUiCard]). Cliquable si [onClick] est fourni.
+ * [destructive] colore le titre en rouge (action irréversible, ex. déconnexion).
+ */
 @Composable
 fun OneUiListItem(
     title: String,
@@ -78,6 +81,7 @@ fun OneUiListItem(
     icon: ImageVector? = null,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    destructive: Boolean = false,
 ) {
     ListRow(
         modifier = if (onClick != null) {
@@ -89,6 +93,7 @@ fun OneUiListItem(
         subtitle = subtitle,
         icon = icon,
         trailing = trailing,
+        titleColor = if (destructive) OneUiTheme.colors.danger else OneUiTheme.colors.textPrimary,
     )
 }
 
@@ -131,6 +136,7 @@ private fun ListRow(
     subtitle: String?,
     icon: ImageVector?,
     trailing: (@Composable () -> Unit)?,
+    titleColor: Color = OneUiTheme.colors.textPrimary,
 ) {
     val colors = OneUiTheme.colors
     Row(
@@ -150,7 +156,7 @@ private fun ListRow(
             Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(text = title, style = OneUiTheme.typography.listTitle, color = colors.textPrimary)
+            Text(text = title, style = OneUiTheme.typography.listTitle, color = titleColor)
             if (!subtitle.isNullOrEmpty()) {
                 Spacer(Modifier.height(2.dp))
                 Text(text = subtitle, style = OneUiTheme.typography.listSubtitle, color = colors.textSecondary)

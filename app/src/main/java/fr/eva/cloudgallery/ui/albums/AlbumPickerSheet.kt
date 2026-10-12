@@ -167,7 +167,7 @@ private fun PickerAlbumRow(album: AlbumSummary, onClick: () -> Unit) {
         subtitle = pluralStringResource(R.plurals.common_items_count, album.mediaCount, album.mediaCount),
         onClick = onClick,
     ) {
-        if (album.coverUri != null) {
+        if (album.coverUri != null || album.coverCloud != null) {
             ThumbnailImage(
                 uri = album.coverUri,
                 isVideo = album.coverType == MediaType.VIDEO,
@@ -175,6 +175,7 @@ private fun PickerAlbumRow(album: AlbumSummary, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(10.dp)),
+                cloud = album.coverCloud,
             )
         } else {
             IconCover(Icons.Outlined.Collections, tint = colors.textTertiary)

@@ -12,6 +12,10 @@
     <!-- Réseau : OneDrive (phase 3+) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Copies hors ligne (phase 4) : tâche de transfert lancée par l'utilisateur (JobScheduler) -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <!-- Progression des copies hors ligne (demandée au premier « Conserver hors ligne », facultative) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".CloudGalleryApp"
@@ -50,6 +54,56 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
+
+        <!--
+           Retour de la connexion Microsoft (MSAL) : l'onglet de navigateur redirige vers
+           msauth://<applicationId>/<empreinte de signature>. Chemin NON encodé ici (il l'est dans
+           la configuration JSON). L'activité est fournie par MSAL ; seul le filtre est ajouté.
+        -->
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="msauth"
+                    android:host="${applicationId}"
+                    android:path="/${msalSignatureHash}" />
+            </intent-filter>
+        </activity>
+
+        <!--
+           Partage et « Ouvrir avec » des originaux OneDrive téléchargés et des copies hors ligne :
+           URI content:// en lecture seule (autorisation accordée par l'intent), dossiers listés
+           dans file_paths.xml.
+        -->
+        <provider
+            android:name=".ui.util.CloudGalleryFileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+           Téléchargement des copies hors ligne (JobScheduler). Seul le système détient
+           BIND_JOB_SERVICE : exporté uniquement pour lui (comme SystemJobService de WorkManager).
+        -->
+        <service
+            android:name=".data.cloud.offline.OfflineTransferJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- Bouton « Annuler » de la notification des copies hors ligne (intent explicite). -->
+        <receiver
+            android:name=".data.cloud.offline.OfflineActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -55,6 +55,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAutoPlayVideos(enabled: Boolean) = set(Keys.AUTO_PLAY_VIDEOS, enabled)
     override suspend fun setConfirmBeforeDelete(enabled: Boolean) = set(Keys.CONFIRM_DELETE, enabled)
     override suspend fun setUseTrash(enabled: Boolean) = set(Keys.USE_TRASH, enabled)
+    override suspend fun setShowCloudInPhotos(enabled: Boolean) = set(Keys.SHOW_CLOUD_IN_PHOTOS, enabled)
+    override suspend fun setLoadOriginalsOnMobileData(enabled: Boolean) = set(Keys.LOAD_ORIGINALS_ON_MOBILE_DATA, enabled)
+    override suspend fun setOfflineWifiOnly(enabled: Boolean) = set(Keys.OFFLINE_WIFI_ONLY, enabled)
+    override suspend fun setOfflineNotificationsAsked(asked: Boolean) = set(Keys.OFFLINE_NOTIFICATIONS_ASKED, asked)
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
@@ -71,6 +75,10 @@ class SettingsRepositoryImpl @Inject constructor(
             autoPlayVideos = this[Keys.AUTO_PLAY_VIDEOS] ?: d.autoPlayVideos,
             confirmBeforeDelete = this[Keys.CONFIRM_DELETE] ?: d.confirmBeforeDelete,
             useTrash = this[Keys.USE_TRASH] ?: d.useTrash,
+            showCloudInPhotos = this[Keys.SHOW_CLOUD_IN_PHOTOS] ?: d.showCloudInPhotos,
+            loadOriginalsOnMobileData = this[Keys.LOAD_ORIGINALS_ON_MOBILE_DATA] ?: d.loadOriginalsOnMobileData,
+            offlineWifiOnly = this[Keys.OFFLINE_WIFI_ONLY] ?: d.offlineWifiOnly,
+            offlineNotificationsAsked = this[Keys.OFFLINE_NOTIFICATIONS_ASKED] ?: d.offlineNotificationsAsked,
         )
     }
 
@@ -83,6 +91,10 @@ class SettingsRepositoryImpl @Inject constructor(
         val AUTO_PLAY_VIDEOS = booleanPreferencesKey("auto_play_videos")
         val CONFIRM_DELETE = booleanPreferencesKey("confirm_before_delete")
         val USE_TRASH = booleanPreferencesKey("use_trash")
+        val SHOW_CLOUD_IN_PHOTOS = booleanPreferencesKey("show_cloud_in_photos")
+        val LOAD_ORIGINALS_ON_MOBILE_DATA = booleanPreferencesKey("load_originals_on_mobile_data")
+        val OFFLINE_WIFI_ONLY = booleanPreferencesKey("offline_wifi_only")
+        val OFFLINE_NOTIFICATIONS_ASKED = booleanPreferencesKey("offline_notifications_asked")
     }
 
     private companion object {

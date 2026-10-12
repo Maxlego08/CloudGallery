@@ -2,6 +2,7 @@ package fr.eva.cloudgallery.ui.grid
 
 import android.content.Context
 import android.content.res.Configuration
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -59,13 +60,18 @@ import fr.eva.cloudgallery.ui.components.OneUiIconButton
 import fr.eva.cloudgallery.ui.components.OneUiLargeTitleHeader
 import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiOverflowMenu
+import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
 import fr.eva.cloudgallery.ui.components.OneUiSelectionTopBar
 import fr.eva.cloudgallery.ui.components.OneUiTextInputDialog
 import fr.eva.cloudgallery.ui.components.OneUiTopBar
 import fr.eva.cloudgallery.ui.components.rememberCollapsedTitleAlpha
 import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
+import fr.eva.cloudgallery.ui.offline.OfflineMenuState
+import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
+import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.shareMedia
+import fr.eva.cloudgallery.ui.util.progressPercent
 
 /** Action de sélection propre à un écran (remplace une action par défaut de la barre inférieure). */
 data class GridExtraAction(val icon: ImageVector, val label: String, val onClick: () -> Unit)
@@ -105,10 +111,18 @@ fun MediaGridPage(
     val zoomLevel by viewModel.zoomLevel.collectAsStateWithLifecycle()
     val count by viewModel.count.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val selectionTargets by viewModel.selectionTargets.collectAsStateWithLifecycle()
     val selectionMode by viewModel.selectionMode.collectAsStateWithLifecycle()
     val allSelected by viewModel.allSelected.collectAsStateWithLifecycle()
     val dayIds by viewModel.dayIds.collectAsStateWithLifecycle()
+    val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
+    val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
     val items = viewModel.gridItems.collectAsLazyPagingItems()
+    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    val withNotificationPermission = rememberNotificationPermissionGate(
+        alreadyAsked = settings?.offlineNotificationsAsked ?: true,
+        onAsked = viewModel::markNotificationsAsked,
+    )
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -237,6 +251,10 @@ fun MediaGridPage(
 
         if (selectionMode) {
             val enabled = selection.isNotEmpty()
+            // Supprimer / Copier : seulement si la sélection contient un fichier local. Partager :
+            // aussi pour les éléments OneDrive (original téléchargé au moment du partage).
+            val localEnabled = localActionsEnabled(selection, selectionTargets)
+            val canShare = shareEnabled(selection, selectionTargets) && sharePreparation == null
             val shareLabel = stringResource(R.string.common_share)
             val addToAlbumLabel = stringResource(R.string.common_add_to_album)
             val favoriteLabel = stringResource(R.string.grid_action_favorite)
@@ -246,7 +264,7 @@ fun MediaGridPage(
             val confirmDelete = loadedSettings?.confirmBeforeDelete ?: true
 
             val actions = buildList {
-                add(OneUiAction(Icons.Outlined.Share, shareLabel, enabled) { viewModel.share() })
+                add(OneUiAction(Icons.Outlined.Share, shareLabel, canShare) { viewModel.share() })
                 if (albumActionOverride != null) {
                     add(OneUiAction(albumActionOverride.icon, albumActionOverride.label, enabled, albumActionOverride.onClick))
                 } else {
@@ -258,17 +276,32 @@ fun MediaGridPage(
                     add(OneUiAction(Icons.Outlined.FavoriteBorder, favoriteLabel, enabled) { viewModel.toggleFavorite() })
                 }
                 add(
-                    OneUiAction(Icons.Outlined.Delete, deleteLabel, enabled) {
+                    OneUiAction(Icons.Outlined.Delete, deleteLabel, localEnabled) {
                         if (confirmDelete) showDeleteDialog = true else viewModel.requestDelete()
                     },
                 )
                 add(OneUiAction(Icons.Filled.MoreVert, moreLabel, enabled) { moreOpen = true })
             }
+            val offlineMenu = selectionOfflineMenu(selection, selectionTargets)
+            val keepOfflineLabel = stringResource(R.string.offline_keep)
+            val releaseOfflineLabel = stringResource(R.string.offline_release)
             val moreItems = buildList {
                 if (albumActionOverride != null) {
                     add(OneUiMenuItem(addToAlbumLabel) { moreOpen = false; showAlbumPicker = true })
                 }
-                add(OneUiMenuItem(copyLabel) { moreOpen = false; showCopyDialog = true })
+                add(OneUiMenuItem(copyLabel, enabled = localEnabled) { moreOpen = false; showCopyDialog = true })
+                // Copies hors ligne : éléments OneDrive à conserver, copies à libérer.
+                if (offlineMenu == OfflineMenuState.KEEP || offlineMenu == OfflineMenuState.BOTH) {
+                    add(
+                        OneUiMenuItem(keepOfflineLabel) {
+                            moreOpen = false
+                            withNotificationPermission { viewModel.keepOffline() }
+                        },
+                    )
+                }
+                if (offlineMenu == OfflineMenuState.RELEASE || offlineMenu == OfflineMenuState.BOTH) {
+                    add(OneUiMenuItem(releaseOfflineLabel) { moreOpen = false; viewModel.releaseOffline() })
+                }
             }
 
             Box(
@@ -284,8 +317,21 @@ fun MediaGridPage(
         }
     }
 
+    // Nombres exacts : seuls les fichiers locaux sont supprimés ou copiés.
+    val counts = actionCounts(selection, selectionTargets)
+    val skippedNotice = if (counts.skippedCloud > 0) {
+        pluralStringResource(R.plurals.grid_cloud_items_skipped, counts.skippedCloud, counts.skippedCloud)
+    } else {
+        null
+    }
+
     if (showDeleteDialog) {
-        val n = selection.size
+        val n = counts.local
+        val info = if (settings?.useTrash != false) {
+            stringResource(R.string.common_trash_info)
+        } else {
+            stringResource(R.string.grid_delete_permanent_message)
+        }
         OneUiDialog(
             title = pluralStringResource(R.plurals.common_delete_confirm, n, n),
             onDismiss = { showDeleteDialog = false },
@@ -295,11 +341,7 @@ fun MediaGridPage(
                 viewModel.requestDelete()
             },
             dismissLabel = stringResource(R.string.common_cancel),
-            message = if (settings?.useTrash != false) {
-                stringResource(R.string.common_trash_info)
-            } else {
-                stringResource(R.string.grid_delete_permanent_message)
-            },
+            message = if (skippedNotice != null) "$info\n\n$skippedNotice" else info,
             destructive = true,
         )
     }
@@ -315,6 +357,37 @@ fun MediaGridPage(
             },
             onDismiss = { showCopyDialog = false },
             placeholder = stringResource(R.string.grid_copy_folder_hint),
+            message = skippedNotice,
+        )
+    }
+
+    sharePreparation?.let { preparation ->
+        val context = LocalContext.current
+        val percent = progressPercent(preparation.done, preparation.total)
+        OneUiProgressDialog(
+            title = pluralStringResource(R.plurals.share_preparing_count, preparation.count, preparation.count),
+            message = if (preparation.total > 0) {
+                stringResource(
+                    R.string.share_preparing_progress,
+                    Formatter.formatShortFileSize(context, preparation.done),
+                    Formatter.formatShortFileSize(context, preparation.total),
+                )
+            } else {
+                null
+            },
+            progress = if (percent >= 0) percent / 100f else null,
+            cancelLabel = stringResource(R.string.common_cancel),
+            onCancel = viewModel::cancelSharePreparation,
+        )
+    }
+
+    offlinePrompt?.let { prompt ->
+        OfflinePromptDialog(
+            prompt = prompt,
+            onConfirmLargeBatch = viewModel::confirmLargeBatch,
+            onDownloadNow = viewModel::downloadOfflineNow,
+            onConfirmRelease = viewModel::confirmRelease,
+            onDismiss = viewModel::dismissOfflinePrompt,
         )
     }
 

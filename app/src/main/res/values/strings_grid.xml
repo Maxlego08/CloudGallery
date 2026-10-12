@@ -26,6 +26,12 @@
         <item quantity="many">Suppression en %d étapes : confirmez chaque demande du système.</item>
         <item quantity="other">Suppression en %d étapes : confirmez chaque demande du système.</item>
     </plurals>
+    <string name="grid_cloud_only_a11y">uniquement sur OneDrive</string>
+    <plurals name="grid_cloud_items_skipped">
+        <item quantity="one">%d élément présent uniquement sur OneDrive n\'est pas concerné.</item>
+        <item quantity="many">%d éléments présents uniquement sur OneDrive ne sont pas concernés.</item>
+        <item quantity="other">%d éléments présents uniquement sur OneDrive ne sont pas concernés.</item>
+    </plurals>
     <plurals name="grid_share_limit">
         <item quantity="one">Vous pouvez partager %d élément au maximum à la fois.</item>
         <item quantity="many">Vous pouvez partager %d éléments au maximum à la fois.</item>

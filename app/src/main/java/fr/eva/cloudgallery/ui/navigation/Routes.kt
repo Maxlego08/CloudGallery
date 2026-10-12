@@ -67,6 +67,10 @@ data class ExternalImageRoute(
 @Serializable
 data object SettingsRoute
 
+/** Compte OneDrive (connexion, déconnexion). */
+@Serializable
+data object AccountRoute
+
 fun encodeContext(context: MediaContext): Pair<String, Long> = when (context) {
     MediaContext.Timeline -> "timeline" to 0L
     MediaContext.Favorites -> "favorites" to 0L
