@@ -86,6 +86,7 @@ private const val LARGE_TITLE_KEY = "large_title"
  * @param bottomPadding espace réservé en bas hors mode sélection (barre d'onglets ou barre système).
  * @param albumActionOverride remplace « Ajouter à l'album » dans la barre (l'action passe dans « Plus »).
  * @param favoriteActionOverride remplace l'action Favori par défaut.
+ * @param emptyAction boutons de l'état vide (hors indexation en cours).
  */
 @Composable
 fun MediaGridPage(
@@ -103,6 +104,7 @@ fun MediaGridPage(
     albumActionOverride: GridExtraAction? = null,
     favoriteActionOverride: GridExtraAction? = null,
     isIndexing: Boolean = false,
+    emptyAction: (@Composable () -> Unit)? = null,
 ) {
     val colors = OneUiTheme.colors
     val dimens = OneUiTheme.dimens
@@ -187,6 +189,7 @@ fun MediaGridPage(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
+                        action = if (isIndexing) null else emptyAction,
                     )
                     Spacer(Modifier.height(gridBottom))
                 }

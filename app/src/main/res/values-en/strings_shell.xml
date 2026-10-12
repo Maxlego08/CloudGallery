@@ -15,6 +15,16 @@
     <string name="perm_allow">Allow access</string>
     <string name="perm_partial_banner">Access limited to some photos</string>
     <string name="perm_partial_manage">Manage</string>
+    <!-- OneDrive-only use (no access to the phone's photos) -->
+    <string name="perm_use_onedrive_only">Use OneDrive only</string>
+    <string name="perm_no_local_banner">Phone photos not allowed</string>
+    <string name="perm_no_local_allow">Allow</string>
+    <string name="perm_onedrive_only_empty_title">No photos to show</string>
+    <string name="perm_onedrive_only_empty_message">Sign in to OneDrive to browse your photos and videos, or allow access to the phone\'s photos.</string>
+    <string name="perm_onedrive_only_sign_in">Sign in to OneDrive</string>
+    <string name="perm_onedrive_only_allow_photos">Allow phone photos</string>
+    <string name="perm_onedrive_only_synced_empty_title">No OneDrive items</string>
+    <string name="perm_onedrive_only_synced_empty_message">OneDrive photos and videos appear here after syncing.</string>
 
     <string name="menu_title">Menu</string>
     <string name="menu_favorites">Favorites</string>
