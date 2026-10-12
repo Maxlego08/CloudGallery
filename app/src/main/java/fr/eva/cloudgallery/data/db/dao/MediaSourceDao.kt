@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
+import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 import kotlinx.coroutines.flow.Flow
 
@@ -307,7 +308,60 @@ interface MediaSourceDao {
         """,
     )
     suspend fun stoppedUpdateCandidates(mediaIds: List<Long>): List<OfflineCandidateRow>
+
+    /**
+     * Economiseur d'espace : copies locales visibles déjà présentes sur OneDrive, vérifiées par
+     * empreinte (voir [SPACE_SAVER_SELECT]), les plus récentes d'abord.
+     */
+    @Query("$SPACE_SAVER_SELECT ORDER BY m.dateTaken DESC, l.id DESC")
+    suspend fun spaceSaverCandidates(): List<SpaceSaverRow>
+
+    /** Mêmes règles, limitées aux sources [sourceIds] : revérification juste avant la suppression. */
+    @Query("$SPACE_SAVER_SELECT AND l.id IN (:sourceIds)")
+    suspend fun spaceSaverCandidatesAmong(sourceIds: List<Long>): List<SpaceSaverRow>
 }
+
+/**
+ * Copies locales que l'économiseur d'espace peut proposer. Les règles portent sur les sources,
+ * que la copie locale et l'élément OneDrive soient regroupés dans un même média ou non :
+ * - source LOCAL visible, avec une URI MediaStore ;
+ * - empreinte QuickXorHash calculée par l'appli et à jour : `hashSignature` égale à la signature
+ *   courante du fichier, au format `"<sizeBytes>:<dateModified>:<generation>"` ;
+ * - au moins un élément OneDrive visible de même empreinte et de même taille.
+ * [SpaceSaverRow.mergedWithCloud] : cet élément OneDrive appartient au même média ;
+ * [SpaceSaverRow.hasUserData] : média favori ou membre d'un album de l'utilisateur.
+ */
+internal const val SPACE_SAVER_SELECT = """
+    SELECT l.id AS sourceId, l.mediaId, l.uri, l.sizeBytes, l.dateModified,
+           m.mediaType, m.mimeType, m.displayName, m.dateTaken,
+           EXISTS(SELECT 1 FROM media_source c WHERE c.mediaId = l.mediaId AND c.kind = 'ONEDRIVE'
+                  AND c.missingSince IS NULL AND c.quickXorHash = l.quickXorHash AND c.sizeBytes = l.sizeBytes) AS mergedWithCloud,
+           (EXISTS(SELECT 1 FROM favorite f WHERE f.mediaId = l.mediaId)
+            OR EXISTS(SELECT 1 FROM album_media am JOIN album a ON a.id = am.albumId
+                      WHERE am.mediaId = l.mediaId AND a.type = 'VIRTUAL')) AS hasUserData
+    FROM media_source l
+    JOIN media m ON m.id = l.mediaId
+    WHERE l.kind = 'LOCAL' AND l.missingSince IS NULL AND l.uri IS NOT NULL
+      AND l.quickXorHash IS NOT NULL AND l.quickXorHash != ''
+      AND l.hashSignature = (l.sizeBytes || ':' || l.dateModified || ':' || l.generation)
+      AND EXISTS(SELECT 1 FROM media_source c WHERE c.kind = 'ONEDRIVE' AND c.missingSince IS NULL
+                 AND c.quickXorHash = l.quickXorHash AND c.sizeBytes = l.sizeBytes)
+"""
+
+/** Copie locale proposée par l'économiseur d'espace (voir [SPACE_SAVER_SELECT]). */
+data class SpaceSaverRow(
+    val sourceId: Long,
+    val mediaId: Long,
+    val uri: String,
+    val sizeBytes: Long,
+    val dateModified: Long,
+    val mediaType: MediaType,
+    val mimeType: String?,
+    val displayName: String,
+    val dateTaken: Long,
+    val mergedWithCloud: Boolean,
+    val hasUserData: Boolean,
+)
 
 /** Elément OneDrive à conserver hors ligne. */
 data class OfflineCandidateRow(

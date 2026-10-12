@@ -71,6 +71,7 @@ import fr.eva.cloudgallery.ui.util.Formatters
 fun StorageScreen(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSpaceSaver: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: StorageViewModel = hiltViewModel(),
 ) {
@@ -137,6 +138,7 @@ fun StorageScreen(
                         onOriginalsCapClick = { showOriginalsCapDialog = true },
                         onClearClick = { showClearDialog = true },
                         onOfflineClick = onOpenAccount,
+                        onSpaceSaverClick = onOpenSpaceSaver,
                     )
                 }
             }
@@ -192,6 +194,7 @@ private fun StorageContent(
     onOriginalsCapClick: () -> Unit,
     onClearClick: () -> Unit,
     onOfflineClick: () -> Unit,
+    onSpaceSaverClick: () -> Unit,
 ) {
     val indent = OneUiTheme.dimens.cardPadding
     Column(Modifier.fillMaxWidth()) {
@@ -246,6 +249,16 @@ private fun StorageContent(
                 title = stringResource(R.string.storage_clear_cache),
                 subtitle = stringResource(R.string.storage_clear_cache_summary, sizeText(usage?.cacheBytes)),
                 onClick = if (canClearCache(usage?.cacheBytes, clearing)) onClearClick else null,
+            )
+        }
+
+        // Economiseur d'espace : fichiers du téléphone (jamais lancé automatiquement).
+        OneUiCategoryHeader(stringResource(R.string.saver_title))
+        OneUiCard {
+            OneUiListItem(
+                title = stringResource(R.string.saver_title),
+                subtitle = stringResource(R.string.saver_entry_summary),
+                onClick = onSpaceSaverClick,
             )
         }
 

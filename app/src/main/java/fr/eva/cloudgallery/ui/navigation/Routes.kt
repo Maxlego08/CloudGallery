@@ -75,6 +75,10 @@ data object AccountRoute
 @Serializable
 data object StorageRoute
 
+/** Economiseur d'espace : copies du téléphone déjà sur OneDrive, revues avant la corbeille. */
+@Serializable
+data object SpaceSaverRoute
+
 fun encodeContext(context: MediaContext): Pair<String, Long> = when (context) {
     MediaContext.Timeline -> "timeline" to 0L
     MediaContext.Favorites -> "favorites" to 0L
