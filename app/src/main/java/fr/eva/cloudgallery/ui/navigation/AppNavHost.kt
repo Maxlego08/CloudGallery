@@ -44,6 +44,7 @@ import fr.eva.cloudgallery.ui.main.mainScreenMode
 import fr.eva.cloudgallery.ui.permissions.rememberMediaPermissionController
 import fr.eva.cloudgallery.ui.search.SearchScreen
 import fr.eva.cloudgallery.ui.settings.SettingsScreen
+import fr.eva.cloudgallery.ui.saver.SpaceSaverScreen
 import fr.eva.cloudgallery.ui.storage.StorageScreen
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.video.VideoPlayerScreen
@@ -242,7 +243,11 @@ fun AppNavHost(
             StorageScreen(
                 onBack = dropUnlessResumed { navController.popBackStack() },
                 onOpenAccount = openAccount,
+                onOpenSpaceSaver = { navController.navigate(SpaceSaverRoute) { launchSingleTop = true } },
             )
+        }
+        composable<SpaceSaverRoute> {
+            SpaceSaverScreen(onBack = dropUnlessResumed { navController.popBackStack() })
         }
     }
 }

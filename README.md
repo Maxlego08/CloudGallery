@@ -677,6 +677,29 @@ jamais touchés, et aucune confirmation système n'est nécessaire.
   (sélection, partage, albums…) et visionneuse limitée aux résultats (`MediaContext.Search`).
 - Recherches récentes (10 au plus) dans `search_history.xml`, exclu des sauvegardes.
 
+### Économiseur d'espace (phase 6)
+
+Paramètres > Stockage > Économiseur d'espace (`ui/saver/`). Seul endroit où l'appli propose de
+supprimer des fichiers du téléphone pour gagner de la place ; jamais lancé automatiquement, aucune
+notification.
+
+- **Copies proposées** (`MediaSourceDao.spaceSaverCandidates`, `SPACE_SAVER_SELECT`) : source locale
+  visible dont l'empreinte QuickXorHash, calculée par l'appli, est à jour (`hashSignature` égale à
+  `"<sizeBytes>:<dateModified>:<generation>"` du fichier) et identique, taille comprise, à celle d'un
+  élément OneDrive visible. Les règles portent sur les sources : copie et élément OneDrive regroupés
+  dans un même média ou non. Une copie favorite ou membre d'un album n'est proposée qu'une fois
+  regroupée avec l'élément OneDrive (sinon le favori ou l'album serait perdu) ; les copies écartées
+  sont comptées à l'écran.
+- **Revue** : filtre d'ancienneté (date de prise de vue : toutes, plus de 30 jours par défaut, 90 jours,
+  un an), toutes les copies du filtre cochées, l'utilisateur décoche celles à garder ; résumé (nombre,
+  espace libéré).
+- **Suppression** : confirmation dans l'appli, revérification en base juste avant (copie modifiée,
+  ré-identifiée ou élément OneDrive disparu : écartée et signalée), puis
+  `MediaStore.createTrashRequest` par lots de 1 000 URI (une demande passe dans une seule transaction
+  Binder), chaque lot confirmé par la boîte système. **Toujours la corbeille Android** (récupérable
+  30 jours), quel que soit le réglage de suppression. Un refus arrête les lots suivants. Ensuite :
+  relecture de MediaStore et de la liste.
+
 ---
 
 ## Configuration Microsoft Entra et paramétrage MSAL

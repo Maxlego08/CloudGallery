@@ -304,10 +304,6 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
 - [ ] Fusionner local et cloud **uniquement sur hash de contenu identique (+ taille)**, **jamais sur
       le nom de fichier**. Un média logique reçoit alors une source `LOCAL` et une source `ONEDRIVE`.
 - [ ] Défaire la fusion si le hash diverge ensuite (fichier modifié d'un côté).
-- [ ] Économiseur d'espace : proposer de supprimer les copies locales **déjà présentes sur OneDrive
-      et vérifiées par hash**, avec une liste revue par l'utilisateur, un résumé de l'espace libéré et
-      une confirmation explicite, puis `MediaStore.createTrashRequest` (corbeille récupérable par
-      défaut). Ne jamais le déclencher automatiquement.
 - [x] Recherche plein texte : index `media_fts` (FTS4 unicode61) sur le nom, les dossiers (sources
       visibles, albums virtuels, noms personnalisés) et les libellés de date et de type (année, mois
       et jour de la semaine en français et en anglais, « vidéo », « photo »), tenu à jour par
@@ -315,6 +311,14 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       incrémentale). Écran Rechercher (icône de l'onglet Photos) : suggestions (albums, recherches
       récentes effaçables), résultats en grille (médias visibles, OneDrive compris), visionneuse
       dans les résultats (`MediaContext.Search`). Le lieu reste à faire avec le géocodage.
+- [x] Économiseur d'espace (Paramètres > Stockage > Économiseur d'espace, `ui/saver/`) : copies
+      locales visibles dont l'empreinte est à jour (`hashSignature` =
+      `"<sizeBytes>:<dateModified>:<generation>"`) et égale, taille comprise, à celle d'un élément
+      OneDrive visible (regroupés ou non, `SPACE_SAVER_SELECT`) ; une copie favorite ou dans un album
+      n'est proposée qu'une fois regroupée avec l'élément OneDrive. Filtre d'ancienneté (30 jours par
+      défaut), tout coché puis revue, résumé, confirmation dans l'appli puis boîte système,
+      revérification en base juste avant, **toujours la corbeille** (lots de 1 000), resynchro.
+      Jamais déclenché automatiquement.
 - [ ] Albums virtuels mêlant sources locales et OneDrive (les références `album_media` pointent déjà
       vers le média logique). Vérifier le comportement quand une source disparaît.
 - [ ] Albums-dossiers : `ALBUM_MEMBERS` / `ALBUM_ROWS` comptent encore les sources masquées comme
@@ -331,6 +335,12 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       secondes après) ; visionneuse ouverte depuis les résultats (balayage limité aux résultats) ;
       recherches récentes retirées une à une et effacées ; saisies spéciales (`"`, `*`, `-`, `OR`)
       sans erreur.
+- [ ] Économiseur d'espace : après le calcul des empreintes (en charge), une photo présente sur le
+      téléphone et sur OneDrive est proposée, une photo modifiée sur le téléphone ne l'est plus ;
+      décocher une copie la garde ; « Libérer » : boîte de l'appli puis boîte système, fichiers dans
+      la corbeille Samsung (restaurables), toujours visibles via OneDrive ; refus de la boîte système :
+      rien n'est supprimé ; filtre « plus d'un an » et grosse sélection (plus de 1 000 : plusieurs
+      boîtes système). `connectedDebugAndroidTest` : `SpaceSaverDaoTest`.
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 
