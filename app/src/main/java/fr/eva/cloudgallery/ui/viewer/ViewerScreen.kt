@@ -74,6 +74,8 @@ import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiOverflowMenu
 import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
 import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderDialogs
+import fr.eva.cloudgallery.ui.securefolder.secureFolderActionVisible
 import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
 import fr.eva.cloudgallery.ui.offline.offlineStatusText
 import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
@@ -116,6 +118,8 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
     val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
     val offlineState by viewModel.offlineState.collectAsStateWithLifecycle()
     val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
+    val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
+    val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
     // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
     val withNotificationPermission = rememberNotificationPermissionGate(
         alreadyAsked = settings.offlineNotificationsAsked,
@@ -309,6 +313,14 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     if (!cloudOnly) {
                         add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
                     }
+                    // Fichier du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                    if (secureFolderActionVisible(secureFolderAvailable, if (isLocal) 1 else 0)) {
+                        add(
+                            OneUiMenuItem(stringResource(R.string.secure_folder_move), enabled = !busy) {
+                                viewModel.moveCurrentToSecureFolder()
+                            },
+                        )
+                    }
                     add(
                         OneUiMenuItem(stringResource(R.string.common_open_with), enabled = canRead && sharePreparation == null) {
                             viewModel.openCurrentWith()
@@ -417,6 +429,15 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             onDismiss = viewModel::dismissOfflinePrompt,
         )
     }
+
+    SecureFolderDialogs(
+        prompt = secureFolderPrompt,
+        onShareLaunched = viewModel::onSecureFolderShareLaunched,
+        onShareReturned = viewModel::onSecureFolderShareReturned,
+        onTrash = viewModel::trashAfterSecureFolder,
+        onCancel = viewModel::dismissSecureFolder,
+        onKeep = viewModel::dismissSecureFolder,
+    )
 
     if (showDeleteConfirm) {
         OneUiDialog(

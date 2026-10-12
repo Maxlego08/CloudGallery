@@ -272,6 +272,7 @@ Déclarées dans `AndroidManifest.xml` :
 | `ACCESS_MEDIA_LOCATION` | Coordonnées GPS non masquées dans les EXIF (`MediaStore.setRequireOriginal`) |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Connexion Microsoft (MSAL) et Microsoft Graph (OneDrive). Aucun accès réseau sans compte OneDrive connecté |
 | `RUN_USER_INITIATED_JOBS` | Téléchargement des copies hors ligne par une tâche de transfert lancée par l'utilisateur (JobScheduler `setUserInitiated`), sans quota ni limite de durée |
+| `<queries>` `com.samsung.knox.securefolder` | Savoir si l'appli Dossier sécurisé Samsung est installée, pour proposer « Déplacer vers le Dossier sécurisé » (aucune API Knox utilisée) |
 | `POST_NOTIFICATIONS` | Progression des copies hors ligne. Demandée une seule fois, au premier « Conserver hors ligne » ; refusée, les téléchargements fonctionnent quand même (progression visible dans l'application et dans le Gestionnaire de tâches) |
 
 Les bibliothèques de MSAL ajoutent au manifeste fusionné la permission `NFC`, des fonctionnalités
@@ -701,6 +702,19 @@ notification.
   30 jours), quel que soit le réglage de suppression. Un refus arrête les lots suivants. Ensuite :
   relecture de MediaStore et de la liste.
 
+### Dossier sécurisé Samsung
+
+« Déplacer vers le Dossier sécurisé » (menu « Plus » de la sélection et de la visionneuse,
+`ui/securefolder/`) n'apparaît que si l'appli `com.samsung.knox.securefolder` est installée, et
+seulement pour les fichiers du téléphone. Le Dossier sécurisé n'ayant pas d'API publique, l'appli
+passe par la **feuille de partage Android** : l'utilisateur y choisit une appli du Dossier sécurisé
+(par exemple sa Galerie ; One UI permet d'afficher ces applis comme cibles de partage depuis les
+paramètres du Dossier sécurisé). Au retour dans CloudGallery, l'appli demande si l'ajout a réussi :
+« Garder les originaux » ne supprime rien, « Mettre les originaux à la corbeille » lance
+`MediaStore.createTrashRequest`, confirmée par le système (**toujours la corbeille**). 100 éléments
+au plus par envoi. Un fichier regroupé avec OneDrive le signale : la copie OneDrive n'est pas
+modifiée et reste visible dans l'appli.
+
 ---
 
 ## Configuration Microsoft Entra et paramétrage MSAL
@@ -1108,6 +1122,9 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
   Galerie ni écrits dans le champ `IS_FAVORITE` de MediaStore, et la base est exclue des sauvegardes.
   Une désinstallation ou un changement d'appareil les perd.
 - **Recherche** par nom, dossier, album, date et type seulement (ni par lieu, ni par contenu).
+- **Dossier sécurisé** : l'envoi dépend de Samsung (applis du Dossier sécurisé visibles dans le
+  menu de partage, limites d'import propres à Samsung) ; l'appli ne peut pas vérifier que les
+  fichiers sont arrivés, c'est l'utilisateur qui le confirme avant la corbeille.
 - **Dédoublonnage** : empreinte QuickXorHash (`data/dedup/QuickXorHash`, même format que
   `file.hashes.quickXorHash` de Graph) calculée pour chaque fichier du téléphone par
   `LocalHashWorker` (WorkManager, **en charge** et batterie non faible, lots de 100 fichiers / 1 Go,

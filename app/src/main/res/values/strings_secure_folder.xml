@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Déplacer vers le Dossier sécurisé Samsung, par le partage Android (préfixe secure_folder_). -->
+<resources>
+    <string name="secure_folder_move">Déplacer vers le Dossier sécurisé</string>
+
+    <!-- Explications avant la feuille de partage -->
+    <plurals name="secure_folder_intro_title">
+        <item quantity="one">Déplacer %d élément vers le Dossier sécurisé ?</item>
+        <item quantity="many">Déplacer %d éléments vers le Dossier sécurisé ?</item>
+        <item quantity="other">Déplacer %d éléments vers le Dossier sécurisé ?</item>
+    </plurals>
+    <string name="secure_folder_intro_steps">1. Dans le menu de partage, choisissez une appli du Dossier sécurisé (par exemple sa Galerie). Si aucune n\'apparaît, autorisez le partage vers les applis du Dossier sécurisé dans ses paramètres.\n2. Revenez ensuite dans CloudGallery : une fois l\'ajout vérifié, vous pourrez mettre les originaux à la corbeille.</string>
+    <string name="secure_folder_continue">Continuer</string>
+    <string name="secure_folder_chooser_title">Choisir une appli du Dossier sécurisé</string>
+    <plurals name="secure_folder_too_many">
+        <item quantity="one">%d élément au plus à la fois vers le Dossier sécurisé.</item>
+        <item quantity="many">%d éléments au plus à la fois vers le Dossier sécurisé.</item>
+        <item quantity="other">%d éléments au plus à la fois vers le Dossier sécurisé.</item>
+    </plurals>
+
+    <!-- Retour dans l'appli -->
+    <plurals name="secure_folder_confirm_title">
+        <item quantity="one">L\'élément a-t-il bien été ajouté au Dossier sécurisé ?</item>
+        <item quantity="many">Les %d éléments ont-ils bien été ajoutés au Dossier sécurisé ?</item>
+        <item quantity="other">Les %d éléments ont-ils bien été ajoutés au Dossier sécurisé ?</item>
+    </plurals>
+    <plurals name="secure_folder_confirm_message">
+        <item quantity="one">Vérifiez qu\'il est dans le Dossier sécurisé avant de continuer. L\'original ira dans la corbeille Android (récupérable pendant 30 jours), après la confirmation du système.</item>
+        <item quantity="many">Vérifiez que les %d éléments sont dans le Dossier sécurisé avant de continuer. Les originaux iront dans la corbeille Android (récupérables pendant 30 jours), après la confirmation du système.</item>
+        <item quantity="other">Vérifiez que les %d éléments sont dans le Dossier sécurisé avant de continuer. Les originaux iront dans la corbeille Android (récupérables pendant 30 jours), après la confirmation du système.</item>
+    </plurals>
+    <string name="secure_folder_trash_originals">Mettre les originaux à la corbeille</string>
+    <string name="secure_folder_keep_originals">Garder les originaux</string>
+
+    <!-- Éléments aussi sur OneDrive -->
+    <plurals name="secure_folder_onedrive_notice">
+        <item quantity="one">%d élément est aussi sur OneDrive : cette copie OneDrive n\'est pas modifiée et reste visible dans CloudGallery.</item>
+        <item quantity="many">%d éléments sont aussi sur OneDrive : ces copies OneDrive ne sont pas modifiées et restent visibles dans CloudGallery.</item>
+        <item quantity="other">%d éléments sont aussi sur OneDrive : ces copies OneDrive ne sont pas modifiées et restent visibles dans CloudGallery.</item>
+    </plurals>
+</resources>

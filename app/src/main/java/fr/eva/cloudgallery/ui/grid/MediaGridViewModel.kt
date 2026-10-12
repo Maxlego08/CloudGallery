@@ -16,6 +16,7 @@ import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
 import fr.eva.cloudgallery.data.cloud.content.ShareUriProvider
 import fr.eva.cloudgallery.data.cloud.content.cloudFileTargetOf
 import fr.eva.cloudgallery.data.cloud.content.downloadErrorOf
+import fr.eva.cloudgallery.data.local.SecureFolderDetector
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AppSettings
@@ -34,6 +35,11 @@ import fr.eva.cloudgallery.ui.offline.OfflinePrompt
 import fr.eva.cloudgallery.ui.offline.keepFeedback
 import fr.eva.cloudgallery.ui.offline.ReleaseStep
 import fr.eva.cloudgallery.ui.offline.releaseStep
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderCandidate
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderMoveState
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderPlan
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderPrompt
+import fr.eva.cloudgallery.ui.securefolder.planSecureFolderMove
 import fr.eva.cloudgallery.ui.util.MAX_SHARE_CLOUD_BYTES
 import fr.eva.cloudgallery.ui.video.PlaybackSourceResolver
 import fr.eva.cloudgallery.ui.util.MAX_SHARE_CLOUD_ITEMS
@@ -54,10 +60,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -81,6 +89,7 @@ class MediaGridDeps @Inject constructor(
     val shareUris: ShareUriProvider,
     val cloudAccess: CloudAccessGuard,
     val offline: OfflineRepository,
+    val secureFolder: SecureFolderDetector,
     @param:IoDispatcher val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope val applicationScope: CoroutineScope,
 )
@@ -217,6 +226,16 @@ abstract class MediaGridViewModel(
      */
     private val _dayIds = MutableStateFlow<Map<Long, List<Long>>>(emptyMap())
     val dayIds: StateFlow<Map<Long, List<Long>>> = _dayIds.asStateFlow()
+
+    /** Appli Dossier sécurisé Samsung installée (« Déplacer vers le Dossier sécurisé »). */
+    val secureFolderAvailable: StateFlow<Boolean> = flow { emit(deps.secureFolder.isInstalled()) }
+        .catch { emit(false) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val secureFolderMove = SecureFolderMoveState()
+
+    /** Déplacement vers le Dossier sécurisé en cours (boîtes de dialogue). */
+    val secureFolderPrompt: StateFlow<SecureFolderPrompt?> = secureFolderMove.prompt
 
     /** Suppression découpée en lots (une confirmation système par lot). */
     private val pendingDeleteBatches = ArrayDeque<List<Uri>>()
@@ -596,16 +615,71 @@ abstract class MediaGridViewModel(
             // Avec confirmation, la boîte de dialogue a déjà indiqué les éléments OneDrive non concernés.
             val local = localSelection(notifySkipped = settings.value?.confirmBeforeDelete == false)
             if (local.isEmpty()) return@launch
-            pendingDeleteToTrash = settings.value?.useTrash ?: true
-            val batches = local.mapNotNull { it.uri }.chunked(MAX_DELETE_BATCH)
-            if (batches.isEmpty()) return@launch
-            completedDeleteBatches = 0
-            pendingDeleteBatches.addAll(batches)
-            if (batches.size > 1) {
-                emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_delete_batches, batches.size, listOf(batches.size))))
-            }
-            launchNextDeleteBatch()
+            startDeleteBatches(local.mapNotNull { it.uri }, toTrash = settings.value?.useTrash ?: true)
         }
+    }
+
+    private suspend fun startDeleteBatches(uris: List<Uri>, toTrash: Boolean) {
+        if (pendingDeleteBatches.isNotEmpty()) return
+        pendingDeleteToTrash = toTrash
+        val batches = uris.chunked(MAX_DELETE_BATCH)
+        if (batches.isEmpty()) return
+        completedDeleteBatches = 0
+        pendingDeleteBatches.addAll(batches)
+        if (batches.size > 1) {
+            emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_delete_batches, batches.size, listOf(batches.size))))
+        }
+        launchNextDeleteBatch()
+    }
+
+    // --- Dossier sécurisé ---
+
+    /**
+     * « Déplacer vers le Dossier sécurisé » : fichiers du téléphone de la sélection (éléments
+     * uniquement sur OneDrive ignorés), explications puis feuille de partage.
+     */
+    fun moveToSecureFolder() {
+        viewModelScope.launch {
+            val all = try {
+                selectedSummaries()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch toast(R.string.common_error_generic)
+            }
+            val candidates = all.map { SecureFolderCandidate(it.id, isLocalActionTarget(it.hasLocal, it.uri != null), it.hasCloud) }
+            when (val plan = planSecureFolderMove(candidates)) {
+                SecureFolderPlan.NothingLocal -> toast(R.string.common_cloud_only_not_supported)
+                is SecureFolderPlan.TooMany ->
+                    emit(GridEvent.Message(GridMessage.Plural(R.plurals.secure_folder_too_many, plan.max, listOf(plan.max))))
+                is SecureFolderPlan.Ready -> {
+                    val byId = all.associateBy { it.id }
+                    secureFolderMove.start(plan, uriOf = { byId[it]?.uri }, mimeTypeOf = { byId[it]?.mimeType })
+                }
+            }
+        }
+    }
+
+    fun onSecureFolderShareLaunched() = secureFolderMove.onShareLaunched()
+
+    fun onSecureFolderShareReturned() = secureFolderMove.onShareReturned()
+
+    /** Abandon avant l'envoi : la sélection est conservée. */
+    fun cancelSecureFolder() = secureFolderMove.dismiss()
+
+    /** Envoi fait, originaux gardés. */
+    fun keepOriginalsAfterSecureFolder() {
+        secureFolderMove.dismiss()
+        exitSelectionMode()
+    }
+
+    /**
+     * Ajout au Dossier sécurisé confirmé par l'utilisateur : originaux envoyés à la corbeille
+     * Android (toujours la corbeille, quel que soit le réglage), demande système par lot.
+     */
+    fun trashAfterSecureFolder() {
+        val moved = secureFolderMove.takeForTrash() ?: return
+        viewModelScope.launch { startDeleteBatches(moved.uris, toTrash = true) }
     }
 
     private suspend fun launchNextDeleteBatch() {

@@ -19,6 +19,7 @@ import fr.eva.cloudgallery.data.cloud.content.cloudFileTargetOf
 import fr.eva.cloudgallery.data.cloud.content.downloadErrorOf
 import fr.eva.cloudgallery.data.cloud.thumb.OriginalDecision
 import fr.eva.cloudgallery.data.cloud.thumb.originalDecision
+import fr.eva.cloudgallery.data.local.SecureFolderDetector
 import fr.eva.cloudgallery.data.net.NetworkStatus
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AlbumSort
@@ -43,6 +44,11 @@ import fr.eva.cloudgallery.ui.offline.OfflinePrompt
 import fr.eva.cloudgallery.ui.offline.keepFeedback
 import fr.eva.cloudgallery.ui.offline.ReleaseStep
 import fr.eva.cloudgallery.ui.offline.releaseStep
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderCandidate
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderMoveState
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderPlan
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderPrompt
+import fr.eva.cloudgallery.ui.securefolder.planSecureFolderMove
 import fr.eva.cloudgallery.ui.video.PlaybackSourceResolver
 import fr.eva.cloudgallery.ui.util.ShareCandidate
 import fr.eva.cloudgallery.ui.util.downloadErrorMessage
@@ -64,6 +70,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -116,6 +123,7 @@ class ViewerViewModel @Inject constructor(
     private val shareUris: ShareUriProvider,
     private val cloudAccess: CloudAccessGuard,
     private val network: NetworkStatus,
+    private val secureFolderDetector: SecureFolderDetector,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -539,6 +547,51 @@ class ViewerViewModel @Inject constructor(
         viewModelScope.launch {
             val useTrash = settings.value.useTrash
             runCatchingIo { writer.createDeleteRequest(listOf(uri), useTrash) }
+                .onSuccess { sender ->
+                    pendingAction = PendingAction.Delete
+                    send(ViewerEvent.LaunchIntentSender(sender))
+                }
+                .onFailure { send(ViewerEvent.Toast(R.string.common_error_generic)) }
+        }
+    }
+
+    // --- Dossier sécurisé ---------------------------------------------------------------------
+
+    /** Appli Dossier sécurisé Samsung installée (« Déplacer vers le Dossier sécurisé »). */
+    val secureFolderAvailable: StateFlow<Boolean> = flow { emit(secureFolderDetector.isInstalled()) }
+        .catch { emit(false) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val secureFolderMove = SecureFolderMoveState()
+
+    /** Déplacement vers le Dossier sécurisé en cours (boîtes de dialogue). */
+    val secureFolderPrompt: StateFlow<SecureFolderPrompt?> = secureFolderMove.prompt
+
+    /** « Déplacer vers le Dossier sécurisé » : fichier du téléphone seulement. */
+    fun moveCurrentToSecureFolder() {
+        val media = currentMedia.value ?: return
+        val uri = currentLocalUri()
+        val candidate = SecureFolderCandidate(media.id, hasLocalFile = uri != null, hasCloud = media.hasCloud)
+        when (val plan = planSecureFolderMove(listOf(candidate))) {
+            is SecureFolderPlan.Ready -> secureFolderMove.start(plan, uriOf = { uri }, mimeTypeOf = { media.mimeType })
+            else -> send(ViewerEvent.Toast(R.string.common_cloud_only_not_supported))
+        }
+    }
+
+    fun onSecureFolderShareLaunched() = secureFolderMove.onShareLaunched()
+
+    fun onSecureFolderShareReturned() = secureFolderMove.onShareReturned()
+
+    fun dismissSecureFolder() = secureFolderMove.dismiss()
+
+    /**
+     * Ajout au Dossier sécurisé confirmé par l'utilisateur : l'original va à la corbeille Android
+     * (toujours la corbeille, quel que soit le réglage), après la confirmation système.
+     */
+    fun trashAfterSecureFolder() {
+        val moved = secureFolderMove.takeForTrash() ?: return
+        viewModelScope.launch {
+            runCatchingIo { writer.createDeleteRequest(moved.uris, toTrash = true) }
                 .onSuccess { sender ->
                     pendingAction = PendingAction.Delete
                     send(ViewerEvent.LaunchIntentSender(sender))

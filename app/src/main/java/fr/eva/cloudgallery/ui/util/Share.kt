@@ -16,8 +16,20 @@ import fr.eva.cloudgallery.R
  */
 fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
     if (uris.isEmpty()) return
-    val mime = commonMimeType(mimeTypes)
-    val intent = if (uris.size == 1) {
+    context.startActivity(chooser(context, sendIntent(uris, mimeTypes), R.string.common_share))
+}
+
+/**
+ * Feuille de partage de « Déplacer vers le Dossier sécurisé » ([title] : consigne courte), à lancer
+ * pour un résultat : le retour dans l'appli déclenche la question « ajout réussi ? ».
+ */
+fun secureFolderShareIntent(context: Context, uris: List<Uri>, mimeTypes: List<String?>, @StringRes title: Int): Intent =
+    chooser(context, sendIntent(uris, mimeTypes), title)
+
+/** ACTION_SEND(_MULTIPLE) en lecture seule (FLAG_GRANT_READ_URI_PERMISSION et ClipData). */
+private fun sendIntent(uris: List<Uri>, mimeTypes: List<String?>): Intent {
+    require(uris.isNotEmpty())
+    return if (uris.size == 1) {
         Intent(Intent.ACTION_SEND).apply {
             putExtra(Intent.EXTRA_STREAM, uris.first())
         }
@@ -26,13 +38,12 @@ fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
             putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
         }
     }.apply {
-        type = mime
+        type = commonMimeType(mimeTypes)
         clipData = ClipData.newRawUri(null, uris.first()).also { clip ->
             uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
         }
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(chooser(context, intent, R.string.common_share))
 }
 
 // Type MIME commun : jpeg + png -> "image/STAR" ; image + vidéo -> "STAR/STAR" (STAR = joker).
