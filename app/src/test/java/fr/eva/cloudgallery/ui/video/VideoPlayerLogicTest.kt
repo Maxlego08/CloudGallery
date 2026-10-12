@@ -1,16 +1,14 @@
 package fr.eva.cloudgallery.ui.video
 
 import androidx.media3.common.PlaybackException
-import fr.eva.cloudgallery.domain.model.CloudThumbRef
-import fr.eva.cloudgallery.domain.model.MediaDetails
-import fr.eva.cloudgallery.domain.model.MediaSourceInfo
-import fr.eva.cloudgallery.domain.model.MediaType
-import fr.eva.cloudgallery.domain.model.SourceKind
+import fr.eva.cloudgallery.domain.model.CloudStreamException
+import fr.eva.cloudgallery.domain.model.CloudStreamFailure
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class VideoPlayerLogicTest {
 
@@ -55,13 +53,71 @@ class VideoPlayerLogicTest {
     fun `other io errors map to io`() {
         listOf(
             PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
-            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+            PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
             PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
         ).forEach { code ->
             assertEquals("code $code", PlaybackErrorKind.IO, VideoPlayerLogic.classifyError(code))
         }
+    }
+
+    @Test
+    fun `connection failures map to network`() {
+        assertEquals(
+            PlaybackErrorKind.NETWORK,
+            VideoPlayerLogic.classifyError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
+        )
+        assertEquals(
+            PlaybackErrorKind.NETWORK,
+            VideoPlayerLogic.classifyError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT),
+        )
+    }
+
+    @Test
+    fun `bad http status after url refresh is server or link`() {
+        assertEquals(
+            PlaybackErrorKind.SERVER_OR_LINK,
+            VideoPlayerLogic.classifyError(PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS),
+        )
+    }
+
+    @Test
+    fun `cloud failure in causes wins over error code`() {
+        // Echec du résolveur : Media3 le rapporte en ERROR_CODE_IO_UNSPECIFIED (2000).
+        val code = PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+        assertEquals(PlaybackErrorKind.AUTH_REQUIRED, VideoPlayerLogic.classifyError(code, CloudStreamFailure.AUTH_REQUIRED))
+        assertEquals(PlaybackErrorKind.CLOUD_THROTTLED, VideoPlayerLogic.classifyError(code, CloudStreamFailure.THROTTLED))
+        assertEquals(PlaybackErrorKind.CLOUD_NOT_FOUND, VideoPlayerLogic.classifyError(code, CloudStreamFailure.NOT_FOUND))
+        assertEquals(PlaybackErrorKind.NETWORK, VideoPlayerLogic.classifyError(code, CloudStreamFailure.NETWORK))
+        assertEquals(PlaybackErrorKind.SERVER_OR_LINK, VideoPlayerLogic.classifyError(code, CloudStreamFailure.SERVER))
+        assertEquals(PlaybackErrorKind.IO, VideoPlayerLogic.classifyError(code, null))
+    }
+
+    @Test
+    fun `cloud failure is found anywhere in the cause chain`() {
+        val root = CloudStreamException(CloudStreamFailure.NOT_FOUND, RuntimeException("graph"))
+        val wrapped = IOException("loader", IllegalStateException("source", root))
+        assertEquals(
+            CloudStreamFailure.NOT_FOUND,
+            VideoPlayerLogic.cloudFailureOf(generateSequence<Throwable>(wrapped) { it.cause }),
+        )
+        assertNull(VideoPlayerLogic.cloudFailureOf(generateSequence<Throwable>(IOException("x")) { it.cause }))
+        assertNull(VideoPlayerLogic.cloudFailureOf(emptySequence()))
+    }
+
+    @Test
+    fun `unavailable source explains why`() {
+        assertEquals(
+            PlaybackErrorKind.AUTH_REQUIRED,
+            VideoPlayerLogic.unavailableError(UnavailableReason.SIGNED_OUT, cloudConfigured = true),
+        )
+        assertEquals(
+            PlaybackErrorKind.CLOUD_ONLY,
+            VideoPlayerLogic.unavailableError(UnavailableReason.SIGNED_OUT, cloudConfigured = false),
+        )
+        assertEquals(
+            PlaybackErrorKind.FILE_NOT_ACCESSIBLE,
+            VideoPlayerLogic.unavailableError(UnavailableReason.NO_SOURCE, cloudConfigured = true),
+        )
     }
 
     @Test
@@ -78,6 +134,23 @@ class VideoPlayerLogicTest {
         assertFalse(VideoPlayerLogic.canOpenExternally(PlaybackErrorKind.IO))
         assertTrue(VideoPlayerLogic.canRetry(PlaybackErrorKind.IO))
         assertFalse(VideoPlayerLogic.canRetry(PlaybackErrorKind.CLOUD_ONLY))
+        assertTrue(VideoPlayerLogic.canRetry(PlaybackErrorKind.NETWORK))
+        assertTrue(VideoPlayerLogic.canRetry(PlaybackErrorKind.SERVER_OR_LINK))
+        assertTrue(VideoPlayerLogic.canRetry(PlaybackErrorKind.CLOUD_THROTTLED))
+        assertFalse(VideoPlayerLogic.canRetry(PlaybackErrorKind.AUTH_REQUIRED))
+        assertFalse(VideoPlayerLogic.canRetry(PlaybackErrorKind.CLOUD_NOT_FOUND))
+        assertFalse(VideoPlayerLogic.canOpenExternally(PlaybackErrorKind.NETWORK))
+        assertFalse(VideoPlayerLogic.canOpenExternally(PlaybackErrorKind.AUTH_REQUIRED))
+    }
+
+    @Test
+    fun `sign in action only when the account is needed`() {
+        assertTrue(VideoPlayerLogic.needsSignIn(PlaybackErrorKind.AUTH_REQUIRED))
+        PlaybackErrorKind.entries.filter { it != PlaybackErrorKind.AUTH_REQUIRED }.forEach {
+            assertFalse(it.name, VideoPlayerLogic.needsSignIn(it))
+        }
+        assertTrue(VideoPlayerLogic.isCloudError(PlaybackErrorKind.CLOUD_NOT_FOUND))
+        assertFalse(VideoPlayerLogic.isCloudError(PlaybackErrorKind.CORRUPTED_FILE))
     }
 
     @Test
@@ -118,35 +191,5 @@ class VideoPlayerLogicTest {
     fun `aspect ratio`() {
         assertEquals(16f / 9f, VideoPlayerLogic.aspectRatio(1920, 1080)!!, 0.0001f)
         assertNull(VideoPlayerLogic.aspectRatio(0, 1080))
-    }
-
-    @Test
-    fun `cloud only media has no playback source yet`() {
-        val details = MediaDetails(
-            id = 1, type = MediaType.VIDEO, displayName = "a.mp4", mimeType = "video/mp4",
-            dateTaken = 0, dateAdded = 0, dateModified = 0, width = 1920, height = 1080,
-            durationMs = 1000, sizeBytes = 1, orientation = 0, uri = null, isFavorite = false,
-            sources = emptyList(),
-        )
-        assertEquals(PlaybackSource.Unavailable, PlaybackSourceResolver.resolve(details))
-    }
-
-    @Test
-    fun `onedrive source alone is never played`() {
-        val details = MediaDetails(
-            id = 1, type = MediaType.VIDEO, displayName = "a.mp4", mimeType = "video/mp4",
-            dateTaken = 0, dateAdded = 0, dateModified = 0, width = 1920, height = 1080,
-            durationMs = 1000, sizeBytes = 1, orientation = 0, uri = null, isFavorite = false,
-            sources = listOf(
-                MediaSourceInfo(
-                    id = 1, kind = SourceKind.ONEDRIVE, externalId = "ITEM!1", uri = null, bucketKey = "onedrive:P",
-                    bucketName = "Photos", relativePath = "OneDrive/Photos/", sizeBytes = 1, dateModified = 0,
-                ),
-            ),
-            cloudThumb = CloudThumbRef("ITEM!1", "ctag"),
-        )
-        assertTrue(details.hasCloud)
-        assertFalse(details.hasLocal)
-        assertEquals(PlaybackSource.Unavailable, PlaybackSourceResolver.resolve(details))
     }
 }

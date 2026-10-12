@@ -1,12 +1,19 @@
 package fr.eva.cloudgallery.ui.util
 
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.StringRes
+import fr.eva.cloudgallery.MainActivity
 import fr.eva.cloudgallery.R
 
-/** Ouvre la feuille de partage Android pour des URI `content://` locales. */
+/**
+ * Ouvre la feuille de partage Android pour des URI `content://` : fichiers MediaStore, ou
+ * fichiers OneDrive téléchargés exposés par le FileProvider de l'appli. Lecture seule
+ * (FLAG_GRANT_READ_URI_PERMISSION et ClipData), jamais d'autorisation d'écriture.
+ */
 fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
     if (uris.isEmpty()) return
     val mime = commonMimeType(mimeTypes)
@@ -25,7 +32,7 @@ fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
         }
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, context.getString(R.string.common_share)))
+    context.startActivity(chooser(context, intent, R.string.common_share))
 }
 
 // Type MIME commun : jpeg + png -> "image/STAR" ; image + vidéo -> "STAR/STAR" (STAR = joker).
@@ -37,11 +44,22 @@ fun commonMimeType(mimeTypes: List<String?>): String {
     return if (families.size == 1) "${families.first()}/*" else "*/*"
 }
 
-/** Ouvre le média dans une autre application (lecteur externe en cas de format non pris en charge). */
+/**
+ * Ouvre le média dans une autre application (lecteur externe en cas de format non pris en charge),
+ * en lecture seule. CloudGallery est exclue du choix : elle se proposerait sinon elle-même pour
+ * ses propres URI (filtre VIEW de MainActivity).
+ */
 fun openWithExternalApp(context: Context, uri: Uri, mimeType: String?) {
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, mimeType ?: "*/*")
+        clipData = ClipData.newRawUri(null, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, context.getString(R.string.common_open_with)))
+    context.startActivity(chooser(context, intent, R.string.common_open_with))
 }
+
+/** Sélecteur d'applis sans CloudGallery elle-même. */
+private fun chooser(context: Context, target: Intent, @StringRes title: Int): Intent =
+    Intent.createChooser(target, context.getString(title)).apply {
+        putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(context, MainActivity::class.java)))
+    }

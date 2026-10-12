@@ -197,7 +197,10 @@ fun AppNavHost(
         }
         composable<VideoPlayerRoute> { entry ->
             val route = entry.toRoute<VideoPlayerRoute>()
-            VideoPlayerScreen(onBack = rememberBackAction(navController, route.exitOnBack))
+            VideoPlayerScreen(
+                onBack = rememberBackAction(navController, route.exitOnBack),
+                onOpenAccount = openAccount,
+            )
         }
         composable<ExternalImageRoute> { entry ->
             val route = entry.toRoute<ExternalImageRoute>()

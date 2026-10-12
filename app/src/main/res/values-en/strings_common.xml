@@ -55,4 +55,33 @@
     </plurals>
     <string name="common_trash_info">Items will be moved to the Android trash for 30 days.</string>
     <string name="common_cloud_only_not_supported">This action is only available for files stored on the device.</string>
+
+    <!-- OneDrive file downloads (originals, sharing): one message per cause -->
+    <string name="cloud_download_error_network">No Internet connection.</string>
+    <string name="cloud_download_error_auth">Sign in to your OneDrive account.</string>
+    <string name="cloud_download_error_throttled">OneDrive asks you to wait: try again in a few minutes.</string>
+    <string name="cloud_download_error_not_found">This file no longer exists on OneDrive.</string>
+    <string name="cloud_download_error_content_changed">This file was just changed on OneDrive: try again.</string>
+    <string name="cloud_download_error_no_space">Not enough storage space on the device.</string>
+    <string name="cloud_download_error_size_mismatch">Incomplete download.</string>
+    <string name="cloud_download_error_server">OneDrive couldn\'t provide the file.</string>
+    <string name="cloud_download_error_cancelled">Download cancelled.</string>
+
+    <!-- Sharing and "Open with" for OneDrive items -->
+    <string name="share_preparing">Downloading from OneDrive…</string>
+    <string name="share_preparing_progress">%1$s of %2$s</string>
+    <plurals name="share_preparing_count">
+        <item quantity="one">Downloading %d item from OneDrive…</item>
+        <item quantity="other">Downloading %d items from OneDrive…</item>
+    </plurals>
+    <string name="share_cloud_too_large">Too large to share from OneDrive (up to 500 MB per share). Use “Keep offline” to download these items, then share them.</string>
+    <plurals name="share_cloud_too_many">
+        <item quantity="one">You can share up to %d OneDrive item at a time. Use “Keep offline” to share more.</item>
+        <item quantity="other">You can share up to %d OneDrive items at a time. Use “Keep offline” to share more.</item>
+    </plurals>
+    <string name="share_cloud_signed_out">Sign in to OneDrive to share items stored only on OneDrive.</string>
+    <plurals name="share_cloud_skipped_signed_out">
+        <item quantity="one">%d item stored only on OneDrive isn\'t shared: sign in to OneDrive.</item>
+        <item quantity="other">%d items stored only on OneDrive aren\'t shared: sign in to OneDrive.</item>
+    </plurals>
 </resources>

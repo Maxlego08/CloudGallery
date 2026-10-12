@@ -115,6 +115,8 @@ fun SettingsScreen(
                         cloudSyncState = cloudSyncState,
                         onOpenAccount = onOpenAccount,
                         onShowCloudInPhotos = viewModel::setShowCloudInPhotos,
+                        onLoadOriginalsOnMobileData = viewModel::setLoadOriginalsOnMobileData,
+                        onOfflineWifiOnly = viewModel::setOfflineWifiOnly,
                         onThemeClick = { showThemeDialog = true },
                         onShowVideoDuration = viewModel::setShowVideoDuration,
                         onAutoPlay = viewModel::setAutoPlayVideos,
@@ -161,6 +163,8 @@ private fun SettingsContent(
     cloudSyncState: CloudSyncState,
     onOpenAccount: () -> Unit,
     onShowCloudInPhotos: (Boolean) -> Unit,
+    onLoadOriginalsOnMobileData: (Boolean) -> Unit,
+    onOfflineWifiOnly: (Boolean) -> Unit,
     onThemeClick: () -> Unit,
     onShowVideoDuration: (Boolean) -> Unit,
     onAutoPlay: (Boolean) -> Unit,
@@ -194,6 +198,20 @@ private fun SettingsContent(
                     subtitle = stringResource(R.string.settings_show_cloud_in_photos_summary),
                     checked = settings.showCloudInPhotos,
                     onCheckedChange = onShowCloudInPhotos,
+                )
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_originals_mobile_title),
+                    subtitle = stringResource(R.string.settings_originals_mobile_summary),
+                    checked = settings.loadOriginalsOnMobileData,
+                    onCheckedChange = onLoadOriginalsOnMobileData,
+                )
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_offline_wifi_only_title),
+                    subtitle = stringResource(R.string.settings_offline_wifi_only_summary),
+                    checked = settings.offlineWifiOnly,
+                    onCheckedChange = onOfflineWifiOnly,
                 )
             }
         }

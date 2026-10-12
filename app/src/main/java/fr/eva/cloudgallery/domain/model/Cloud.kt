@@ -1,5 +1,7 @@
 package fr.eva.cloudgallery.domain.model
 
+import java.io.IOException
+
 /** Compte Microsoft connecté (mode compte unique). Le nom d'utilisateur n'est jamais journalisé. */
 data class CloudAccount(val username: String?)
 
@@ -125,7 +127,89 @@ data class CloudSyncState(
 data class CloudThumbRef(val itemId: String, val version: String)
 
 /**
- * Modèle d'image (Coil) d'une miniature OneDrive. [preview] : grand aperçu aux proportions
- * d'origine (visionneuse) au lieu d'une vignette carrée dimensionnée selon la cellule.
+ * Modèle d'image (Coil) d'une miniature OneDrive. [previewSide] : grand aperçu aux proportions
+ * d'origine (visionneuse) tenant dans un carré de ce côté (px), au lieu d'une vignette carrée
+ * dimensionnée selon la cellule (null).
  */
-data class CloudThumbnail(val ref: CloudThumbRef, val preview: Boolean = false)
+data class CloudThumbnail(val ref: CloudThumbRef, val previewSide: Int? = null)
+
+/**
+ * Accès temporaire au contenu d'un élément OneDrive (`@microsoft.graph.downloadUrl`). [url] est
+ * une URL pré-authentifiée qui vaut un jeton : jamais persistée, jamais journalisée, jamais
+ * envoyée avec un en-tête Authorization. Classe ordinaire (pas une data class) : [toString] ne
+ * la contient pas.
+ */
+class CloudDownloadInfo(
+    val itemId: String,
+    val sizeBytes: Long,
+    /** Version du contenu (cTag), null si Graph ne l'a pas renvoyée. */
+    val cTag: String?,
+    val eTag: String?,
+    /** Lecteur OneDrive de l'élément (comparé au lecteur de l'index avant tout téléchargement persistant). */
+    val driveId: String?,
+    val url: String,
+) {
+    override fun toString(): String = "CloudDownloadInfo(itemId=$itemId, sizeBytes=$sizeBytes)"
+}
+
+/** Cause d'un échec de lecture en streaming d'un élément OneDrive, indépendante de la langue. */
+enum class CloudStreamFailure {
+    /** Compte déconnecté, session expirée ou OneDrive différent de celui de l'index. */
+    AUTH_REQUIRED,
+
+    /** Microsoft Graph demande de patienter. */
+    THROTTLED,
+
+    /** Elément introuvable sur OneDrive (supprimé ou déplacé hors du lecteur). */
+    NOT_FOUND,
+
+    /** Pas de réseau ou délai dépassé. */
+    NETWORK,
+
+    /** Autre échec côté Microsoft. */
+    SERVER,
+}
+
+/**
+ * Echec d'obtention de l'URL de lecture d'un élément OneDrive, remonté à Media3 sous forme
+ * d'[IOException]. Le message ne contient jamais d'URL ni de jeton (seulement [failure]).
+ */
+class CloudStreamException(val failure: CloudStreamFailure, cause: Throwable? = null) :
+    IOException("Lecture OneDrive impossible : $failure", cause)
+
+/**
+ * Cause d'échec d'un téléchargement de fichier OneDrive (original, partage, copie hors ligne),
+ * indépendante de la langue. Persistable par son nom (jamais de texte libre ni d'URL).
+ */
+enum class DownloadError {
+    /** Pas de réseau, délai dépassé ou connexion coupée. */
+    NETWORK,
+
+    /** Compte déconnecté, session expirée, autre compte, ou données OneDrive vidées entre-temps. */
+    AUTH_REQUIRED,
+
+    /** Microsoft Graph ou l'hôte de téléchargement demande de patienter. */
+    THROTTLED,
+
+    /** Elément introuvable sur OneDrive. */
+    NOT_FOUND,
+
+    /** Le contenu a changé sur OneDrive pendant le téléchargement. */
+    CONTENT_CHANGED,
+
+    /** Espace de stockage insuffisant sur l'appareil. */
+    NO_SPACE,
+
+    /** Taille reçue différente de la taille annoncée. */
+    SIZE_MISMATCH,
+
+    /** Autre échec côté service (réponse inattendue). */
+    SERVER,
+
+    /** Annulé par l'utilisateur. */
+    CANCELLED,
+}
+
+/** Echec typé d'un téléchargement OneDrive. Le message ne contient jamais d'URL ni de jeton. */
+class CloudDownloadException(val error: DownloadError, cause: Throwable? = null) :
+    IOException("Téléchargement OneDrive impossible : $error", cause)

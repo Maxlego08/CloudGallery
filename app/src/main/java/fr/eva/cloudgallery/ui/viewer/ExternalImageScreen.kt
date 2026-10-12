@@ -113,7 +113,8 @@ fun ExternalImageScreen(
     ) {
         ZoomableImage(
             media = media,
-            uri = uri,
+            // URI content:// d'une autre appli : même chargement qu'un fichier MediaStore.
+            source = ViewerImageSource.MediaStore(uri, media.dateModified),
             isCurrentPage = true,
             callbacks = callbacks,
             onZoomChanged = {},

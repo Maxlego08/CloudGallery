@@ -88,6 +88,7 @@ import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.ui.components.OneUiCheckCircle
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
+import fr.eva.cloudgallery.ui.image.offlineThumbnail
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 import kotlinx.coroutines.Job
@@ -453,6 +454,7 @@ fun MediaGrid(
     val videoLabel = stringResource(R.string.common_video)
     val imageLabel = stringResource(R.string.common_image)
     val cloudOnlyLabel = stringResource(R.string.grid_cloud_only_a11y)
+    val offlineLabel = stringResource(R.string.offline_badge_a11y)
 
     // Lambdas stables pour l'accessibilité (les gestes réels passent par pointerInput).
     val a11yClick = remember { { item: GridItem.Media -> currentOnItemClick(item) } }
@@ -530,6 +532,7 @@ fun MediaGrid(
                     showVideoDuration = showVideoDuration,
                     typeLabel = if (item.media.type == MediaType.VIDEO) videoLabel else imageLabel,
                     cloudOnlyLabel = cloudOnlyLabel,
+                    offlineLabel = offlineLabel,
                     onA11yClick = a11yClick,
                     onA11yLongClick = a11yLongClick,
                 )
@@ -621,6 +624,7 @@ private fun MediaCell(
     showVideoDuration: Boolean,
     typeLabel: String,
     cloudOnlyLabel: String,
+    offlineLabel: String,
     onA11yClick: (GridItem.Media) -> Unit,
     onA11yLongClick: (GridItem.Media) -> Unit,
 ) {
@@ -630,12 +634,15 @@ private fun MediaCell(
     val corner by animateDpAsState(if (selected) 10.dp else 0.dp, label = "cellCorner")
     val isVideo = media.type == MediaType.VIDEO
     val duration = remember(media.durationMs) { Formatters.duration(media.durationMs) }
-    // Elément uniquement sur OneDrive : badge nuage, et mention lue par TalkBack.
-    val cloudOnly = media.hasCloud && !media.hasLocal
+    // Elément uniquement sur OneDrive (ni fichier local ni copie hors ligne) : badge nuage ;
+    // conservé hors ligne : badge « hors ligne ». Mention lue par TalkBack dans les deux cas.
+    val cloudOnly = media.hasCloud && !media.hasLocal && !media.hasOffline
+    val offlineOnly = media.hasOffline && !media.hasLocal
     val description = buildString {
         append(typeLabel)
         if (isVideo) append(", ").append(duration)
         if (cloudOnly) append(", ").append(cloudOnlyLabel)
+        if (offlineOnly) append(", ").append(offlineLabel)
     }
 
     Box(
@@ -665,6 +672,9 @@ private fun MediaCell(
                 version = media.dateModified,
                 modifier = Modifier.fillMaxSize(),
                 cloud = media.cloudThumb,
+                offline = remember(media.id, media.hasOffline, media.dateModified, media.cloudThumb, media.mimeType) {
+                    media.offlineThumbnail()
+                },
             )
             if (isVideo) {
                 Row(

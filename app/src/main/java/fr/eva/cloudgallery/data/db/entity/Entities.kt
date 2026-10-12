@@ -167,9 +167,19 @@ data class CachedFileEntity(
     val lastAccessAt: Long,
     /** Fichier conservé explicitement hors connexion : jamais supprimé par le nettoyage LRU. */
     val pinned: Boolean,
+    /**
+     * Version du contenu copié (cTag OneDrive) : une copie dont la version diffère de celle de
+     * l'élément OneDrive est périmée. Null si inconnue (jamais considérée comme à jour).
+     */
+    val version: String? = null,
 )
 
-enum class DownloadState { QUEUED, RUNNING, DONE, FAILED, CANCELLED }
+/**
+ * Etat d'une copie hors ligne à télécharger (stocké par son nom, colonne TEXT : ajouter une valeur
+ * ne change pas le schéma). PAUSED : arrêtée par l'utilisateur (Gestionnaire de tâches, arrêt
+ * forcé), reprise uniquement à sa demande.
+ */
+enum class DownloadState { QUEUED, RUNNING, DONE, FAILED, CANCELLED, PAUSED }
 
 @Entity(
     tableName = "download_task",
@@ -188,7 +198,14 @@ data class DownloadTaskEntity(
     val keepOffline: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    /** Nom d'un code d'erreur (DownloadError), jamais de texte libre ni d'URL. */
     val error: String? = null,
+    /** Identifiant de l'élément OneDrive au moment de la mise en file. */
+    val cloudItemId: String? = null,
+    /** Version du contenu (cTag) à laquelle appartient le fichier partiel `.part`. */
+    val cTag: String? = null,
+    /** Tentatives déjà faites (reprises après erreur). */
+    @ColumnInfo(defaultValue = "0") val attempts: Int = 0,
 )
 
 /**

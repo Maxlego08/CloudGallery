@@ -13,10 +13,14 @@ import fr.eva.cloudgallery.domain.model.CloudException
 import fr.eva.cloudgallery.domain.model.CloudProfile
 import fr.eva.cloudgallery.domain.model.CloudSyncReason
 import fr.eva.cloudgallery.domain.model.CloudSyncState
+import fr.eva.cloudgallery.domain.model.DeletedOnOneDriveCopy
 import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.domain.model.KeepOfflineResult
+import fr.eva.cloudgallery.domain.model.OfflineItemState
+import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +42,15 @@ interface MediaRepository {
 
     /** Nombre de médias parmi [ids] disposant d'un fichier local (les éléments uniquement OneDrive sont exclus). */
     suspend fun countWithLocalFile(ids: Collection<Long>): Int
+
+    /** Nombre de médias parmi [ids] partageables (fichier local, copie hors ligne ou élément OneDrive). */
+    suspend fun countShareable(ids: Collection<Long>): Int
+
+    /** Eléments OneDrive visibles sans copie hors ligne parmi [ids] (« Conserver hors ligne »). */
+    suspend fun countKeepableOffline(ids: Collection<Long>): Int
+
+    /** Médias parmi [ids] qui ont une copie hors ligne (« Libérer l'espace »). */
+    suspend fun countWithOfflineCopy(ids: Collection<Long>): Int
 
     /** Identifiants du contexte dont la date de prise de vue est dans [startMs, endMs[, dans l'ordre de [pagedMedia]. */
     suspend fun idsInPeriod(context: MediaContext, startMs: Long, endMs: Long): List<Long>
@@ -124,6 +137,9 @@ interface SettingsRepository {
     suspend fun setConfirmBeforeDelete(enabled: Boolean)
     suspend fun setUseTrash(enabled: Boolean)
     suspend fun setShowCloudInPhotos(enabled: Boolean)
+    suspend fun setLoadOriginalsOnMobileData(enabled: Boolean)
+    suspend fun setOfflineWifiOnly(enabled: Boolean)
+    suspend fun setOfflineNotificationsAsked(asked: Boolean)
 }
 
 /**
@@ -212,6 +228,81 @@ interface CloudTokenProvider {
      */
     suspend fun onTokenRejected(token: String)
 }
+
+/**
+ * Copies hors ligne d'éléments OneDrive (« Conserver hors ligne » / « Libérer ») : fichiers
+ * privés de l'appli, téléchargés en arrière-plan par une tâche lancée par l'utilisateur. Ni
+ * MediaStore ni les fichiers de l'utilisateur ne sont jamais touchés.
+ */
+interface OfflineRepository {
+    /** File des téléchargements et copies présentes. */
+    val queue: Flow<OfflineQueueState>
+
+    /** Etat hors ligne d'un média (statut, progression, erreur). */
+    fun observeItem(mediaId: Long): Flow<OfflineItemState>
+
+    /**
+     * Met en file les éléments OneDrive de [mediaIds] sans copie hors ligne. Un gros lot (plus de
+     * 200 éléments ou 1 Go) demande d'abord confirmation, sauf [confirmedLargeBatch].
+     */
+    suspend fun keepOffline(mediaIds: Collection<Long>, confirmedLargeBatch: Boolean = false): KeepOfflineResult
+
+    /**
+     * Copies hors ligne parmi [mediaIds] (visibles ou masquées) qui sont la dernière copie de
+     * l'élément : ni sur OneDrive (supprimé), ni sur l'appareil. Lève une exception si le compte
+     * est impossible : « Libérer » ne doit alors rien supprimer sans confirmation.
+     */
+    suspend fun lastCopiesAmong(mediaIds: Collection<Long>): Int
+
+    /**
+     * Supprime les copies hors ligne de [mediaIds] (et leurs téléchargements). Un élément qui
+     * n'existait plus qu'en copie hors ligne disparaît. Renvoie le nombre de copies supprimées.
+     */
+    suspend fun release(mediaIds: Collection<Long>): Int
+
+    /** Annule les téléchargements de [mediaIds] (une copie déjà présente est gardée). */
+    suspend fun cancel(mediaIds: Collection<Long>)
+
+    /** Annule tous les téléchargements (bouton « Annuler » de la notification, écran Compte). */
+    suspend fun cancelAll()
+
+    /** Reprend les téléchargements en pause ou en échec. */
+    suspend fun resume()
+
+    /**
+     * « Télécharger maintenant » : les tâches en file à cet instant ignorent le réglage « Wi-Fi
+     * uniquement » (les suivantes le respectent de nouveau).
+     */
+    suspend fun downloadNow()
+
+    /** Réglage « Wi-Fi uniquement » modifié : travail en cours ou planifié adapté aussitôt. */
+    suspend fun onNetworkPolicyChanged()
+
+    /** Retour au premier plan : reprise après un arrêt du processus, nettoyage, relance de la file. */
+    suspend fun resumeIfNeeded()
+
+    /** Copies d'éléments supprimés de OneDrive en attente de décision (délai de grâce écoulé). */
+    val deletedOnOneDrive: Flow<List<DeletedOnOneDriveCopy>>
+
+    /**
+     * « Supprimer les copies » confirmé pour [mediaIds] (la liste montrée à l'utilisateur) :
+     * retire ces copies et leurs éléments, seulement pour ceux encore en attente de décision.
+     * Renvoie le nombre réellement traité.
+     */
+    suspend fun deleteCopiesOfDeletedItems(mediaIds: Collection<Long>): Int
+
+    /**
+     * « Les conserver » pour [mediaIds] (la liste montrée) : ces copies restent, visibles, comme
+     * seuls exemplaires. Seulement pour ceux encore en attente de décision ; renvoie leur nombre.
+     */
+    suspend fun keepCopiesOfDeletedItems(mediaIds: Collection<Long>): Int
+
+    /** Copies hors ligne supprimées par une déconnexion ou une purge, dont dernières copies. */
+    suspend fun purgeImpact(): OfflinePurgeImpact
+}
+
+/** Copies hors ligne retirées par une purge des données OneDrive ([lastCopies] : seuls exemplaires). */
+data class OfflinePurgeImpact(val copies: Int, val lastCopies: Int)
 
 interface PlaybackPositionRepository {
     suspend fun get(mediaId: Long): Long

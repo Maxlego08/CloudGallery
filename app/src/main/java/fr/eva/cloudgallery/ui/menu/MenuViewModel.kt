@@ -8,8 +8,12 @@ import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import fr.eva.cloudgallery.ui.main.MediaSyncCoordinator
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +22,7 @@ class MenuViewModel @Inject constructor(
     indexer: LocalMediaIndexer,
     private val syncCoordinator: MediaSyncCoordinator,
     cloudAccounts: CloudAccountRepository,
+    offline: OfflineRepository,
 ) : ViewModel() {
 
     val indexState: StateFlow<IndexState> = indexer.state
@@ -29,6 +34,14 @@ class MenuViewModel @Inject constructor(
 
     /** Etat de la synchronisation OneDrive (sous-titre de l'entrée OneDrive, compte connecté). */
     val cloudSyncState: StateFlow<CloudSyncState> = cloudAccounts.syncState
+
+    /**
+     * Copies hors ligne d'éléments supprimés de OneDrive en attente de décision : signalées sur
+     * l'entrée OneDrive (la décision se prend dans l'écran Compte).
+     */
+    val deletedOfflineCopies: StateFlow<Int> = offline.deletedOnOneDrive
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init {
         // Au démarrage du processus l'état est « chargement » : lecture du compte MSAL (E/S)

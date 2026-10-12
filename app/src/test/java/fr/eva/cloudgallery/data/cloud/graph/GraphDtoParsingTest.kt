@@ -1,6 +1,7 @@
 package fr.eva.cloudgallery.data.cloud.graph
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -153,5 +154,38 @@ class GraphDtoParsingTest {
             """{ "error": { "code": "resyncChangesApplyDifferences", "message": "Resync required", "innerError": { } } }""",
         )
         assertEquals("resyncChangesApplyDifferences", error.error?.code)
+    }
+
+    @Test
+    fun downloadInfo_parsesAnnotation_andNeverPrintsTheUrl() {
+        val dto = GraphJson.decodeFromString(
+            DownloadInfoDto.serializer(),
+            """
+            {
+              "@odata.context": "https://graph.microsoft.com/v1.0/${'$'}metadata#users('x')/drive/items(id,size)/${'$'}entity",
+              "@microsoft.graph.downloadUrl": "https://public.ch.files.1drv.com/y4mABC/clip.mp4?download&psid=1&tempauth=SECRET",
+              "id": "ITEM!12",
+              "size": 1048576,
+              "cTag": "aYzpJVEVNITEyLjI1Nw",
+              "eTag": "aSVRFTSExMi4yNTc",
+              "parentReference": { "driveId": "abc123", "driveType": "personal", "id": "PARENT!1" }
+            }
+            """.trimIndent(),
+        )
+        assertEquals("ITEM!12", dto.id)
+        assertEquals(1_048_576L, dto.size)
+        assertEquals("aYzpJVEVNITEyLjI1Nw", dto.cTag)
+        assertEquals("abc123", dto.parentReference?.driveId)
+        assertTrue(dto.downloadUrl!!.startsWith("https://public.ch.files.1drv.com/"))
+        val text = dto.toString()
+        assertFalse(text.contains("http"))
+        assertFalse(text.contains("SECRET"))
+    }
+
+    @Test
+    fun downloadInfo_withoutAnnotation_hasNullUrl() {
+        val dto = GraphJson.decodeFromString(DownloadInfoDto.serializer(), """{ "id": "ITEM!12", "size": null }""")
+        assertNull(dto.downloadUrl)
+        assertNull(dto.size)
     }
 }

@@ -44,7 +44,7 @@ import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
         PlaybackPositionEntity::class,
         CloudFolderEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -90,6 +90,21 @@ abstract class AppDatabase : RoomDatabase() {
                         "PRIMARY KEY(`itemId`))",
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_cloud_folder_parentId` ON `cloud_folder` (`parentId`)")
+            }
+        }
+
+        /**
+         * v4 : contenus OneDrive copiés sur l'appareil (originaux temporaires, copies hors ligne).
+         * Version du contenu (cTag) des fichiers en cache, et identifiant, version et nombre de
+         * tentatives des téléchargements (reprise sûre d'un fichier partiel). Lignes existantes :
+         * colonnes nulles (version inconnue, jamais considérée à jour) et 0 tentative.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE cached_file ADD COLUMN version TEXT")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN cloudItemId TEXT")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN cTag TEXT")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

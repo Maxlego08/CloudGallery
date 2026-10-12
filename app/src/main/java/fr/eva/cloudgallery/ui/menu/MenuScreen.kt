@@ -1,6 +1,14 @@
 package fr.eva.cloudgallery.ui.menu
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -61,6 +69,7 @@ fun MenuScreen(
     val indexState by viewModel.indexState.collectAsStateWithLifecycle()
     val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
     val cloudSyncState by viewModel.cloudSyncState.collectAsStateWithLifecycle()
+    val deletedOfflineCopies by viewModel.deletedOfflineCopies.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
     val colors = OneUiTheme.colors
@@ -120,14 +129,24 @@ fun MenuScreen(
                         // Masquée quand ce build n'embarque pas de configuration OneDrive.
                         if (viewModel.cloudAvailable) {
                             OneUiDivider(startIndent = dimens.cardPadding + 40.dp)
-                            // Compte connecté : état de la synchronisation ; sinon, état du compte.
+                            // Copies hors ligne à vérifier (éléments supprimés de OneDrive) en priorité ;
+                            // sinon, compte connecté : état de la synchronisation ; sinon, état du compte.
                             val signedIn = cloudState is CloudAccountState.SignedIn
                             OneUiListItem(
                                 title = stringResource(R.string.common_onedrive),
-                                subtitle = if (signedIn) cloudSyncStatusText(cloudSyncState) else cloudAccountSummary(cloudState),
+                                subtitle = when {
+                                    deletedOfflineCopies > 0 ->
+                                        pluralStringResource(R.plurals.offline_deleted_menu, deletedOfflineCopies, deletedOfflineCopies)
+                                    signedIn -> cloudSyncStatusText(cloudSyncState)
+                                    else -> cloudAccountSummary(cloudState)
+                                },
                                 icon = Icons.Rounded.Cloud,
                                 onClick = onOpenAccount,
-                                trailing = if (signedIn && cloudSyncState.running) RunningTrailing else null,
+                                trailing = when {
+                                    deletedOfflineCopies > 0 -> { { CountBadge(deletedOfflineCopies) } }
+                                    signedIn && cloudSyncState.running -> RunningTrailing
+                                    else -> null
+                                },
                             )
                         }
                     }
@@ -147,3 +166,18 @@ fun MenuScreen(
 }
 
 private val RunningTrailing: @Composable () -> Unit = { IndexRunningIndicator() }
+
+/** Pastille de comptage (éléments qui attendent une décision de l'utilisateur). */
+@Composable
+private fun CountBadge(count: Int) {
+    Box(
+        modifier = Modifier
+            .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+            .clip(CircleShape)
+            .background(OneUiTheme.colors.danger)
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = count.toString(), style = OneUiTheme.typography.badge, color = Color.White)
+    }
+}

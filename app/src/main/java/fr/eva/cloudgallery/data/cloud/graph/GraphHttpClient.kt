@@ -168,7 +168,7 @@ class GraphHttpClient @Inject constructor(
 ) {
     private val caller = GraphCaller(
         tokens = tokens,
-        userAgent = "CloudGallery/${BuildConfig.VERSION_NAME} (Android)",
+        userAgent = CLOUD_USER_AGENT,
         gate = ThrottleGate(System::currentTimeMillis),
         transport = { request -> client.get().newCall(request).await() },
     )
@@ -182,8 +182,15 @@ class GraphHttpClient @Inject constructor(
     ): T = withContext(io) { caller.get(url, accept, maxRetries, block) }
 }
 
-/** Exécution asynchrone d'un appel OkHttp, annulée avec la coroutine. */
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+/** User-Agent de toutes les requêtes HTTP de l'appli (Graph et hôte de téléchargement OneDrive). */
+internal val CLOUD_USER_AGENT: String = "CloudGallery/${BuildConfig.VERSION_NAME} (Android)"
+
+/**
+ * Exécution asynchrone d'un appel OkHttp jusqu'aux en-têtes de la réponse, annulée avec la
+ * coroutine. La lecture du corps qui suit n'est pas couverte : l'appelant qui lit un long corps
+ * doit annuler l'appel lui-même (voir CdnDownloader).
+ */
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
     cont.invokeOnCancellation { cancel() }
     enqueue(
         object : Callback {

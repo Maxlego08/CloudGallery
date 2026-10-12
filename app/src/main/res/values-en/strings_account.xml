@@ -17,7 +17,7 @@
     <string name="account_read_only_summary">Files and profile only. CloudGallery never changes or deletes anything on OneDrive.</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_sign_out_title">Sign out of OneDrive?</string>
-    <string name="account_sign_out_message">OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions, the OneDrive albums (even renamed or pinned ones) and the cached thumbnails. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_sign_out_message">OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions, the OneDrive albums (even renamed or pinned ones) and the cached thumbnails. Offline copies are removed from the device. Your files on OneDrive and on this phone are not modified.</string>
     <string name="account_signing_out">Signing out…</string>
     <string name="account_signed_out_toast">Signed out of OneDrive</string>
     <string name="account_sign_out_failed">Can\'t sign out: %1$s</string>
@@ -29,7 +29,7 @@
     <string name="account_leftover_purge">Remove OneDrive data from this device</string>
     <string name="account_leftover_purge_summary">OneDrive items from a previous session are still in CloudGallery</string>
     <string name="account_purge_title">Remove OneDrive data?</string>
-    <string name="account_purge_message">OneDrive photos and videos from a previous session will disappear from CloudGallery, along with their favorites, their album additions and the OneDrive albums. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_purge_message">OneDrive photos and videos from a previous session will disappear from CloudGallery, along with their favorites, their album additions and the OneDrive albums. Offline copies are removed from the device. Your files on OneDrive and on this phone are not modified.</string>
     <string name="account_purge_done">OneDrive data removed from this device</string>
     <string name="account_purge_failed">Can\'t remove the OneDrive data.</string>
 
@@ -51,7 +51,7 @@
     <string name="account_mismatch_message">The OneDrive items in CloudGallery come from another account. Syncing is paused until you replace them with this account\'s items.</string>
     <string name="account_mismatch_action">Replace with this account</string>
     <string name="account_mismatch_dialog_title">Replace the OneDrive data?</string>
-    <string name="account_mismatch_dialog_message">The previous account\'s OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions and the OneDrive albums. This account\'s items will then be synced. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_mismatch_dialog_message">The previous account\'s OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions, the OneDrive albums and the offline copies (removed from the device). This account\'s items will then be synced. Your files on OneDrive and on this phone are not modified.</string>
     <string name="account_mismatch_confirm">Replace</string>
     <string name="account_mismatch_done">Previous account data removed, sync started</string>
     <string name="account_mismatch_failed">Can\'t replace the OneDrive data.</string>

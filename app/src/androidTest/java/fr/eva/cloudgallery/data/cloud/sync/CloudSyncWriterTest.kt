@@ -11,6 +11,9 @@ import fr.eva.cloudgallery.data.cloud.graph.ImageFacetDto
 import fr.eva.cloudgallery.data.cloud.graph.ItemReferenceDto
 import fr.eva.cloudgallery.data.cloud.graph.VideoFacetDto
 import fr.eva.cloudgallery.data.db.AppDatabase
+import fr.eva.cloudgallery.data.db.entity.CacheKind
+import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
+import fr.eva.cloudgallery.data.db.entity.DownloadState
 import fr.eva.cloudgallery.data.db.entity.FavoriteEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
@@ -377,5 +380,135 @@ class CloudSyncWriterTest {
         assertEquals(1, db.cloudFolderDao().getAll().size)
         assertFalse(writer.hasIndexedData())
         assertEquals(0, writer.visibleCount())
+    }
+
+    // --- Copies hors ligne ---------------------------------------------------------------
+
+    /** Copie hors ligne enregistrée pour l'élément [itemId] (comme le moteur la crée). */
+    private suspend fun pinOffline(itemId: String, cTag: String = "c1"): Long {
+        val mediaId = mediaOf(itemId)!!.id
+        db.mediaSourceDao().insert(
+            MediaSourceEntity(
+                mediaId = mediaId, kind = SourceKind.OFFLINE_COPY, externalId = itemId, uri = null, bucketKey = null,
+                bucketName = null, relativePath = null, sizeBytes = 100, dateModified = 1, cTag = cTag,
+            ),
+        )
+        db.cachedFileDao().replace(
+            CachedFileEntity(
+                mediaId = mediaId, sourceId = null, kind = CacheKind.OFFLINE, path = "$itemId.jpg", sizeBytes = 100,
+                createdAt = 0, lastAccessAt = 0, pinned = true, version = cTag,
+            ),
+        )
+        db.mediaDao().refreshSourceFlags(listOf(mediaId))
+        return mediaId
+    }
+
+    private suspend fun offlineCopyOf(itemId: String) = db.mediaSourceDao().find(SourceKind.OFFLINE_COPY, itemId)
+
+    @Test
+    fun deletedItem_hidesItsOfflineCopy_andKeepsItAfterGracePeriodForUserDecision() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT"), image("B", "ROOT")))
+        val a = pinOffline("A")
+        val b = mediaOf("B")!!.id
+        assertTrue(a in timeline(includeCloudOnly = false))
+
+        sync(full = false, listOf(deleted("A"), deleted("B")))
+        // Masquée avec son élément OneDrive : plus dans Photos.
+        assertNotNull(offlineCopyOf("A")!!.missingSince)
+        assertFalse(db.mediaDao().getById(a)!!.hasOffline)
+        assertFalse(a in timeline(includeCloudOnly = false))
+
+        // Délai de grâce écoulé : sans copie, purgé ; avec copie, gardé (masqué) en attente de décision.
+        sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS)
+        assertNull(db.mediaDao().getById(b))
+        assertNotNull(db.mediaDao().getById(a))
+        assertNotNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A"))
+        assertNotNull(db.cachedFileDao().get(a, CacheKind.OFFLINE))
+        assertEquals(listOf(a), db.mediaSourceDao().awaitingDecisionMediaIds(t0 + 1))
+        // Passages suivants : toujours en attente, jamais purgé automatiquement.
+        sync(full = false, emptyList(), now = t0 + 2 * MISSING_GRACE_MS)
+        assertNotNull(db.mediaDao().getById(a))
+    }
+
+    @Test
+    fun fullEnumeration_hidesUnseenItemsOfflineCopy() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT"), image("B", "ROOT")))
+        val a = pinOffline("A")
+        sync(full = true, listOf(root(), image("B", "ROOT")))
+        assertNotNull(offlineCopyOf("A")!!.missingSince)
+        assertFalse(db.mediaDao().getById(a)!!.hasOffline)
+    }
+
+    @Test
+    fun deletedFolder_hidesOfflineCopiesOfItsContent() = runTest {
+        sync(full = true, listOf(root(), folder("PH", "Photos"), image("A", "PH")))
+        val a = pinOffline("A")
+        sync(full = false, listOf(deleted("PH")))
+        assertNotNull(offlineCopyOf("A")!!.missingSince)
+        assertFalse(db.mediaDao().getById(a)!!.hasOffline)
+        assertFalse(a in timeline(includeCloudOnly = false))
+    }
+
+    @Test
+    fun restoredItem_showsItsOfflineCopyAgain() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT")))
+        val a = pinOffline("A")
+        sync(full = false, listOf(deleted("A")))
+        assertFalse(db.mediaDao().getById(a)!!.hasOffline)
+        sync(full = false, listOf(image("A", "ROOT")))
+        assertNull(offlineCopyOf("A")!!.missingSince)
+        assertTrue(db.mediaDao().getById(a)!!.hasOffline)
+        assertTrue(a in timeline(includeCloudOnly = false))
+    }
+
+    @Test
+    fun contentChange_ofPinnedItem_enqueuesExactlyOneRedownload_andDropsStaleOriginal() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT")))
+        val a = pinOffline("A", cTag = "c1")
+        db.cachedFileDao().replace(
+            CachedFileEntity(
+                mediaId = a, sourceId = null, kind = CacheKind.ORIGINAL, path = "orig.jpg", sizeBytes = 100,
+                createdAt = 0, lastAccessAt = 0, pinned = false, version = "c1",
+            ),
+        )
+        sync(full = false, listOf(image("A", "ROOT", cTag = "c2")))
+        sync(full = false, listOf(image("A", "ROOT", cTag = "c2")))
+        val task = db.downloadTaskDao().listOpen().single()
+        assertEquals(a, task.mediaId)
+        assertEquals("c2", task.cTag)
+        assertEquals(DownloadState.QUEUED, task.state)
+        // L'ancienne copie reste servie jusqu'au remplacement.
+        assertTrue(db.mediaDao().getById(a)!!.hasOffline)
+        assertEquals("c1", offlineCopyOf("A")!!.cTag)
+        assertNull(db.cachedFileDao().get(a, CacheKind.ORIGINAL))
+    }
+
+    @Test
+    fun unchangedContent_neverEnqueues() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT")))
+        pinOffline("A", cTag = "c1")
+        sync(full = false, listOf(image("A", "ROOT", cTag = "c1")))
+        assertFalse(db.downloadTaskDao().existsAny())
+    }
+
+    @Test
+    fun keptCopy_isRelinked_whenTheItemComesBackOnOneDrive() = runTest {
+        sync(full = true, listOf(root(), image("A", "ROOT")))
+        val a = pinOffline("A")
+        db.favoriteDao().insertAll(listOf(FavoriteEntity(a, 1)))
+        // « Les conserver » : plus de source OneDrive, la copie reste seule et visible.
+        db.mediaSourceDao().deleteForMedia(SourceKind.ONEDRIVE, listOf(a))
+        db.mediaSourceDao().syncOfflineCopyVisibility(listOf(a))
+        db.mediaDao().refreshSourceFlags(listOf(a))
+        assertTrue(a in timeline(includeCloudOnly = false))
+
+        sync(full = false, listOf(image("A", "ROOT", cTag = "c1")))
+        // Même média (favori conservé), aucun doublon.
+        assertEquals(a, mediaOf("A")!!.id)
+        assertTrue(db.favoriteDao().isFavorite(a))
+        assertEquals(1, timeline(includeCloudOnly = true).count { it == a })
+        assertEquals(1, db.mediaDao().observeTimelineCount(includeCloudOnly = true).first())
+        assertTrue(db.mediaDao().getById(a)!!.hasCloud)
+        assertTrue(db.mediaDao().getById(a)!!.hasOffline)
     }
 }

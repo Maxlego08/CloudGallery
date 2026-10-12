@@ -6,18 +6,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import fr.eva.cloudgallery.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Miniatures OneDrive en cache (disque et mémoire), vidées avec les données OneDrive. */
+/**
+ * Miniatures OneDrive en cache (disque et mémoire), vidées avec les données OneDrive. Une
+ * miniature en cours de téléchargement pendant une purge n'est pas enregistrée : voir
+ * [fr.eva.cloudgallery.data.cloud.CloudDataGeneration], incrémenté avant la purge.
+ */
 interface CloudThumbnailCache {
-    /**
-     * Numéro de vidage : un téléchargement commencé avant un vidage n'est pas enregistré
-     * (une miniature en cours de chargement ne réapparaît pas après une déconnexion).
-     */
-    val generation: Long
-
     /** Vide les miniatures OneDrive (disque et mémoire). Thread d'E/S. */
     suspend fun clear()
 }
@@ -34,12 +31,7 @@ class CoilCloudThumbnailCache @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : CloudThumbnailCache {
 
-    private val generationCounter = AtomicLong(0)
-
-    override val generation: Long get() = generationCounter.get()
-
     override suspend fun clear(): Unit = withContext(io) {
-        generationCounter.incrementAndGet()
         val loader = SingletonImageLoader.get(context)
         loader.diskCache?.clear()
         loader.memoryCache?.let { memory ->

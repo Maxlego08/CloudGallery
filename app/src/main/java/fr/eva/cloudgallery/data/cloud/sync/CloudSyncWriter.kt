@@ -3,8 +3,13 @@ package fr.eva.cloudgallery.data.cloud.sync
 import androidx.room.withTransaction
 import fr.eva.cloudgallery.data.cloud.graph.DriveItemDto
 import fr.eva.cloudgallery.data.db.AppDatabase
+import fr.eva.cloudgallery.data.cloud.offline.planGraceExpiry
+import fr.eva.cloudgallery.data.cloud.offline.requeueOnCTagChange
 import fr.eva.cloudgallery.data.db.entity.AlbumEntity
+import fr.eva.cloudgallery.data.db.entity.CacheKind
 import fr.eva.cloudgallery.data.db.entity.CloudFolderEntity
+import fr.eva.cloudgallery.data.db.entity.DownloadState
+import fr.eva.cloudgallery.data.db.entity.DownloadTaskEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.di.IoDispatcher
@@ -64,6 +69,11 @@ internal data class CloudFolderLabels(val root: String, val unnamed: String)
  * locale est global). Un élément OneDrive = un média : jamais de rapprochement par nom ou
  * empreinte avec un fichier local. Rien n'est supprimé directement : une source disparue est
  * masquée, puis purgée après le délai de grâce.
+ *
+ * Copies hors ligne (OFFLINE_COPY) : masquées et réaffichées avec leur élément OneDrive ; un
+ * élément supprimé qui a une copie n'est pas purgé au bout du délai (décision de l'utilisateur
+ * attendue) ; un contenu modifié met en file le téléchargement de la nouvelle version (lancé au
+ * prochain passage de l'appli au premier plan). Aucun fichier n'est touché ici.
  */
 @Singleton
 class CloudSyncWriter @Inject constructor(
@@ -75,6 +85,8 @@ class CloudSyncWriter @Inject constructor(
     private val albumDao = db.albumDao()
     private val folderDao = db.cloudFolderDao()
     private val cursorDao = db.syncCursorDao()
+    private val taskDao = db.downloadTaskDao()
+    private val cachedFileDao = db.cachedFileDao()
 
     /**
      * Vrai si l'index contient des données OneDrive visibles par l'utilisateur ou rattachées à
@@ -96,8 +108,19 @@ class CloudSyncWriter @Inject constructor(
             val touched = HashSet<Long>()
             applyFolders(actions.filterIsInstance<DeltaAction.UpsertFolder>().map { it.folder }, run, now)
             applyRemovals(actions.filterIsInstance<DeltaAction.Remove>().map { it.itemId }, run, now, touched)
-            applyMedia(actions.filterIsInstance<DeltaAction.UpsertMedia>().map { it.media }, run, touched)
-            touched.chunked(CHUNK).forEach { mediaDao.refreshSourceFlags(it) }
+            applyMedia(actions.filterIsInstance<DeltaAction.UpsertMedia>().map { it.media }, run, now, touched)
+            refreshTouched(touched)
+        }
+    }
+
+    /**
+     * Copies hors ligne alignées sur la visibilité de leur élément OneDrive (masquées avec lui,
+     * visibles s'il revient), puis indicateurs dénormalisés recalculés.
+     */
+    private suspend fun refreshTouched(touched: Collection<Long>) {
+        for (chunk in touched.chunked(CHUNK)) {
+            sourceDao.syncOfflineCopyVisibility(chunk)
+            mediaDao.refreshSourceFlags(chunk)
         }
     }
 
@@ -146,14 +169,20 @@ class CloudSyncWriter @Inject constructor(
         }
     }
 
-    private suspend fun applyMedia(items: List<CloudMediaFields>, run: CloudSyncRun, touched: MutableSet<Long>) {
+    private suspend fun applyMedia(items: List<CloudMediaFields>, run: CloudSyncRun, now: Long, touched: MutableSet<Long>) {
         if (items.isEmpty()) return
         for (chunk in items.chunked(CHUNK)) {
-            val sources = sourceDao.findAll(SourceKind.ONEDRIVE, chunk.map { it.itemId }).associateBy { it.externalId }
-            val medias = mediaDao.getByIds(sources.values.map { it.mediaId }).associateBy { it.id }
+            val itemIds = chunk.map { it.itemId }
+            val sources = sourceDao.findAll(SourceKind.ONEDRIVE, itemIds).associateBy { it.externalId }
+            // Copies hors ligne de ces éléments (même identifiant OneDrive).
+            val offline = sourceDao.findAll(SourceKind.OFFLINE_COPY, itemIds).associateBy { it.externalId }
+            val medias = mediaDao.getByIds((sources.values.map { it.mediaId } + offline.values.map { it.mediaId }).distinct())
+                .associateBy { it.id }
+            val redownload = ArrayList<DownloadTaskEntity>()
             for (fields in chunk) {
                 val source = sources[fields.itemId]
                 val media = source?.let { medias[it.mediaId] }
+                val copy = offline[fields.itemId]
                 if (source != null && media != null) {
                     val updatedMedia = fields.applyTo(media)
                     if (updatedMedia != media) mediaDao.update(updatedMedia)
@@ -162,15 +191,39 @@ class CloudSyncWriter @Inject constructor(
                         sourceDao.update(updatedSource)
                         touched += media.id
                     }
+                    if (source.cTag != fields.cTag) {
+                        // Contenu modifié : l'original temporaire est périmé (son fichier, sans
+                        // ligne, part au prochain nettoyage).
+                        cachedFileDao.deleteForMedia(listOf(media.id), CacheKind.ORIGINAL)
+                    }
+                    val hasCopy = copy != null && copy.mediaId == media.id
+                    if (requeueOnCTagChange(hasCopy, copy?.cTag, fields.cTag)) {
+                        // Copie hors ligne périmée : nouveau téléchargement (l'ancienne reste
+                        // servie jusqu'à ce que la nouvelle la remplace).
+                        redownload += redownloadTask(media.id, fields, now)
+                    }
                 } else {
                     // Source orpheline impossible (clé étrangère en cascade) ; par prudence elle est remplacée.
                     if (source != null) sourceDao.deleteByIds(listOf(source.id))
-                    val mediaId = mediaDao.insert(fields.toMediaEntity())
+                    val copyMedia = copy?.let { medias[it.mediaId] }
+                    val mediaId = if (copy != null && copyMedia != null) {
+                        // Elément revenu sur OneDrive alors que sa copie hors ligne a été conservée :
+                        // rattaché au même média (favoris, albums), jamais dupliqué.
+                        val updatedMedia = fields.applyTo(copyMedia)
+                        if (updatedMedia != copyMedia) mediaDao.update(updatedMedia)
+                        if (requeueOnCTagChange(true, copy.cTag, fields.cTag)) {
+                            redownload += redownloadTask(copyMedia.id, fields, now)
+                        }
+                        copyMedia.id
+                    } else {
+                        mediaDao.insert(fields.toMediaEntity())
+                    }
                     sourceDao.insert(fields.toSourceEntity(mediaId))
                     touched += mediaId
                 }
                 run.seen?.add(fields.itemId)
             }
+            if (redownload.isNotEmpty()) taskDao.enqueueIfAbsent(redownload)
         }
     }
 
@@ -186,10 +239,16 @@ class CloudSyncWriter @Inject constructor(
             // 1. Eléments : masqués s'ils manquent à une énumération complète, purgés après le délai de grâce.
             val stamps = sourceDao.stamps(SourceKind.ONEDRIVE).map { CloudStamp(it.id, it.mediaId, it.externalId, it.missingSince) }
             val plan = planCloudRemovals(stamps, run.seen, now)
+            // Décision D1 : un élément conservé hors ligne n'est jamais purgé sans l'avis de
+            // l'utilisateur ; il reste masqué, en attente de sa décision (écran Compte).
+            val expiry = planGraceExpiry(plan.purge, sourceDao.mediaIdsByKind(SourceKind.OFFLINE_COPY).toSet())
             for (chunk in plan.hide.chunked(CHUNK)) sourceDao.markMissing(chunk.map { it.sourceId }, now)
-            for (chunk in plan.purge.chunked(CHUNK)) sourceDao.deleteByIds(chunk.map { it.sourceId })
+            for (chunk in expiry.purge.chunked(CHUNK)) {
+                sourceDao.deleteByIds(chunk.map { it.sourceId })
+                taskDao.deleteForMedia(chunk.map { it.mediaId }.distinct())
+            }
             plan.hide.mapTo(touched) { it.mediaId }
-            plan.purge.mapTo(touched) { it.mediaId }
+            expiry.purge.mapTo(touched) { it.mediaId }
 
             // 2. Dossiers supprimés (toujours absents en fin de passage) : leur contenu est masqué.
             val folders = folderDao.getAll().map { it.toFields() }
@@ -208,7 +267,7 @@ class CloudSyncWriter @Inject constructor(
                 }
             }
 
-            touched.chunked(CHUNK).forEach { mediaDao.refreshSourceFlags(it) }
+            refreshTouched(touched)
             mediaDao.deleteOrphans()
             albumDao.clearDanglingCovers()
 
@@ -315,6 +374,20 @@ class CloudSyncWriter @Inject constructor(
             sha1Hash = sha1Hash,
             quickXorHash = quickXorHash,
             missingSince = null,
+        )
+
+        /** Téléchargement d'une nouvelle version d'une copie hors ligne. */
+        fun redownloadTask(mediaId: Long, fields: CloudMediaFields, now: Long) = DownloadTaskEntity(
+            mediaId = mediaId,
+            sourceId = null,
+            state = DownloadState.QUEUED,
+            bytesDownloaded = 0,
+            bytesTotal = fields.sizeBytes.coerceAtLeast(0),
+            keepOffline = true,
+            createdAt = now,
+            updatedAt = now,
+            cloudItemId = fields.itemId,
+            cTag = fields.cTag,
         )
 
         /** Mise à jour d'une source existante ; un élément revenu (restauré) redevient visible. */

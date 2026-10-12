@@ -9,8 +9,12 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
+import fr.eva.cloudgallery.data.cloud.offline.OfflineStore
+import fr.eva.cloudgallery.data.db.dao.CachedFileDao
 import fr.eva.cloudgallery.data.db.dao.MediaDao
 import fr.eva.cloudgallery.data.db.dao.MediaSourceDao
+import fr.eva.cloudgallery.data.db.entity.CacheKind
+import fr.eva.cloudgallery.data.db.entity.CachedFileEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import fr.eva.cloudgallery.data.local.externalIdCandidatesFromMediaStorePath
 import fr.eva.cloudgallery.data.local.orderedByListPosition
@@ -21,6 +25,7 @@ import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.domain.model.OfflineFile
 import fr.eva.cloudgallery.domain.model.SourceKind
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.domain.repository.MediaRepository
@@ -47,6 +52,8 @@ import javax.inject.Singleton
 class MediaRepositoryImpl @Inject constructor(
     private val mediaDao: MediaDao,
     private val sourceDao: MediaSourceDao,
+    private val cachedFileDao: CachedFileDao,
+    private val offlineStore: OfflineStore,
     private val indexer: LocalMediaIndexer,
     settingsRepository: SettingsRepository,
     @param:IoDispatcher private val io: CoroutineDispatcher,
@@ -78,18 +85,28 @@ class MediaRepositoryImpl @Inject constructor(
         is MediaContext.Single -> mediaDao.observeById(context.mediaId).map { listOfNotNull(it?.id) }
     }.distinctUntilChanged().flowOn(io)
 
+    /** Observe aussi la copie hors ligne : la visionneuse bascule sur le fichier dès qu'il est enregistré. */
     override fun observeMedia(id: Long): Flow<MediaDetails?> = combine(
         mediaDao.observeById(id),
         sourceDao.observeForMedia(id),
         mediaDao.observeIsFavorite(id),
-    ) { media, sources, favorite -> media?.toDetails(favorite, sources) }
+        cachedFileDao.observe(id, CacheKind.OFFLINE),
+    ) { media, sources, favorite, offline -> media?.toDetails(favorite, sources, offline?.toOfflineFile()) }
         .distinctUntilChanged()
         .flowOn(io)
 
     override suspend fun getMedia(id: Long): MediaDetails? = withContext(io) {
         val media = mediaDao.getById(id) ?: return@withContext null
-        media.toDetails(mediaDao.observeIsFavorite(id).first(), sourceDao.getForMedia(id))
+        media.toDetails(
+            mediaDao.observeIsFavorite(id).first(),
+            sourceDao.getForMedia(id),
+            cachedFileDao.get(id, CacheKind.OFFLINE)?.toOfflineFile(),
+        )
     }
+
+    /** Fichier d'une copie hors ligne enregistrée (chemin relatif vérifié, aucune E/S). */
+    private fun CachedFileEntity.toOfflineFile(): OfflineFile? =
+        offlineStore.fileOf(path)?.let { OfflineFile(it, sizeBytes, version) }
 
     override suspend fun getSummaries(ids: List<Long>): List<MediaSummary> = withContext(io) {
         if (ids.isEmpty()) return@withContext emptyList()
@@ -99,6 +116,18 @@ class MediaRepositoryImpl @Inject constructor(
 
     override suspend fun countWithLocalFile(ids: Collection<Long>): Int = withContext(io) {
         ids.distinct().chunked(CHUNK).sumOf { mediaDao.countWithLocalFile(it) }
+    }
+
+    override suspend fun countShareable(ids: Collection<Long>): Int = withContext(io) {
+        ids.distinct().chunked(CHUNK).sumOf { mediaDao.countShareable(it) }
+    }
+
+    override suspend fun countKeepableOffline(ids: Collection<Long>): Int = withContext(io) {
+        ids.distinct().chunked(CHUNK).sumOf { mediaDao.countKeepableOffline(it) }
+    }
+
+    override suspend fun countWithOfflineCopy(ids: Collection<Long>): Int = withContext(io) {
+        ids.distinct().chunked(CHUNK).sumOf { mediaDao.countWithOfflineCopy(it) }
     }
 
     override suspend fun idsInPeriod(context: MediaContext, startMs: Long, endMs: Long): List<Long> = withContext(io) {

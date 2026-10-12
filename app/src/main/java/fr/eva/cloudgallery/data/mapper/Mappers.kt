@@ -10,6 +10,8 @@ import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSourceInfo
 import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.domain.model.OfflineFile
+import fr.eva.cloudgallery.domain.model.SourceKind
 
 fun MediaRow.toSummary(): MediaSummary = MediaSummary(
     id = id,
@@ -39,9 +41,15 @@ fun MediaSourceEntity.toInfo(): MediaSourceInfo = MediaSourceInfo(
     relativePath = relativePath,
     sizeBytes = sizeBytes,
     dateModified = dateModified,
+    // Pour une source locale, la colonne contient GENERATION_MODIFIED : sans intérêt hors OneDrive.
+    cTag = cTag.takeIf { kind != SourceKind.LOCAL },
 )
 
-fun MediaEntity.toDetails(isFavorite: Boolean, sources: List<MediaSourceEntity>): MediaDetails = MediaDetails(
+fun MediaEntity.toDetails(
+    isFavorite: Boolean,
+    sources: List<MediaSourceEntity>,
+    offlineFile: OfflineFile? = null,
+): MediaDetails = MediaDetails(
     id = id,
     type = mediaType,
     displayName = displayName,
@@ -59,6 +67,7 @@ fun MediaEntity.toDetails(isFavorite: Boolean, sources: List<MediaSourceEntity>)
     // Une source masquée (corbeille, volume démonté…) n'est pas exploitable par l'UI.
     sources = sources.filter { it.missingSince == null }.map { it.toInfo() },
     cloudThumb = cloudThumbRef(cloudItemId, cloudCTag, dateModified),
+    offlineFile = offlineFile,
 )
 
 fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(

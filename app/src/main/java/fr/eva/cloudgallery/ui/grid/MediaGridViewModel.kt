@@ -11,9 +11,15 @@ import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.data.cloud.CloudAccessGuard
+import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
+import fr.eva.cloudgallery.data.cloud.content.ShareUriProvider
+import fr.eva.cloudgallery.data.cloud.content.cloudFileTargetOf
+import fr.eva.cloudgallery.data.cloud.content.downloadErrorOf
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.DownloadError
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.repository.AlbumRepository
@@ -21,12 +27,27 @@ import fr.eva.cloudgallery.domain.repository.FavoritesRepository
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.domain.repository.LocalMediaWriter
 import fr.eva.cloudgallery.domain.repository.MediaRepository
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
+import fr.eva.cloudgallery.ui.offline.OfflineFeedback
+import fr.eva.cloudgallery.ui.offline.OfflinePrompt
+import fr.eva.cloudgallery.ui.offline.keepFeedback
+import fr.eva.cloudgallery.ui.offline.ReleaseStep
+import fr.eva.cloudgallery.ui.offline.releaseStep
+import fr.eva.cloudgallery.ui.util.MAX_SHARE_CLOUD_BYTES
+import fr.eva.cloudgallery.ui.video.PlaybackSourceResolver
+import fr.eva.cloudgallery.ui.util.MAX_SHARE_CLOUD_ITEMS
+import fr.eva.cloudgallery.ui.util.ShareCandidate
+import fr.eva.cloudgallery.ui.util.ShareRefusal
+import fr.eva.cloudgallery.ui.util.downloadErrorMessage
+import fr.eva.cloudgallery.ui.util.planShare
+import fr.eva.cloudgallery.ui.util.progressPercent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,9 +77,19 @@ class MediaGridDeps @Inject constructor(
     val settingsRepository: SettingsRepository,
     val localMediaIndexer: LocalMediaIndexer,
     val localMediaWriter: LocalMediaWriter,
+    val cloudOriginals: CloudOriginalStore,
+    val shareUris: ShareUriProvider,
+    val cloudAccess: CloudAccessGuard,
+    val offline: OfflineRepository,
     @param:IoDispatcher val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope val applicationScope: CoroutineScope,
 )
+
+/**
+ * Téléchargement depuis OneDrive avant un partage : [count] éléments, [done] / [total] octets
+ * ([total] ≤ 0 si inconnu).
+ */
+data class GridSharePreparation(val count: Int, val done: Long, val total: Long)
 
 /** Message ponctuel à afficher (toast), résolu dans l'UI. */
 sealed interface GridMessage {
@@ -147,10 +178,16 @@ abstract class MediaGridViewModel(
     val selectionTargets: StateFlow<SelectionTargets?> = _selection
         .mapLatest { ids ->
             if (ids.isEmpty()) {
-                SelectionTargets(ids, 0)
+                SelectionTargets(ids, 0, 0)
             } else {
                 try {
-                    SelectionTargets(ids, deps.mediaRepository.countWithLocalFile(ids))
+                    SelectionTargets(
+                        forSelection = ids,
+                        local = deps.mediaRepository.countWithLocalFile(ids),
+                        shareable = deps.mediaRepository.countShareable(ids),
+                        keepableOffline = deps.mediaRepository.countKeepableOffline(ids),
+                        withOfflineCopy = deps.mediaRepository.countWithOfflineCopy(ids),
+                    )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
@@ -162,6 +199,17 @@ abstract class MediaGridViewModel(
 
     private val _events = Channel<GridEvent>(Channel.BUFFERED)
     val events: Flow<GridEvent> = _events.receiveAsFlow()
+
+    private val _offlinePrompt = MutableStateFlow<OfflinePrompt?>(null)
+
+    /** Boîte de dialogue d'une action hors ligne (gros lot, attente du Wi-Fi, espace, dernière copie). */
+    val offlinePrompt: StateFlow<OfflinePrompt?> = _offlinePrompt.asStateFlow()
+
+    private val _sharePreparation = MutableStateFlow<GridSharePreparation?>(null)
+
+    /** Téléchargement en cours avant un partage (null sinon). */
+    val sharePreparation: StateFlow<GridSharePreparation?> = _sharePreparation.asStateFlow()
+    private var shareJob: Job? = null
 
     /**
      * Identifiants complets (base de données) des jours dont l'en-tête a été touché : la pagination
@@ -310,17 +358,196 @@ abstract class MediaGridViewModel(
         return local
     }
 
-    fun share() {
+    // --- Copies hors ligne ---
+
+    /** « Conserver hors ligne » pour la sélection (gros lot : confirmation d'abord). */
+    fun keepOffline() = keep(_selection.value.toList(), confirmed = false)
+
+    /** Gros lot confirmé par l'utilisateur. */
+    fun confirmLargeBatch(ids: List<Long>) = keep(ids, confirmed = true)
+
+    private fun keep(ids: List<Long>, confirmed: Boolean) {
+        if (ids.isEmpty()) return
         viewModelScope.launch {
-            val local = localSelection(notifySkipped = true)
-            if (local.isEmpty()) return@launch
-            if (local.size > MAX_SHARE) {
+            val result = try {
+                deps.offline.keepOffline(ids, confirmed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch toast(R.string.common_error_generic)
+            }
+            val feedback = keepFeedback(result, ids)
+            showOfflineFeedback(feedback)
+            if (feedback !is OfflineFeedback.Prompt || feedback.prompt is OfflinePrompt.WaitingForWifi) exitSelectionMode()
+        }
+    }
+
+    /** « Télécharger maintenant » : la file en attente du Wi-Fi utilise le réseau mobile. */
+    fun downloadOfflineNow() {
+        viewModelScope.launch { runCatching { deps.offline.downloadNow() } }
+    }
+
+    /** « Libérer l'espace » : immédiat, sauf s'il y a des dernières copies (confirmation). */
+    fun releaseOffline() {
+        val ids = _selection.value.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            // Compte impossible : rien n'est supprimé (une dernière copie l'aurait été sans confirmation).
+            val lastCopies = try {
+                deps.offline.lastCopiesAmong(ids)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            when (val step = releaseStep(ids, lastCopies)) {
+                ReleaseStep.Release -> release(ids)
+                is ReleaseStep.Confirm -> _offlinePrompt.value = step.prompt
+                ReleaseStep.Abort -> toast(R.string.offline_release_check_failed)
+            }
+        }
+    }
+
+    /** Libération de dernières copies confirmée. */
+    fun confirmRelease(ids: List<Long>) = release(ids)
+
+    private fun release(ids: List<Long>) {
+        viewModelScope.launch {
+            val released = try {
+                deps.offline.release(ids)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch toast(R.string.common_error_generic)
+            }
+            emit(GridEvent.Message(GridMessage.Plural(R.plurals.offline_released, released, listOf(released))))
+            exitSelectionMode()
+        }
+    }
+
+    fun dismissOfflinePrompt() {
+        _offlinePrompt.value = null
+    }
+
+    /** L'autorisation des notifications a été demandée (une seule fois). */
+    fun markNotificationsAsked() {
+        viewModelScope.launch { runCatching { deps.settingsRepository.setOfflineNotificationsAsked(true) } }
+    }
+
+    private fun showOfflineFeedback(feedback: OfflineFeedback) {
+        when (feedback) {
+            is OfflineFeedback.Prompt -> _offlinePrompt.value = feedback.prompt
+            is OfflineFeedback.Text -> toast(feedback.resId)
+            is OfflineFeedback.Plural ->
+                emit(GridEvent.Message(GridMessage.Plural(feedback.resId, feedback.count, listOf(feedback.count))))
+        }
+    }
+
+    /**
+     * Partage la sélection : fichiers locaux et copies hors ligne tels quels, éléments uniquement
+     * sur OneDrive après téléchargement de leur original (compte connecté, au plus
+     * [MAX_SHARE_CLOUD_ITEMS] éléments et [MAX_SHARE_CLOUD_BYTES] octets, progression annulable).
+     */
+    fun share() {
+        if (shareJob?.isActive == true) return
+        shareJob = viewModelScope.launch {
+            val all = selectedSummaries()
+            val local = localActionTargets(all)
+            val nonLocal = all.filter { !isLocalActionTarget(it.hasLocal, it.uri != null) }
+            // Copies hors ligne intactes : partagées sans téléchargement ; sinon repli sur OneDrive.
+            val offlineCopies = withContext(deps.ioDispatcher) {
+                nonLocal.filter { it.hasOffline }.mapNotNull { summary ->
+                    val details = deps.mediaRepository.getMedia(summary.id) ?: return@mapNotNull null
+                    val copy = details.offlineCopy?.takeIf { PlaybackSourceResolver.isOfflineFileUsable(it) } ?: return@mapNotNull null
+                    details to copy
+                }
+            }
+            val offlineIds = offlineCopies.mapTo(HashSet()) { it.first.id }
+            val cloud = nonLocal.filter { it.id !in offlineIds && it.hasCloud }
+            if (local.size + offlineCopies.size > MAX_SHARE) {
                 emit(GridEvent.Message(GridMessage.Plural(R.plurals.grid_share_limit, MAX_SHARE, listOf(MAX_SHARE))))
                 return@launch
             }
-            emit(GridEvent.Share(local.mapNotNull { it.uri }, local.map { it.mimeType }))
+            val cloudAllowed = cloud.isNotEmpty() && deps.cloudAccess.canAccess()
+            if (cloudAllowed && cloud.size > MAX_SHARE_CLOUD_ITEMS) {
+                // Refus avant de lire les détails des éléments.
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.share_cloud_too_many, MAX_SHARE_CLOUD_ITEMS, listOf(MAX_SHARE_CLOUD_ITEMS))))
+                return@launch
+            }
+            val targets = if (cloudAllowed) {
+                withContext(deps.ioDispatcher) {
+                    cloud.mapNotNull { summary -> deps.mediaRepository.getMedia(summary.id)?.let(::cloudFileTargetOf) }
+                }
+            } else {
+                emptyList()
+            }
+            val candidates = local.map { ShareCandidate(it.id, hasLocalFile = true, offlinePath = null, cloudItemId = null, sizeBytes = 0) } +
+                offlineCopies.map { (details, copy) ->
+                    ShareCandidate(details.id, hasLocalFile = false, offlinePath = copy.file.path, cloudItemId = null, sizeBytes = copy.sizeBytes)
+                } +
+                targets.map { ShareCandidate(it.mediaId, hasLocalFile = false, offlinePath = null, cloudItemId = it.itemId, sizeBytes = it.sizeBytes) }
+            val plan = planShare(candidates, cloudAllowed)
+            when (plan.refusal) {
+                ShareRefusal.TOO_MANY -> return@launch emit(
+                    GridEvent.Message(GridMessage.Plural(R.plurals.share_cloud_too_many, MAX_SHARE_CLOUD_ITEMS, listOf(MAX_SHARE_CLOUD_ITEMS))),
+                )
+                ShareRefusal.TOO_LARGE -> return@launch toast(R.string.share_cloud_too_large)
+                null -> Unit
+            }
+            if (plan.local.isEmpty() && plan.offline.isEmpty() && plan.toDownload.isEmpty()) {
+                return@launch toast(if (cloud.isNotEmpty() && !cloudAllowed) R.string.share_cloud_signed_out else R.string.common_cloud_only_not_supported)
+            }
+            if (cloud.isNotEmpty() && !cloudAllowed) {
+                emit(GridEvent.Message(GridMessage.Plural(R.plurals.share_cloud_skipped_signed_out, cloud.size, listOf(cloud.size))))
+            }
+            val uris = ArrayList<Uri>(local.mapNotNull { it.uri })
+            val mimeTypes = ArrayList<String?>(local.filter { it.uri != null }.map { it.mimeType })
+            try {
+                for ((details, copy) in offlineCopies) {
+                    uris += deps.shareUris.uriFor(copy.file, details.displayName)
+                    mimeTypes += details.mimeType
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch toast(R.string.common_error_generic)
+            }
+            if (targets.isNotEmpty()) {
+                val total = plan.downloadBytes
+                _sharePreparation.value = GridSharePreparation(targets.size, 0, total)
+                try {
+                    var before = 0L
+                    for (target in targets) {
+                        var lastPercent = -1
+                        val file = deps.cloudOriginals.ensureOriginal(target) { done, _ ->
+                            val percent = progressPercent(before + done, total)
+                            if (percent != lastPercent) {
+                                lastPercent = percent
+                                _sharePreparation.update { it?.copy(done = before + done) }
+                            }
+                        }
+                        uris += deps.shareUris.uriFor(file, target.displayName)
+                        mimeTypes += target.mimeType
+                        before += target.sizeBytes.coerceAtLeast(0)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@launch toast(downloadErrorMessage(downloadErrorOf(e) ?: DownloadError.SERVER))
+                } finally {
+                    _sharePreparation.value = null
+                }
+            }
+            emit(GridEvent.Share(uris, mimeTypes))
             exitSelectionMode()
         }
+    }
+
+    /** Annule le téléchargement qui précède un partage. */
+    fun cancelSharePreparation() {
+        shareJob?.cancel()
+        shareJob = null
+        _sharePreparation.value = null
     }
 
     /** Ajoute la sélection aux favoris, ou l'en retire si tous les éléments y sont déjà. */

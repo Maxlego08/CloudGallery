@@ -1,11 +1,13 @@
 package fr.eva.cloudgallery.data.cloud.graph
 
 import fr.eva.cloudgallery.data.cloud.sync.DELTA_SELECT
+import fr.eva.cloudgallery.domain.model.CloudDownloadInfo
 import fr.eva.cloudgallery.domain.model.CloudErrorCode
 import fr.eva.cloudgallery.domain.model.CloudException
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okio.BufferedSource
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,6 +52,32 @@ class GraphApi @Inject constructor(
         read(body.source(), body.contentType()?.let { "${it.type}/${it.subtype}" })
     }
 
+    /**
+     * Taille, version et URL de téléchargement temporaire (`@microsoft.graph.downloadUrl`) d'un
+     * élément. L'URL pré-authentifiée vaut un jeton : elle n'est ni journalisée ni persistée, et
+     * une réponse illisible est signalée sans son contenu (qui pourrait la contenir).
+     */
+    suspend fun downloadInfo(itemId: String): CloudDownloadInfo =
+        http.get(downloadInfoUrl(itemId), maxRetries = DOWNLOAD_INFO_MAX_RETRIES) { response ->
+            val dto = try {
+                GraphJson.decodeFromString(DownloadInfoDto.serializer(), response.body.string())
+            } catch (_: SerializationException) {
+                throw CloudException(CloudErrorCode.SERVER)
+            } catch (_: IllegalArgumentException) {
+                throw CloudException(CloudErrorCode.SERVER)
+            }
+            val url = dto.downloadUrl?.takeIf { isDownloadUrlAcceptable(it) }
+                ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("URL de téléchargement absente"))
+            CloudDownloadInfo(
+                itemId = dto.id,
+                sizeBytes = dto.size ?: 0L,
+                cTag = dto.cTag,
+                eTag = dto.eTag,
+                driveId = dto.parentReference?.driveId,
+                url = url,
+            )
+        }
+
     private suspend fun <T> getJson(url: String, deserializer: DeserializationStrategy<T>): T =
         http.get(url) { response ->
             val body = response.body.string()
@@ -67,6 +95,9 @@ class GraphApi @Inject constructor(
         private const val ACCEPT_IMAGE = "image/*"
         private const val THUMBNAIL_MAX_RETRIES = 1
 
+        /** Demandée juste avant une lecture : quelques nouvelles tentatives seulement. */
+        private const val DOWNLOAD_INFO_MAX_RETRIES = 2
+
         /** Une miniature pèse quelques dizaines à centaines de Ko : au-delà, réponse inattendue. */
         private const val THUMBNAIL_MAX_BYTES = 16L * 1024 * 1024
     }
@@ -82,6 +113,35 @@ internal fun thumbnailContentUrl(itemId: String, size: String): String =
         .addPathSegment("content")
         .build()
         .toString()
+
+/**
+ * Champs demandés pour un téléchargement : l'annotation `@microsoft.graph.downloadUrl` n'est
+ * renvoyée que si elle est sélectionnée. `parentReference` donne le lecteur de l'élément.
+ */
+internal const val DOWNLOAD_SELECT = "id,size,cTag,eTag,parentReference,@microsoft.graph.downloadUrl"
+
+/**
+ * URL de `GET /me/drive/items/{id}?$select=…` ([DOWNLOAD_SELECT]). L'identifiant est encodé comme
+ * un segment de chemin ; `$select`, les virgules et `@` restent littéraux. [selectParam] permet de
+ * passer à `select` (forme sans `$` de l'exemple de la documentation) si l'appareil montre que
+ * `$select` ne renvoie pas l'annotation.
+ */
+internal fun downloadInfoUrl(itemId: String, selectParam: String = "\$select"): String =
+    "${GraphApi.GRAPH_BASE}/me/drive/items".toHttpUrl().newBuilder()
+        .addPathSegment(itemId)
+        .addEncodedQueryParameter(selectParam, DOWNLOAD_SELECT)
+        .build()
+        .toString()
+
+/**
+ * URL de téléchargement utilisable : HTTPS uniquement (elle transporte une autorisation
+ * temporaire), et jamais l'hôte Microsoft Graph (le jeton Bearer n'y est jamais joint, mais un
+ * lien Graph n'a rien à faire ici).
+ */
+internal fun isDownloadUrlAcceptable(url: String): Boolean {
+    val parsed = url.toHttpUrlOrNull() ?: return false
+    return parsed.isHttps && !isTrustedGraphUrl(parsed)
+}
 
 /**
  * URL du delta initial (tout le lecteur). `$select` et les virgules restent littéraux, comme

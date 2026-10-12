@@ -103,6 +103,32 @@ class GraphRetryLogicTest {
     }
 
     @Test
+    fun downloadInfoUrl_encodesItemId_andKeepsSelectLiteral() {
+        assertEquals(
+            "https://graph.microsoft.com/v1.0/me/drive/items/ABC123!456?\$select=$DOWNLOAD_SELECT",
+            downloadInfoUrl("ABC123!456"),
+        )
+        assertTrue(downloadInfoUrl("ABC123!456").endsWith("id,size,cTag,eTag,parentReference,@microsoft.graph.downloadUrl"))
+        // Identifiant inattendu : encodé comme un segment, jamais interprété comme un chemin.
+        val odd = downloadInfoUrl("a b/../c")
+        assertTrue(odd.startsWith("https://graph.microsoft.com/v1.0/me/drive/items/a%20b%2F..%2Fc?"))
+        assertTrue(isTrustedGraphUrl(odd))
+        // Forme documentée sans « $ », si l'appareil montre que `$select` ignore l'annotation.
+        assertEquals(
+            "https://graph.microsoft.com/v1.0/me/drive/items/X?select=$DOWNLOAD_SELECT",
+            downloadInfoUrl("X", selectParam = "select"),
+        )
+    }
+
+    @Test
+    fun downloadUrl_mustBeHttps_andNeverGraph() {
+        assertTrue(isDownloadUrlAcceptable("https://public.ch.files.1drv.com/y4m/clip.mp4?tempauth=x"))
+        assertFalse(isDownloadUrlAcceptable("http://public.ch.files.1drv.com/y4m/clip.mp4"))
+        assertFalse(isDownloadUrlAcceptable("https://graph.microsoft.com/v1.0/me/drive/items/X/content"))
+        assertFalse(isDownloadUrlAcceptable("not a url"))
+    }
+
+    @Test
     fun errorCodeForStatus_mapsToUserFacingCodes() {
         assertEquals(CloudErrorCode.AUTH_REQUIRED, errorCodeForStatus(401))
         assertEquals(CloudErrorCode.DECLINED, errorCodeForStatus(403))

@@ -18,6 +18,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import fr.eva.cloudgallery.data.cloud.CloudAccessGuard
+import fr.eva.cloudgallery.data.cloud.content.ShareUriProvider
+import fr.eva.cloudgallery.data.cloud.stream.CloudStreamSourceFactory
+import fr.eva.cloudgallery.data.cloud.stream.RemoteStream
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.repository.MediaRepository
@@ -71,6 +75,9 @@ class VideoPlayerViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val settingsRepository: SettingsRepository,
     private val positionRepository: PlaybackPositionRepository,
+    private val cloudAccess: CloudAccessGuard,
+    private val cloudStreams: CloudStreamSourceFactory,
+    private val shareUris: ShareUriProvider,
     @ApplicationScope private val applicationScope: CoroutineScope,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
@@ -102,6 +109,9 @@ class VideoPlayerViewModel @Inject constructor(
     private var lastSaveAt = 0L
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
+
+    /** Lecture en streaming OneDrive en cours (null pour un fichier local). */
+    private var remote: RemoteStream? = null
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -142,8 +152,15 @@ class VideoPlayerViewModel @Inject constructor(
 
         override fun onPlayerError(error: PlaybackException) {
             savePosition()
+            // Les échecs OneDrive (URL de lecture) sont dans la chaîne des causes ; l'URL de
+            // téléchargement n'apparaît jamais dans l'erreur (URI stable rapportée par Media3).
+            val cloudFailure = VideoPlayerLogic.cloudFailureOf(generateSequence(error.cause) { it.cause })
             _uiState.update {
-                it.copy(error = VideoPlayerLogic.classifyError(error.errorCode), isBuffering = false, isPlaying = false)
+                it.copy(
+                    error = VideoPlayerLogic.classifyError(error.errorCode, cloudFailure),
+                    isBuffering = false,
+                    isPlaying = false,
+                )
             }
         }
     }
@@ -188,24 +205,69 @@ class VideoPlayerViewModel @Inject constructor(
                     aspectRatio = it.aspectRatio ?: ratio,
                 )
             }
-            when (val source = PlaybackSourceResolver.resolve(details)) {
+            // Copie hors ligne vérifiée (présente, taille attendue) sur le dispatcher d'E/S.
+            val offlineOk = withContext(ioDispatcher) { PlaybackSourceResolver.isOfflineFileUsable(details.offlineCopy) }
+            // Accès OneDrive vérifié seulement si la lecture en dépend (compte, autre compte, build).
+            val remoteAllowed = PlaybackSourceResolver.needsRemote(details, offlineOk) && cloudAccess.canAccess()
+            when (val source = PlaybackSourceResolver.resolve(details, remoteAllowed, offlineOk)) {
                 is PlaybackSource.Local -> {
-                    val saved = withContext(ioDispatcher) {
-                        runCatching { positionRepository.get(mediaId) }.getOrDefault(0L)
-                    }
-                    val autoPlay = runCatching { settingsRepository.settings.first().autoPlayVideos }.getOrDefault(true)
-                    val start = VideoPlayerLogic.resumePosition(saved, details.durationMs)
+                    val (start, autoPlay) = startParameters(details.durationMs)
                     _uiState.update { it.copy(loading = false, uri = source.uri, positionMs = start) }
+                    remote = null
                     player.setMediaItem(PlaybackSourceResolver.toMediaItem(source), start)
                     player.playWhenReady = autoPlay
                     player.prepare()
                     prepared = true
                 }
 
-                PlaybackSource.Unavailable ->
-                    _uiState.update { it.copy(loading = false, error = PlaybackErrorKind.CLOUD_ONLY) }
+                is PlaybackSource.Offline -> {
+                    val (start, autoPlay) = startParameters(details.durationMs)
+                    // « Ouvrir avec » : URI content:// du FileProvider (lecture seule), jamais file://.
+                    val openWithUri = try {
+                        shareUris.uriFor(source.file.file, details.displayName)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    _uiState.update { it.copy(loading = false, uri = openWithUri, positionMs = start) }
+                    remote = null
+                    player.setMediaItem(PlaybackSourceResolver.toMediaItem(source), start)
+                    player.playWhenReady = autoPlay
+                    player.prepare()
+                    prepared = true
+                }
+
+                is PlaybackSource.Remote -> {
+                    val (start, autoPlay) = startParameters(details.durationMs)
+                    // « Ouvrir avec » reste masqué : aucune URI partageable pour un flux OneDrive.
+                    _uiState.update { it.copy(loading = false, uri = null, positionMs = start) }
+                    val stream = cloudStreams.create(source.itemId, mediaId)
+                    remote = stream
+                    // Réseau (URL temporaire puis HTTP Range) : uniquement sur le thread de chargement de Media3.
+                    player.setMediaSource(stream.source, start)
+                    player.playWhenReady = autoPlay
+                    player.prepare()
+                    prepared = true
+                }
+
+                is PlaybackSource.Unavailable -> _uiState.update {
+                    it.copy(
+                        loading = false,
+                        error = VideoPlayerLogic.unavailableError(source.reason, cloudAccess.configured),
+                    )
+                }
             }
         }
+    }
+
+    /** Position de reprise mémorisée et lecture automatique (réglage). */
+    private suspend fun startParameters(durationMs: Long): Pair<Long, Boolean> {
+        val saved = withContext(ioDispatcher) {
+            runCatching { positionRepository.get(mediaId) }.getOrDefault(0L)
+        }
+        val autoPlay = runCatching { settingsRepository.settings.first().autoPlayVideos }.getOrDefault(true)
+        return VideoPlayerLogic.resumePosition(saved, durationMs) to autoPlay
     }
 
     private suspend fun loadExternal(uri: Uri) {
@@ -281,15 +343,27 @@ class VideoPlayerViewModel @Inject constructor(
         player.volume = if (player.volume == 0f) 1f else 0f
     }
 
-    /** Relance après une erreur : nouvelle préparation à la position courante, ou rechargement complet. */
+    /**
+     * Relance après une erreur : nouvelle préparation à la position courante (avec une nouvelle
+     * URL de téléchargement pour un flux OneDrive), ou rechargement complet.
+     */
     fun retry() {
         _uiState.update { it.copy(error = null) }
         if (prepared && player.currentMediaItem != null) {
+            remote?.invalidateUrl()
             player.prepare()
             player.play()
         } else {
             load()
         }
+    }
+
+    /**
+     * Retour sur le lecteur (par exemple après l'écran Compte) alors qu'une connexion OneDrive
+     * était demandée : nouvel essai, qui réussit si le compte est désormais connecté.
+     */
+    fun retryIfSignInPending() {
+        if (_uiState.value.error == PlaybackErrorKind.AUTH_REQUIRED) retry()
     }
 
     /** Sauvegarde la position (portée applicative : survit à la fermeture de l'écran). */

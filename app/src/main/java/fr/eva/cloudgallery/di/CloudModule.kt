@@ -7,12 +7,14 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import fr.eva.cloudgallery.data.cloud.CloudSessionCoordinator
 import fr.eva.cloudgallery.data.cloud.auth.MsalAuthService
+import fr.eva.cloudgallery.data.cloud.offline.OfflineRepositoryImpl
 import fr.eva.cloudgallery.data.cloud.sync.OneDriveSyncer
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailCache
 import fr.eva.cloudgallery.data.cloud.thumb.CoilCloudThumbnailCache
 import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
 import fr.eva.cloudgallery.domain.repository.CloudMediaSyncer
 import fr.eva.cloudgallery.domain.repository.CloudTokenProvider
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -37,6 +39,9 @@ abstract class CloudModule {
 
     @Binds @Singleton
     abstract fun bindCloudThumbnailCache(impl: CoilCloudThumbnailCache): CloudThumbnailCache
+
+    @Binds @Singleton
+    abstract fun bindOfflineRepository(impl: OfflineRepositoryImpl): OfflineRepository
 }
 
 @Module

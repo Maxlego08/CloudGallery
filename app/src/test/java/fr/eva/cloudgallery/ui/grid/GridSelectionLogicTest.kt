@@ -6,6 +6,7 @@ import fr.eva.cloudgallery.domain.model.MediaType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import fr.eva.cloudgallery.ui.offline.OfflineMenuState
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -111,10 +112,50 @@ class GridSelectionLogicTest {
     }
 
     @Test
+    fun share_enabledForCloudItems_disabledWithoutAnyShareableItem() {
+        val selection = setOf(1L, 2L)
+        // Tout OneDrive : rien à supprimer, mais partageable (original téléchargé).
+        assertFalse(localActionsEnabled(selection, SelectionTargets(selection, local = 0, shareable = 2)))
+        assertTrue(shareEnabled(selection, SelectionTargets(selection, local = 0, shareable = 2)))
+        // Aucune source partageable (éléments masqués) : désactivé.
+        assertFalse(shareEnabled(selection, SelectionTargets(selection, local = 0, shareable = 0)))
+        // Calcul en cours ou pour une autre sélection : l'action filtre elle-même.
+        assertTrue(shareEnabled(selection, null))
+        assertTrue(shareEnabled(selection, SelectionTargets(setOf(1L), local = 0, shareable = 0)))
+        assertFalse(shareEnabled(emptySet(), null))
+        // Par défaut, partageable = local (compatibilité).
+        assertEquals(1, SelectionTargets(selection, 1).shareable)
+    }
+
+    @Test
     fun contentCoordinates_removeTopPadding() {
         // Doigt à 300 px du haut du conteneur, marge intérieure de 250 px : 50 px dans le contenu.
         assertEquals(Offset(12f, 50f), toContentCoordinates(Offset(12f, 300f), 250))
         assertEquals(Offset(0f, -20f), toContentCoordinates(Offset(0f, 230f), 250))
         assertEquals(Offset(5f, 5f), toContentCoordinates(Offset(5f, 5f), 0))
+    }
+
+    @Test
+    fun offlineMenu_onlyFromCountsOfTheSameSelection() {
+        val selection = setOf(1L, 2L)
+        // Calcul en cours (ou pour une autre sélection) : aucune entrée hors ligne.
+        assertEquals(OfflineMenuState.NONE, selectionOfflineMenu(selection, null))
+        assertEquals(
+            OfflineMenuState.NONE,
+            selectionOfflineMenu(selection, SelectionTargets(setOf(1L), local = 0, shareable = 1, keepableOffline = 1)),
+        )
+        assertEquals(
+            OfflineMenuState.KEEP,
+            selectionOfflineMenu(selection, SelectionTargets(selection, local = 0, shareable = 2, keepableOffline = 2)),
+        )
+        assertEquals(
+            OfflineMenuState.BOTH,
+            selectionOfflineMenu(selection, SelectionTargets(selection, local = 0, shareable = 2, keepableOffline = 1, withOfflineCopy = 1)),
+        )
+        assertEquals(
+            OfflineMenuState.RELEASE,
+            selectionOfflineMenu(selection, SelectionTargets(selection, local = 0, shareable = 2, withOfflineCopy = 2)),
+        )
+        assertEquals(OfflineMenuState.NONE, selectionOfflineMenu(emptySet(), SelectionTargets(emptySet(), 0, 0)))
     }
 }

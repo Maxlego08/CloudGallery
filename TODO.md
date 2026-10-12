@@ -110,23 +110,112 @@ Détail dans le README (« Vérifications sur l'appareil : OneDrive ») :
 
 - [x] Visionneuse : miniature puis aperçu OneDrive dans `CloudOnlyPage` (`ui/viewer/ViewerPages.kt`),
       fait en phase 3.
-- [ ] Visionneuse : original OneDrive au zoom profond (téléchargement à la demande).
-- [ ] Choisir le niveau d'aperçu selon la taille de l'écran, le niveau de zoom et le réseau
-      (mesuré ou non).
-- [ ] Ajouter `PlaybackSource.Remote` (`ui/video/PlaybackSource.kt`) : URL temporaire
+- [x] Visionneuse : original OneDrive au zoom profond (téléchargement à la demande, automatique sur
+      réseau non facturé, pastille « Charger l'original (x Mo) » sinon, réglage « Charger les
+      originaux sur réseau mobile »), `CloudOriginalStore` + `CdnDownloader`, aperçu zoomable.
+- [x] Choisir le niveau d'aperçu selon la taille de l'écran, l'image et le réseau (paliers 1600 /
+      2048, 1600 au plus sur réseau facturé, palier refusé par Graph abandonné).
+- [x] Ajouter `PlaybackSource.Remote` (`ui/video/PlaybackSource.kt`) : URL temporaire
       `@microsoft.graph.downloadUrl`, `ResolvingDataSource` au-dessus de `DefaultHttpDataSource`
-      (HTTP Range pour le seek) et renouvellement de l'URL à son expiration.
-- [ ] Lire en priorité une copie `OFFLINE_COPY` quand elle existe.
-- [ ] Vérifier que Media3 1.11.1 renvoie bien `ERROR_CODE_IO_*` pour les erreurs réseau, et
-      ajouter les messages correspondants.
-- [ ] Partage et « Ouvrir avec » d'un média cloud : télécharger d'abord dans le cache, puis exposer
-      le fichier via un FileProvider.
-- [ ] Téléchargements hors ligne : file `download_task` (reprise, progression, annulation, erreurs).
-      Une copie terminée devient une source `OFFLINE_COPY` et marque `hasOffline`.
-- [ ] Action « Conserver hors ligne » / « Libérer » (`pinned`) depuis la visionneuse et en sélection
-      multiple.
-- [ ] Usage « OneDrive seul » : aujourd'hui, sans permission médias, l'application n'affiche que
-      l'écran d'autorisation. Permettre de parcourir OneDrive sans accès aux photos du téléphone.
+      (HTTP Range pour le seek) et renouvellement de l'URL à son expiration (`data/cloud/stream/`,
+      `CloudDownloadUrlProvider`, garde d'accès commune `CloudAccessGuard`, journal Media3 expurgé
+      des URL).
+- [x] Lire en priorité une copie `OFFLINE_COPY` quand elle existe (`PlaybackSource.Offline`, copie
+      vérifiée hors du thread principal ; « Ouvrir avec » par le FileProvider).
+- [x] Vérifier que Media3 1.11.1 renvoie bien `ERROR_CODE_IO_*` pour les erreurs réseau (vérifié
+      dans le bytecode : 2001/2002 réseau, 2004 statut HTTP, 2000 pour une erreur du résolveur), et
+      ajouter les messages correspondants (réseau, lien, connexion requise, limitation, introuvable).
+- [x] État du réseau par défaut (`data/net/NetworkStatus`) : mesuré ou non, économiseur de données
+      (compté comme mesuré), état inconnu traité comme facturé. Utilisé par les aperçus et
+      téléchargements des tranches suivantes.
+- [x] Partage et « Ouvrir avec » d'un média cloud : téléchargement de l'original (progression
+      annulable, 20 éléments / 500 Mo), `CloudGalleryFileProvider`, CloudGallery exclue du sélecteur.
+- [x] Base v4 (`cached_file.version`, `download_task.cloudItemId` / `cTag` / `attempts`), schéma
+      exporté, `MigrationTest` 3→4, 2→4, 1→4 ; cache temporaire des originaux (1 Go, 7 jours,
+      nettoyage au démarrage) ; purge des originaux à la déconnexion (`CloudDataGeneration`).
+- [x] Message de dépassement des plafonds de partage (`share_cloud_too_large`, `share_cloud_too_many`)
+      qui propose « Conserver hors ligne » ; copies hors ligne partagées sans téléchargement.
+- [ ] Lire l'EXIF d'un original téléchargé (panneau Détails) sans passer par `MediaStore.setRequireOriginal`.
+- [x] Téléchargements hors ligne : file `download_task` (reprise par Range, progression, annulation,
+      pause après un arrêt par l'utilisateur, erreurs codées), tâche JobScheduler lancée par
+      l'utilisateur (`OfflineTransferJobService`), notification avec « Annuler ». Une copie terminée
+      (`filesDir/offline/`, exclue des sauvegardes) devient une source `OFFLINE_COPY` et marque
+      `hasOffline` ; enregistrement revérifié (purge, libération, version).
+- [x] Action « Conserver hors ligne » / « Libérer l'espace » (`pinned`) depuis la visionneuse et en
+      sélection multiple ; autorisation des notifications au premier usage ; gros lot (200 éléments /
+      1 Go) confirmé ; espace insuffisant (écran système) ; réglage « Wi-Fi uniquement » et
+      « Télécharger maintenant » ; section « Hors ligne » de l'écran Compte.
+- [x] Nouvelle version d'un élément conservé : nouveau téléchargement, l'ancienne copie reste jusqu'au
+      remplacement ; original temporaire périmé retiré.
+- [x] Déconnexion, purge des données restantes, changement de compte : moteur arrêté, copies
+      supprimées, confirmation avec le nombre de copies et de dernières copies (D3).
+- [x] Élément supprimé de OneDrive (D1) : copie masquée avec lui, jamais purgée sans décision après
+      30 jours ; carte de l'écran Compte et pastille du Menu (« Supprimer les copies » /
+      « Les conserver ») ; copie conservée visible, « Libérer » avec confirmation de dernière copie ;
+      élément revenu rattaché au même média.
+- [x] Corrections de la revue de la phase 4 : décision D1 limitée à la liste confirmée et revérifiée
+      dans la transaction ; dernières copies comptées copies masquées comprises et « Libérer »
+      abandonné si le compte échoue ; confirmations de purge désactivées tant que le nombre de copies
+      n'est pas lu (avertissement prudent en cas d'échec) ; « Télécharger maintenant » limité aux
+      tâches en file à cet instant ; réglage « Wi-Fi uniquement » appliqué aussitôt (replanification,
+      réseau vérifié avant chaque élément) ; `allocateBytes` appelé quand l'espace libre manque mais
+      est obtenable (copies et originaux) ; pause au démarrage seulement après un arrêt pendant un
+      téléchargement ; fin de travail revérifiée (`OfflineJobTracker`) ; « Libérer » / « Annuler »
+      de l'élément en cours sans arrêter le passage ; contenu plus récent que l'index en attente de
+      la synchro ; version redemandée à Graph avant une reprise Range ; mise à jour arrêtée
+      signalée et reprenable ; original jamais écrasé avant l'enregistrement du suivant ; nettoyage
+      des originaux conditionnel ; aperçu choisi une fois le réseau connu ; zoom haute résolution
+      avec les dimensions du fichier ; aperçu en cache seulement pour une copie hors ligne ; zoom
+      profond sans compte signalé ; sign-out en échec : file relancée après la fin de l'état
+      « déconnexion » ; tests `OfflineRepositoryTest`, `OfflineJobTrackerTest`,
+      `CloudOriginalLogicTest`.
+
+### Vérifications sur l'appareil (phase 4)
+Détail dans le README (« Vérifications sur l'appareil : streaming OneDrive ») :
+- [ ] `$select=id,size,cTag,eTag,parentReference,@microsoft.graph.downloadUrl` accepté avec `$` et
+      annotation renvoyée (sinon `downloadInfoUrl(selectParam = "select")`, forme de la doc).
+- [ ] Réponse 206 de l'hôte de téléchargement aux requêtes Range (seek rapide).
+- [ ] Statut HTTP renvoyé pour une URL expirée (401, 403, 404 ou 410 attendus) et durée de
+      validité réelle (URL réutilisée deux minutes au plus).
+- [ ] Logcat sans URL `files.1drv.com` ni `tempauth`, y compris après une erreur de lecture.
+- [ ] Taille d'aperçu `c2048x2048` acceptée par Graph et image réellement plus grande que
+      `c1600x1600` (sinon `CLOUD_PREVIEW_TIERS = [1600]`).
+- [ ] Original OneDrive de 50 Mpx affiché sans plantage (décodage réduit) ; orientation EXIF correcte.
+- [ ] Pastille « Charger l'original » en données mobiles et avec l'économiseur de données ;
+      chargement automatique en Wi-Fi.
+- [ ] Partage d'un original vers Gmail / Messages : nom OneDrive affiché ; « Ouvrir avec » sans
+      CloudGallery dans le sélecteur.
+- [ ] `connectedDebugAndroidTest` : `MigrationTest` (3→4, 2→4, 1→4), `CachedFileDaoTest`,
+      `CloudDataPurgerTest`, `OfflineDaoTest`, `OfflineDownloadEngineTest`, `OfflineRepositoryTest`,
+      `CloudSyncWriterTest`
+      (la suite instrumentée de la phase 3 n'a pas encore tourné non plus).
+- [ ] Copies hors ligne (détail dans le README, « Vérifications sur l'appareil : copies hors ligne ») :
+  - [ ] première demande d'autorisation des notifications, téléchargement aussi en cas de refus
+        (tâche visible dans le Gestionnaire de tâches) ;
+  - [ ] Wi-Fi uniquement : boîte « En attente du Wi-Fi », « Télécharger maintenant » en mobile,
+        économiseur de données compris ;
+  - [ ] passage du Wi-Fi au mobile en cours de téléchargement : arrêt, reprise au retour du Wi-Fi
+        (Range, fichier partiel gardé), jamais en mobile (`JobParameters.getNetwork`) ;
+  - [ ] VPN actif : la tâche démarre ;
+  - [ ] arrêt depuis le Gestionnaire de tâches : file en pause, aucune reprise automatique (vérifier
+        si `onStopJob` reçoit `STOP_REASON_USER` ou si le processus est tué : motif de sortie
+        `REASON_USER_REQUESTED` utilisé au redémarrage) ; appli balayée depuis les applis récentes
+        avec une file en attente du Wi-Fi : file toujours en attente à la réouverture ;
+  - [ ] « Télécharger maintenant » en mobile, puis nouvelle version trouvée par la synchro : la
+        nouvelle tâche attend le Wi-Fi ;
+  - [ ] « Wi-Fi uniquement » activé pendant un téléchargement en mobile : arrêt et attente du
+        Wi-Fi ; désactivé alors que la file attend le Wi-Fi : démarrage aussitôt ;
+  - [ ] « Libérer » de l'élément en cours de téléchargement : les suivants continuent ;
+  - [ ] espace presque plein avec du cache d'autres applis : copie de plusieurs Go menée à bien
+        (`allocateBytes`) ;
+  - [ ] redémarrage du téléphone avec une file en attente : reprise à l'ouverture suivante ;
+  - [ ] restrictions One UI « applis en veille » ;
+  - [ ] `parentReference.driveId` renvoyé par Graph comparé au lecteur de l'index (casse ignorée) ;
+  - [ ] nouvelle version sur OneDrive : retéléchargement, ancienne copie affichée jusque-là ;
+  - [ ] élément conservé supprimé sur OneDrive : masqué, carte au bout de 30 jours (horloge
+        avancée), « Les conserver » / « Supprimer les copies » ;
+  - [ ] déconnexion : `files/offline` vide, message avec le nombre de copies ;
+  - [ ] logcat sans URL ni nom de fichier ; `dumpsys jobscheduler` : tâche 4001 « user-initiated ».
 
 ## Phase 5 — Cache LRU, page Stockage, synchro périodique
 
@@ -144,6 +233,12 @@ Détail dans le README (« Vérifications sur l'appareil : OneDrive ») :
       d'éléments) : fait en phase 3.
 - [ ] Première énumération OneDrive reprenable après un arrêt du processus (aujourd'hui elle
       recommence depuis le début, sans perte de données).
+- [ ] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : aujourd'hui, sans permission
+      médias, l'application n'affiche que l'écran d'autorisation. Permettre de parcourir OneDrive
+      sans accès aux photos du téléphone.
+- [ ] Copies hors ligne : relancer automatiquement un nouveau téléchargement détecté par une synchro
+      en arrière-plan (aujourd'hui au premier plan seulement : la tâche lancée par l'utilisateur ne
+      peut être planifiée qu'appli visible) ; couvertures d'album et EXIF depuis la copie hors ligne.
 - [ ] Garder les lignes `cloud_folder` des dossiers supprimés (marqueur de suppression) tant que
       des sources masquées y font référence : la restauration d'un dossier pourrait alors cibler
       ses seuls descendants, au lieu de déclencher une énumération complète à chaque nouveau
@@ -240,19 +335,17 @@ animations :
 | Fichier | Note |
 |---|---|
 | `app/src/main/java/fr/eva/cloudgallery/data/repository/MediaRepositoryImpl.kt` | URI du sélecteur de photos (`content://media/picker/...`) et URI FileProvider tierces : impossible de les rattacher à une source MediaStore, la visionneuse les affiche sans index |
-| `app/src/main/java/fr/eva/cloudgallery/ui/video/PlaybackSource.kt` | `TODO(phase 4)` : `PlaybackSource.Remote` (downloadUrl temporaire, `ResolvingDataSource` + `DefaultHttpDataSource`, HTTP Range, copie hors ligne en priorité) |
-| `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ViewerPages.kt` | `TODO(phase 4)` : original OneDrive (téléchargement à la demande, zoom, lecture vidéo en streaming) |
 | `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ViewerScreen.kt` | `TODO(viewer)` : édition vidéo (découpe) non prise en charge |
 | `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ZoomableImage.kt` | `TODO(viewer)` : décodage par tuiles (`BitmapRegionDecoder`) pour les images de plus de 24 MP |
 
 ## Limitations connues (rappel)
 
-- [ ] OneDrive en lecture seule et sans originaux : pas de zoom pleine résolution, de lecture
-      vidéo, de partage, de copie ni d'« Ouvrir avec » pour un élément présent uniquement sur
-      OneDrive (phase 4).
+- [ ] OneDrive en lecture seule : un élément présent uniquement sur OneDrive peut être zoomé
+      (original), lu, partagé et ouvert ailleurs, mais ni modifié, ni supprimé, ni copié vers un
+      dossier du téléphone, même conservé hors ligne (copie de l'appli, lecture seule).
 - [ ] Doublons : un média présent sur le téléphone et sur OneDrive est deux médias (réglage
       « Afficher les éléments OneDrive dans Photos » désactivé par défaut ; fusion en phase 6).
-- [ ] Sans permission médias, OneDrive n'est pas consultable (écran d'autorisation seul).
+- [ ] Sans permission médias, OneDrive n'est pas consultable (écran d'autorisation seul ; phase 5).
 - [ ] Pas de synchro en arrière-plan : `work-runtime-ktx` et `hilt-work` sont présents mais ne
       servent pas.
 - [ ] Les favoris et albums personnalisés sont propres à l'application. Ils sont perdus à la

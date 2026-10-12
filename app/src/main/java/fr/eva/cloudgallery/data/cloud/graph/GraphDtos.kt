@@ -120,6 +120,22 @@ data class QuotaDto(
     val state: String? = null,
 )
 
+/**
+ * Réponse de `GET /me/drive/items/{id}?$select=…,@microsoft.graph.downloadUrl`. Classe ordinaire
+ * (pas une data class) : [toString] ne contient jamais l'URL pré-authentifiée.
+ */
+@Serializable
+class DownloadInfoDto(
+    val id: String,
+    val size: Long? = null,
+    val cTag: String? = null,
+    val eTag: String? = null,
+    val parentReference: ItemReferenceDto? = null,
+    @SerialName("@microsoft.graph.downloadUrl") val downloadUrl: String? = null,
+) {
+    override fun toString(): String = "DownloadInfoDto(id=$id, size=$size)"
+}
+
 @Serializable
 data class GraphErrorEnvelope(val error: GraphErrorDto? = null)
 

@@ -10,8 +10,10 @@ import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
 import fr.eva.cloudgallery.ui.main.MediaSyncCoordinator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -24,6 +26,7 @@ class SettingsViewModel @Inject constructor(
     indexer: LocalMediaIndexer,
     private val syncCoordinator: MediaSyncCoordinator,
     private val cloudAccounts: CloudAccountRepository,
+    private val offline: dagger.Lazy<OfflineRepository>,
 ) : ViewModel() {
 
     /** null tant que les réglages ne sont pas chargés (évite d'afficher des valeurs par défaut erronées). */
@@ -53,6 +56,21 @@ class SettingsViewModel @Inject constructor(
     fun setUseTrash(enabled: Boolean) = update { settingsRepository.setUseTrash(enabled) }
     fun setConfirmBeforeDelete(enabled: Boolean) = update { settingsRepository.setConfirmBeforeDelete(enabled) }
     fun setShowCloudInPhotos(enabled: Boolean) = update { settingsRepository.setShowCloudInPhotos(enabled) }
+    fun setLoadOriginalsOnMobileData(enabled: Boolean) = update { settingsRepository.setLoadOriginalsOnMobileData(enabled) }
+    /**
+     * « Wi-Fi uniquement » : le travail de téléchargement en cours ou planifié est aussitôt adapté
+     * (appli visible : replanification acceptée par le système).
+     */
+    fun setOfflineWifiOnly(enabled: Boolean) = update {
+        settingsRepository.setOfflineWifiOnly(enabled)
+        try {
+            offline.get().onNetworkPolicyChanged()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Repris au prochain retour au premier plan ou à la prochaine action hors ligne.
+        }
+    }
 
     /** Relecture complète de MediaStore (portée applicative). */
     fun reindexAll() = syncCoordinator.syncNow(full = true)

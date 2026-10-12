@@ -4,6 +4,7 @@ import android.app.Activity
 import android.util.Log
 import fr.eva.cloudgallery.data.cloud.auth.MsalAuthService
 import fr.eva.cloudgallery.data.cloud.graph.GraphApi
+import fr.eva.cloudgallery.data.cloud.offline.OfflineRepositoryImpl
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 import fr.eva.cloudgallery.domain.model.CloudAuthRequiredException
@@ -44,6 +45,7 @@ class CloudSessionCoordinator @Inject constructor(
     private val purger: CloudDataPurger,
     private val syncer: CloudMediaSyncer,
     private val graph: GraphApi,
+    private val offline: dagger.Lazy<OfflineRepositoryImpl>,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : CloudAccountRepository {
 
@@ -72,14 +74,26 @@ class CloudSessionCoordinator @Inject constructor(
         sessionMutex.withLock {
             // Etat « déconnexion » d'abord : plus aucune synchronisation ne peut démarrer.
             auth.beginSignOut()
+            var result: Result<Unit>? = null
             try {
-                syncer.exclusive {
-                    // Déconnexion MSAL d'abord : en cas d'échec, les données sont conservées.
-                    val signOut = auth.signOut()
-                    if (signOut.isFailure) signOut else purge()
+                result = syncer.exclusive {
+                    // Copies hors ligne : téléchargements arrêtés avant la déconnexion, aucun ne
+                    // peut redémarrer pendant la purge.
+                    offline.get().whileStoppedForPurge {
+                        // Déconnexion MSAL d'abord : en cas d'échec, les données sont conservées.
+                        val signOut = auth.signOut()
+                        if (signOut.isFailure) signOut else purge()
+                    }
                 }
+                result
             } finally {
-                withContext(NonCancellable) { auth.endSignOut() }
+                withContext(NonCancellable) {
+                    auth.endSignOut()
+                    // Echec : rien n'a été retiré, le compte reste connecté ; les téléchargements
+                    // en file reprennent (après endSignOut : pendant « déconnexion », l'accès au
+                    // compte est refusé et rien ne serait replanifié).
+                    if (result?.isFailure == true) offline.get().resumeIfNeeded()
+                }
             }
         }
     }.await()
@@ -91,7 +105,7 @@ class CloudSessionCoordinator @Inject constructor(
             if (auth.state.value !is CloudAccountState.SignedOut) {
                 return@withLock Result.failure(IllegalStateException("Un compte OneDrive est connecté"))
             }
-            val result = syncer.exclusive { purge() }
+            val result = syncer.exclusive { offline.get().whileStoppedForPurge { purge() } }
             withContext(NonCancellable) { auth.refresh() }
             result
         }
@@ -103,7 +117,7 @@ class CloudSessionCoordinator @Inject constructor(
             if (auth.state.value !is CloudAccountState.SignedIn || !syncer.state.value.accountMismatch) {
                 return@withLock Result.failure(IllegalStateException("Aucun changement de compte OneDrive à confirmer"))
             }
-            val result = syncer.exclusive { purge() }
+            val result = syncer.exclusive { offline.get().whileStoppedForPurge { purge() } }
             if (result.isSuccess) syncer.requestSync(CloudSyncReason.MANUAL)
             result
         }

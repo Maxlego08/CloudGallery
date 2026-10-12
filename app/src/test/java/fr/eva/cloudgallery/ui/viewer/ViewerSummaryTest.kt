@@ -49,4 +49,14 @@ class ViewerSummaryTest {
         val refreshed = refreshedSummary(cached, details("old"))
         assertEquals(cached, refreshed)
     }
+
+    @Test
+    fun keptOffline_updatesFilmstripBadge() {
+        val withCopy = details("old").let { d ->
+            d.copy(sources = d.sources + MediaSourceInfo(2, SourceKind.OFFLINE_COPY, "ITEM!1", null, null, null, null, 1, 10, "old"))
+        }
+        val refreshed = refreshedSummary(cached, withCopy)
+        assertTrue(refreshed.hasOffline)
+        assertFalse(refreshedSummary(refreshed, details("old")).hasOffline)
+    }
 }

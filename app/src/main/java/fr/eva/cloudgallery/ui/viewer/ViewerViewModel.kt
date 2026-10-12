@@ -2,6 +2,7 @@ package fr.eva.cloudgallery.ui.viewer
 
 import android.content.IntentSender
 import android.net.Uri
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -9,32 +10,60 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import fr.eva.cloudgallery.R
+import fr.eva.cloudgallery.data.cloud.CloudAccessGuard
+import fr.eva.cloudgallery.data.cloud.content.CloudFileTarget
+import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
+import fr.eva.cloudgallery.data.cloud.content.ShareUriProvider
+import fr.eva.cloudgallery.data.cloud.content.cloudFileTargetOf
+import fr.eva.cloudgallery.data.cloud.content.downloadErrorOf
+import fr.eva.cloudgallery.data.cloud.thumb.OriginalDecision
+import fr.eva.cloudgallery.data.cloud.thumb.originalDecision
+import fr.eva.cloudgallery.data.net.NetworkStatus
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AlbumType
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.DownloadError
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.model.MediaType
+import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.repository.AlbumRepository
 import fr.eva.cloudgallery.domain.repository.FavoritesRepository
 import fr.eva.cloudgallery.domain.repository.LocalMediaIndexer
 import fr.eva.cloudgallery.domain.repository.LocalMediaWriter
 import fr.eva.cloudgallery.domain.repository.MediaRepository
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
 import fr.eva.cloudgallery.ui.navigation.ViewerRoute
+import fr.eva.cloudgallery.ui.offline.OfflineFeedback
+import fr.eva.cloudgallery.ui.offline.OfflinePrompt
+import fr.eva.cloudgallery.ui.offline.keepFeedback
+import fr.eva.cloudgallery.ui.offline.ReleaseStep
+import fr.eva.cloudgallery.ui.offline.releaseStep
+import fr.eva.cloudgallery.ui.video.PlaybackSourceResolver
+import fr.eva.cloudgallery.ui.util.ShareCandidate
+import fr.eva.cloudgallery.ui.util.downloadErrorMessage
+import fr.eva.cloudgallery.ui.util.planShare
+import fr.eva.cloudgallery.ui.util.progressPercent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -48,8 +77,17 @@ sealed interface ViewerEvent {
     /** Demande de consentement système (suppression / écriture) à lancer avec StartIntentSenderForResult. */
     data class LaunchIntentSender(val sender: IntentSender) : ViewerEvent
     data class Toast(@StringRes val message: Int, val arg: String? = null) : ViewerEvent
+
+    /** Message court au pluriel ([count] sert de quantité et d'argument). */
+    data class PluralToast(@PluralsRes val message: Int, val count: Int) : ViewerEvent
     /** Le recadrage a été enregistré : fermer l'éditeur. */
     data object CropSaved : ViewerEvent
+
+    /** Ouvrir la feuille de partage (URI `content://` en lecture seule). */
+    data class Share(val uris: List<Uri>, val mimeTypes: List<String?>) : ViewerEvent
+
+    /** Ouvrir le média dans une autre appli (URI `content://` en lecture seule). */
+    data class OpenWith(val uri: Uri, val mimeType: String?) : ViewerEvent
 }
 
 /** Etat EXIF du média dont le panneau Détails est ouvert. */
@@ -71,7 +109,12 @@ class ViewerViewModel @Inject constructor(
     private val writer: LocalMediaWriter,
     private val indexer: LocalMediaIndexer,
     private val exifReader: ExifReader,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
+    private val originals: CloudOriginalStore,
+    private val offline: OfflineRepository,
+    private val shareUris: ShareUriProvider,
+    private val cloudAccess: CloudAccessGuard,
+    private val network: NetworkStatus,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -118,6 +161,41 @@ class ViewerViewModel @Inject constructor(
 
     private var pendingAction: PendingAction? = null
 
+    private val _cloudOriginal = MutableStateFlow(CloudOriginalState(_currentId.value, CloudOriginalUi.Idle))
+
+    /** Original OneDrive de l'image courante (aperçu, téléchargement, prêt, à confirmer, échec). */
+    val cloudOriginal: StateFlow<CloudOriginalState> = _cloudOriginal.asStateFlow()
+    private var originalJob: Job? = null
+
+    private val _sharePreparation = MutableStateFlow<SharePreparation?>(null)
+
+    /** Téléchargement en cours avant un partage ou un « Ouvrir avec » (null sinon). */
+    val sharePreparation: StateFlow<SharePreparation?> = _sharePreparation.asStateFlow()
+    private var shareJob: Job? = null
+
+    /**
+     * Réseau facturé (données mobiles, économiseur de données) : aperçus OneDrive plus petits.
+     * Null tant que l'état réel n'est pas lu (les pages attendent avant de choisir leur palier) :
+     * lecture directe d'abord, puis suivi des changements (la valeur initiale du flux partagé,
+     * qui peut être un état « inconnu », est ignorée).
+     */
+    val costlyNetwork: StateFlow<Boolean?> = flow {
+        emit(network.current().costly)
+        emitAll(network.state.drop(1).map { it.costly })
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Etat hors ligne du média courant (copie, téléchargement en file ou en cours, échec). */
+    val offlineState: StateFlow<OfflineItemState> = _currentId
+        .flatMapLatest { offline.observeItem(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OfflineItemState.NONE)
+
+    private val _offlinePrompt = MutableStateFlow<OfflinePrompt?>(null)
+
+    /** Boîte de dialogue d'une action hors ligne (gros lot, attente du Wi-Fi, espace, dernière copie). */
+    val offlinePrompt: StateFlow<OfflinePrompt?> = _offlinePrompt.asStateFlow()
+
     init {
         // Tient la bande de miniatures à jour après une modification du média courant (rotation,
         // favori, fichier local apparu ou retiré, nouveau contenu OneDrive).
@@ -128,6 +206,32 @@ class ViewerViewModel @Inject constructor(
                 val refreshed = refreshedSummary(cached, media)
                 if (refreshed != cached) _summaries.update { it + (media.id to refreshed) }
             }
+        }
+        // Nouvelle image courante, ou nouvelle version de l'image (synchro) : l'original suivi
+        // jusque-là est abandonné ; un original déjà téléchargé et à jour est affiché directement.
+        viewModelScope.launch {
+            currentMedia
+                .filterNotNull()
+                .map { it.id to cloudOriginalTargetOf(it) }
+                .distinctUntilChanged()
+                .collectLatest { (id, target) ->
+                    originalJob?.cancel()
+                    originalJob = null
+                    _cloudOriginal.value = CloudOriginalState(id, CloudOriginalUi.Idle)
+                    if (target == null) return@collectLatest
+                    val file = try {
+                        originals.existing(target)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (file != null) {
+                        _cloudOriginal.update {
+                            if (it.mediaId == id) CloudOriginalState(id, CloudOriginalUi.Ready(Uri.fromFile(file), file.name)) else it
+                        }
+                    }
+                }
         }
     }
 
@@ -173,6 +277,254 @@ class ViewerViewModel @Inject constructor(
             runCatchingIo { albumRepository.addToAlbum(albumId, listOf(id)) }
                 .onSuccess { send(ViewerEvent.Toast(R.string.viewer_added_to_album)) }
                 .onFailure { send(ViewerEvent.Toast(R.string.common_error_generic)) }
+        }
+    }
+
+    // --- Original OneDrive ------------------------------------------------------------------
+
+    /**
+     * Zoom profond sur l'aperçu OneDrive de [mediaId] ([wanted]) ou retour en arrière : décide
+     * s'il faut l'original (voir [originalDecision]) et le charge automatiquement, ou le propose
+     * sur un réseau facturé (sauf réglage contraire). Sans compte utilisable : aperçu seul.
+     */
+    fun onHiResWanted(mediaId: Long, wanted: Boolean, requestedLongPx: Int, previewSide: Int) {
+        val media = currentMedia.value?.takeIf { it.id == mediaId } ?: return
+        val target = cloudOriginalTargetOf(media) ?: return
+        viewModelScope.launch {
+            val current = _cloudOriginal.value
+            if (current.mediaId != mediaId) return@launch
+            when (current.ui) {
+                is CloudOriginalUi.Downloading, is CloudOriginalUi.Ready -> return@launch
+                is CloudOriginalUi.NeedsConfirmation -> if (!wanted) {
+                    _cloudOriginal.value = CloudOriginalState(mediaId, CloudOriginalUi.Idle)
+                    return@launch
+                }
+                CloudOriginalUi.Idle, is CloudOriginalUi.Failed -> Unit
+            }
+            if (!wanted) return@launch
+            if (!cloudAccess.canAccess()) {
+                // Zoom profond sans compte utilisable (reconnexion nécessaire, autre compte) : la
+                // pastille l'explique, si l'original apporterait vraiment plus de détail.
+                val useful = originalDecision(
+                    deepZoom = true,
+                    requestedLongPx = requestedLongPx,
+                    previewSide = previewSide,
+                    imageLongPx = imageLongSide(media),
+                    costlyNetwork = false,
+                    allowOnCostly = true,
+                ) != OriginalDecision.NOT_NEEDED
+                if (useful) {
+                    _cloudOriginal.update {
+                        if (it.mediaId == mediaId) CloudOriginalState(mediaId, CloudOriginalUi.Failed(DownloadError.AUTH_REQUIRED)) else it
+                    }
+                }
+                return@launch
+            }
+            val decision = originalDecision(
+                deepZoom = true,
+                requestedLongPx = requestedLongPx,
+                previewSide = previewSide,
+                imageLongPx = imageLongSide(media),
+                costlyNetwork = network.current().costly,
+                allowOnCostly = settings.value.loadOriginalsOnMobileData,
+            )
+            if (_cloudOriginal.value.mediaId != mediaId) return@launch
+            when (decision) {
+                OriginalDecision.NOT_NEEDED -> Unit
+                OriginalDecision.AUTO -> startOriginal(target, media)
+                OriginalDecision.ASK -> _cloudOriginal.value =
+                    CloudOriginalState(mediaId, CloudOriginalUi.NeedsConfirmation(target.sizeBytes))
+            }
+        }
+    }
+
+    /** « Charger l'original » (ou nouvel essai après un échec) pour l'image courante [mediaId]. */
+    fun loadOriginal(mediaId: Long) {
+        val media = currentMedia.value?.takeIf { it.id == mediaId } ?: return
+        val target = cloudOriginalTargetOf(media) ?: return
+        if (_cloudOriginal.value.ui is CloudOriginalUi.Downloading) return
+        startOriginal(target, media)
+    }
+
+    /** Abandonne le téléchargement de l'original (l'aperçu reste affiché). */
+    fun cancelOriginal() {
+        originalJob?.cancel()
+        originalJob = null
+        _cloudOriginal.update { CloudOriginalState(it.mediaId, CloudOriginalUi.Idle) }
+    }
+
+    private fun startOriginal(target: CloudFileTarget, media: MediaDetails) {
+        val id = media.id
+        originalJob?.cancel()
+        _cloudOriginal.value = CloudOriginalState(id, CloudOriginalUi.Downloading(0, target.sizeBytes))
+        originalJob = viewModelScope.launch {
+            var lastPercent = -1
+            try {
+                val file = originals.ensureOriginal(target) { done, total ->
+                    val percent = progressPercent(done, total)
+                    if (percent != lastPercent) {
+                        lastPercent = percent
+                        _cloudOriginal.update {
+                            if (it.mediaId == id && it.ui is CloudOriginalUi.Downloading) {
+                                CloudOriginalState(id, CloudOriginalUi.Downloading(done, total))
+                            } else {
+                                it
+                            }
+                        }
+                    }
+                }
+                _cloudOriginal.update {
+                    if (it.mediaId == id) CloudOriginalState(id, CloudOriginalUi.Ready(Uri.fromFile(file), file.name)) else it
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val error = downloadErrorOf(e) ?: DownloadError.SERVER
+                _cloudOriginal.update { if (it.mediaId == id) CloudOriginalState(id, CloudOriginalUi.Failed(error)) else it }
+            }
+        }
+    }
+
+    // --- Copies hors ligne ----------------------------------------------------------------------
+
+    /** « Conserver hors ligne » (ou reprise d'un téléchargement en pause / en échec) du média courant. */
+    fun keepOffline() = keep(listOf(_currentId.value), confirmed = false)
+
+    /** Gros lot confirmé par l'utilisateur. */
+    fun confirmLargeBatch(ids: List<Long>) = keep(ids, confirmed = true)
+
+    private fun keep(ids: List<Long>, confirmed: Boolean) {
+        viewModelScope.launch {
+            val result = try {
+                offline.keepOffline(ids, confirmed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch send(ViewerEvent.Toast(R.string.common_error_generic))
+            }
+            showFeedback(keepFeedback(result, ids))
+        }
+    }
+
+    /** « Télécharger maintenant » : la file en attente du Wi-Fi utilise le réseau mobile. */
+    fun downloadOfflineNow() {
+        viewModelScope.launch { runCatchingIo { offline.downloadNow() } }
+    }
+
+    /** « Libérer l'espace » : immédiat, sauf pour une dernière copie (confirmation). */
+    fun releaseOffline() {
+        val ids = listOf(_currentId.value)
+        viewModelScope.launch {
+            // Compte impossible : rien n'est supprimé (une dernière copie l'aurait été sans confirmation).
+            val lastCopies = runCatchingIo { offline.lastCopiesAmong(ids) }.getOrNull()
+            when (val step = releaseStep(ids, lastCopies)) {
+                ReleaseStep.Release -> release(ids)
+                is ReleaseStep.Confirm -> _offlinePrompt.value = step.prompt
+                ReleaseStep.Abort -> send(ViewerEvent.Toast(R.string.offline_release_check_failed))
+            }
+        }
+    }
+
+    /** Libération d'une dernière copie confirmée. */
+    fun confirmRelease(ids: List<Long>) = release(ids)
+
+    private fun release(ids: List<Long>) {
+        viewModelScope.launch {
+            runCatchingIo { offline.release(ids) }
+                .onSuccess { send(ViewerEvent.PluralToast(R.plurals.offline_released, it)) }
+                .onFailure { send(ViewerEvent.Toast(R.string.common_error_generic)) }
+        }
+    }
+
+    /** Annule le téléchargement hors ligne du média courant (une copie déjà présente reste). */
+    fun cancelOfflineDownload() {
+        val id = _currentId.value
+        viewModelScope.launch {
+            runCatchingIo { offline.cancel(listOf(id)) }
+                .onSuccess { send(ViewerEvent.Toast(R.string.offline_cancelled)) }
+                .onFailure { send(ViewerEvent.Toast(R.string.common_error_generic)) }
+        }
+    }
+
+    fun dismissOfflinePrompt() {
+        _offlinePrompt.value = null
+    }
+
+    /** L'autorisation des notifications a été demandée (une seule fois). */
+    fun markNotificationsAsked() {
+        viewModelScope.launch { runCatching { settingsRepository.setOfflineNotificationsAsked(true) } }
+    }
+
+    private fun showFeedback(feedback: OfflineFeedback) {
+        when (feedback) {
+            is OfflineFeedback.Prompt -> _offlinePrompt.value = feedback.prompt
+            is OfflineFeedback.Text -> send(ViewerEvent.Toast(feedback.resId))
+            is OfflineFeedback.Plural -> send(ViewerEvent.PluralToast(feedback.resId, feedback.count))
+        }
+    }
+
+    // --- Partage / Ouvrir avec ----------------------------------------------------------------
+
+    /** Partage le média courant : fichier local, copie hors ligne, sinon original OneDrive téléchargé (plafonné). */
+    fun shareCurrent() = prepareAndSend(openWith = false)
+
+    /** « Ouvrir avec » : fichier local, copie hors ligne, sinon original OneDrive téléchargé (plafonné). */
+    fun openCurrentWith() = prepareAndSend(openWith = true)
+
+    /** Annule le téléchargement qui précède un partage. */
+    fun cancelSharePreparation() {
+        shareJob?.cancel()
+        shareJob = null
+        _sharePreparation.value = null
+    }
+
+    private fun prepareAndSend(openWith: Boolean) {
+        val media = currentMedia.value ?: return
+        val local = media.uri?.takeIf { media.hasLocal }
+        if (local != null) {
+            send(if (openWith) ViewerEvent.OpenWith(local, media.mimeType) else ViewerEvent.Share(listOf(local), listOf(media.mimeType)))
+            return
+        }
+        if (shareJob?.isActive == true) return
+        shareJob = viewModelScope.launch {
+            // Copie hors ligne intacte : partagée telle quelle (aucun téléchargement).
+            val copy = media.offlineCopy
+            if (copy != null && withContext(io) { PlaybackSourceResolver.isOfflineFileUsable(copy) }) {
+                val uri = try {
+                    shareUris.uriFor(copy.file, media.displayName)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@launch send(ViewerEvent.Toast(R.string.common_error_generic))
+                }
+                return@launch send(if (openWith) ViewerEvent.OpenWith(uri, media.mimeType) else ViewerEvent.Share(listOf(uri), listOf(media.mimeType)))
+            }
+            val target = cloudFileTargetOf(media) ?: return@launch send(ViewerEvent.Toast(R.string.common_cloud_only_not_supported))
+            if (!cloudAccess.canAccess()) return@launch send(ViewerEvent.Toast(R.string.share_cloud_signed_out))
+            val plan = planShare(
+                listOf(ShareCandidate(media.id, hasLocalFile = false, offlinePath = null, cloudItemId = target.itemId, sizeBytes = target.sizeBytes)),
+                cloudAllowed = true,
+            )
+            if (plan.refusal != null) return@launch send(ViewerEvent.Toast(R.string.share_cloud_too_large))
+            _sharePreparation.value = SharePreparation(0, target.sizeBytes)
+            var lastPercent = -1
+            try {
+                val file = originals.ensureOriginal(target) { done, total ->
+                    val percent = progressPercent(done, total)
+                    if (percent != lastPercent) {
+                        lastPercent = percent
+                        _sharePreparation.update { it?.let { SharePreparation(done, total) } }
+                    }
+                }
+                val uri = shareUris.uriFor(file, media.displayName)
+                send(if (openWith) ViewerEvent.OpenWith(uri, media.mimeType) else ViewerEvent.Share(listOf(uri), listOf(media.mimeType)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                send(ViewerEvent.Toast(downloadErrorMessage(downloadErrorOf(e) ?: DownloadError.SERVER)))
+            } finally {
+                _sharePreparation.value = null
+            }
         }
     }
 
@@ -346,7 +698,7 @@ class ViewerViewModel @Inject constructor(
 
 /**
  * Résumé de la bande de miniatures mis à jour depuis les détails du média courant : tout ce qui
- * change l'image affichée (version, fichier local, miniature OneDrive) et le favori.
+ * change l'image affichée (version, fichier local, miniature OneDrive, copie hors ligne) et le favori.
  */
 internal fun refreshedSummary(cached: MediaSummary, media: MediaDetails): MediaSummary = cached.copy(
     dateModified = media.dateModified,
@@ -354,5 +706,6 @@ internal fun refreshedSummary(cached: MediaSummary, media: MediaDetails): MediaS
     uri = media.uri,
     hasLocal = media.hasLocal,
     hasCloud = media.hasCloud,
+    hasOffline = media.hasOffline,
     cloudThumb = media.cloudThumb,
 )

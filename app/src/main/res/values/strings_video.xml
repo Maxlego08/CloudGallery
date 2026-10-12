@@ -22,6 +22,12 @@
     <string name="video_error_not_accessible">Le fichier vidéo est introuvable ou inaccessible. Il a peut-être été déplacé ou supprimé.</string>
     <string name="video_error_io">Impossible de lire le fichier vidéo.</string>
     <string name="video_error_not_found">Cette vidéo n\'existe plus dans la galerie.</string>
-    <string name="video_error_cloud_only">Cette vidéo est uniquement sur OneDrive. La lecture en streaming n\'est pas encore disponible.</string>
+    <string name="video_error_cloud_only">Cette vidéo est uniquement sur OneDrive, et OneDrive n\'est pas disponible dans cette version de l\'application.</string>
+    <string name="video_error_network">Connexion impossible. Vérifiez votre connexion à Internet, puis réessayez.</string>
+    <string name="video_error_server_link">OneDrive n\'a pas pu fournir la vidéo. Réessayez dans quelques instants.</string>
+    <string name="video_error_auth_required">Pour lire cette vidéo, connectez-vous au compte OneDrive auquel elle appartient.</string>
+    <string name="video_error_cloud_throttled">OneDrive limite temporairement les requêtes. Réessayez dans quelques minutes.</string>
+    <string name="video_error_cloud_not_found">Cette vidéo est introuvable sur OneDrive. Elle a peut-être été déplacée ou supprimée.</string>
+    <string name="video_action_sign_in">Se connecter</string>
     <string name="video_error_other">La lecture de cette vidéo a échoué.</string>
 </resources>

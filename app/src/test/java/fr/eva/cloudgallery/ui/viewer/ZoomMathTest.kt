@@ -95,4 +95,16 @@ class ZoomMathTest {
         assertEquals(0, ZoomMath.pagerSettleTarget(-0.3f, 0, 0f, 1000f, 10))
         assertEquals(9, ZoomMath.pagerSettleTarget(9.4f, 9, 0f, 1000f, 10))
     }
+
+    @Test
+    fun imageDimensions_fallBackToTheFileWhenTheIndexHasNone() {
+        assertEquals(4000 to 3000, ZoomMath.imageDimensions(4000, 3000, fileBounds = 8000 to 6000))
+        // OneDrive a renvoyé 0 x 0 : dimensions lues dans l'original téléchargé.
+        assertEquals(8160 to 6120, ZoomMath.imageDimensions(0, 0, fileBounds = 8160 to 6120))
+        assertEquals(0 to 0, ZoomMath.imageDimensions(0, 0, fileBounds = null))
+        assertEquals(0 to 0, ZoomMath.imageDimensions(0, 3000, fileBounds = 0 to 0))
+        // Avec ces dimensions, le rechargement haute résolution redevient possible.
+        val (w, h) = ZoomMath.imageDimensions(0, 0, fileBounds = 8160 to 6120)
+        assertNotNull(ZoomMath.hiResMaxSide(w, h, baseMaxSide = 4096))
+    }
 }

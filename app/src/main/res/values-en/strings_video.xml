@@ -22,6 +22,12 @@
     <string name="video_error_not_accessible">The video file can\'t be found or accessed. It may have been moved or deleted.</string>
     <string name="video_error_io">Couldn\'t read the video file.</string>
     <string name="video_error_not_found">This video is no longer in the gallery.</string>
-    <string name="video_error_cloud_only">This video is only on OneDrive. Streaming playback isn\'t available yet.</string>
+    <string name="video_error_cloud_only">This video is only on OneDrive, and OneDrive isn\'t available in this version of the app.</string>
+    <string name="video_error_network">Couldn\'t connect. Check your Internet connection, then try again.</string>
+    <string name="video_error_server_link">OneDrive couldn\'t provide the video. Try again in a moment.</string>
+    <string name="video_error_auth_required">To play this video, sign in to the OneDrive account it belongs to.</string>
+    <string name="video_error_cloud_throttled">OneDrive is temporarily limiting requests. Try again in a few minutes.</string>
+    <string name="video_error_cloud_not_found">This video can\'t be found on OneDrive. It may have been moved or deleted.</string>
+    <string name="video_action_sign_in">Sign in</string>
     <string name="video_error_other">Playback of this video failed.</string>
 </resources>

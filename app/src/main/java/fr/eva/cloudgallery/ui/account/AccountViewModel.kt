@@ -9,9 +9,15 @@ import fr.eva.cloudgallery.domain.model.CloudErrorCode
 import fr.eva.cloudgallery.domain.model.CloudException
 import fr.eva.cloudgallery.domain.model.CloudProfile
 import fr.eva.cloudgallery.domain.model.CloudSyncState
+import fr.eva.cloudgallery.domain.model.DeletedOnOneDriveCopy
+import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
 import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
+import fr.eva.cloudgallery.domain.repository.OfflinePurgeImpact
+import fr.eva.cloudgallery.domain.repository.OfflineRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
+import fr.eva.cloudgallery.ui.offline.PurgeImpactUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +43,12 @@ data class AccountUiState(
     val profile: CloudProfile? = null,
     /** Réglage « Afficher les éléments OneDrive dans Photos » (null avant lecture). */
     val showCloudInPhotos: Boolean? = null,
+    /** File et copies hors ligne. */
+    val offlineQueue: OfflineQueueState = OfflineQueueState(),
+    /** Copies d'éléments supprimés de OneDrive en attente de décision (D1). */
+    val deletedCopies: List<DeletedOnOneDriveCopy> = emptyList(),
+    /** Décision D1 en cours d'application. */
+    val decidingCopies: Boolean = false,
 )
 
 sealed interface AccountEvent {
@@ -47,16 +59,29 @@ sealed interface AccountEvent {
     data object PurgeFailed : AccountEvent
     data object ReplaceDone : AccountEvent
     data object ReplaceFailed : AccountEvent
+    data class CopiesDeleted(val count: Int) : AccountEvent
+    data class CopiesKept(val count: Int) : AccountEvent
+    data object OfflineActionFailed : AccountEvent
+    data object OfflineCancelled : AccountEvent
+    data object OfflineResumed : AccountEvent
 }
 
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val accounts: CloudAccountRepository,
     private val settingsRepository: SettingsRepository,
+    private val offline: OfflineRepository,
 ) : ViewModel() {
 
     private val purging = MutableStateFlow(false)
     private val profile = MutableStateFlow<CloudProfile?>(null)
+    private val decidingCopies = MutableStateFlow(false)
+
+    /** Etat hors ligne : file, copies en attente de décision, décision en cours. */
+    private val offlineState: Flow<Triple<OfflineQueueState, List<DeletedOnOneDriveCopy>, Boolean>> =
+        combine(offline.queue, offline.deletedOnOneDrive, decidingCopies) { queue, deleted, deciding ->
+            Triple(queue, deleted, deciding)
+        }
 
     private val baseState: Flow<AccountUiState> =
         combine(accounts.state, accounts.signInRunning, purging, accounts.syncState, profile) { account, running, purgingNow, sync, prof ->
@@ -70,8 +95,13 @@ class AccountViewModel @Inject constructor(
         }
 
     val state: StateFlow<AccountUiState> =
-        combine(baseState, settingsRepository.settings.map { it.showCloudInPhotos }) { base, showCloud ->
-            base.copy(showCloudInPhotos = showCloud)
+        combine(baseState, settingsRepository.settings.map { it.showCloudInPhotos }, offlineState) { base, showCloud, off ->
+            base.copy(
+                showCloudInPhotos = showCloud,
+                offlineQueue = off.first,
+                deletedCopies = off.second,
+                decidingCopies = off.third,
+            )
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
@@ -116,6 +146,68 @@ class AccountViewModel @Inject constructor(
 
     fun setShowCloudInPhotos(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setShowCloudInPhotos(enabled) }
+    }
+
+    /**
+     * Copies hors ligne retirées par une déconnexion ou une purge (dont dernières copies) ;
+     * [PurgeImpactUi.Unknown] si la lecture échoue (la confirmation avertit alors prudemment).
+     */
+    internal suspend fun purgeImpact(): PurgeImpactUi = try {
+        val impact: OfflinePurgeImpact = offline.purgeImpact()
+        PurgeImpactUi.Known(impact.copies, impact.lastCopies)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        PurgeImpactUi.Unknown
+    }
+
+    /**
+     * « Supprimer les copies » confirmé pour [mediaIds], la liste affichée et comptée dans la
+     * confirmation (jamais une liste relue au moment du clic).
+     */
+    fun deleteDeletedCopies(mediaIds: List<Long>) =
+        decide { offline.deleteCopiesOfDeletedItems(mediaIds).let { AccountEvent.CopiesDeleted(it) } }
+
+    /** « Les conserver » pour [mediaIds] (liste affichée) : copies gardées comme seuls exemplaires, visibles. */
+    fun keepDeletedCopies(mediaIds: List<Long>) =
+        decide { offline.keepCopiesOfDeletedItems(mediaIds).let { AccountEvent.CopiesKept(it) } }
+
+    private fun decide(action: suspend () -> AccountEvent) {
+        if (decidingCopies.value) return
+        decidingCopies.value = true
+        viewModelScope.launch {
+            try {
+                eventChannel.trySend(action())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                eventChannel.trySend(AccountEvent.OfflineActionFailed)
+            } finally {
+                decidingCopies.value = false
+            }
+        }
+    }
+
+    /** Reprend les téléchargements hors ligne en pause ou en échec. */
+    fun resumeOffline() = offlineAction(AccountEvent.OfflineResumed) { offline.resume() }
+
+    /** « Télécharger maintenant » (file en attente du Wi-Fi). */
+    fun downloadOfflineNow() = offlineAction(null) { offline.downloadNow() }
+
+    /** Annule tous les téléchargements hors ligne (les copies présentes restent). */
+    fun cancelOffline() = offlineAction(AccountEvent.OfflineCancelled) { offline.cancelAll() }
+
+    private fun offlineAction(done: AccountEvent?, action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                action()
+                done?.let { eventChannel.trySend(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                eventChannel.trySend(AccountEvent.OfflineActionFailed)
+            }
+        }
     }
 
     /** Déconnexion confirmée par l'utilisateur (données OneDrive retirées de l'index). */

@@ -9,11 +9,14 @@
    utilisé uniquement par MSAL) est exclue pour la même raison, ainsi que l'état de
    synchronisation OneDrive (cloud_sync.xml), lié à l'index local.
    La configuration MSAL générée vit dans noBackupFilesDir (jamais sauvegardé).
+   Les copies hors ligne OneDrive (files/offline/) sont exclues : volumineuses, liées à l'index
+   local, et téléchargeables de nouveau.
 -->
 <full-backup-content>
     <exclude domain="database" path="." />
     <exclude domain="root" path="app_fr.eva.cloudgallery/" />
     <exclude domain="sharedpref" path="cloud_sync.xml" />
+    <exclude domain="file" path="offline/" />
     <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.xml" />
     <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.foci.xml" />
     <exclude domain="sharedpref" path="com.microsoft.identity.client.account_credential_cache.uid.xml" />

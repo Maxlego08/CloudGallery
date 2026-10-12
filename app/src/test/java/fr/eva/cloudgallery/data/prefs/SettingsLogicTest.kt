@@ -60,4 +60,33 @@ class SettingsLogicTest {
         repository.setShowCloudInPhotos(false)
         assertFalse(repository.settings.first().showCloudInPhotos)
     }
+
+    /** Décision utilisateur (D2) : sur réseau facturé, l'original est proposé, pas chargé, par défaut. */
+    @Test
+    fun loadOriginalsOnMobileData_isOffByDefault() = runTest {
+        assertFalse(AppSettings().loadOriginalsOnMobileData)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+        repository.setLoadOriginalsOnMobileData(true)
+        assertTrue(repository.settings.first().loadOriginalsOnMobileData)
+        // Indépendant de l'autre réglage OneDrive.
+        assertFalse(repository.settings.first().showCloudInPhotos)
+        repository.setLoadOriginalsOnMobileData(false)
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+    }
+
+    /** Décision utilisateur (D2) : copies hors ligne en Wi-Fi uniquement par défaut. */
+    @Test
+    fun offlineWifiOnly_isOnByDefault_andNotificationsNotYetAsked() = runTest {
+        assertTrue(AppSettings().offlineWifiOnly)
+        assertFalse(AppSettings().offlineNotificationsAsked)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertTrue(repository.settings.first().offlineWifiOnly)
+        repository.setOfflineWifiOnly(false)
+        assertFalse(repository.settings.first().offlineWifiOnly)
+        repository.setOfflineNotificationsAsked(true)
+        assertTrue(repository.settings.first().offlineNotificationsAsked)
+        // Indépendant des autres réglages OneDrive.
+        assertFalse(repository.settings.first().loadOriginalsOnMobileData)
+    }
 }

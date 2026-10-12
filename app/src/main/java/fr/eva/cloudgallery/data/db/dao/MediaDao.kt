@@ -137,6 +137,31 @@ interface MediaDao {
     @Query("SELECT COUNT(*) FROM media WHERE id IN (:ids) AND hasLocal = 1 AND primaryUri IS NOT NULL")
     suspend fun countWithLocalFile(ids: List<Long>): Int
 
+    /**
+     * Médias partageables parmi [ids] : fichier local, copie hors ligne ou élément OneDrive
+     * visible (téléchargé au moment du partage). Lecture seule : rien d'autre n'est autorisé ainsi.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM media WHERE id IN (:ids) AND " +
+            "((hasLocal = 1 AND primaryUri IS NOT NULL) OR hasOffline = 1 OR hasCloud = 1)",
+    )
+    suspend fun countShareable(ids: List<Long>): Int
+
+    /**
+     * Eléments OneDrive visibles sans copie hors ligne parmi [ids] (« Conserver hors ligne »),
+     * hors éléments déjà en attente ou en cours de téléchargement (en pause ou en échec : comptés,
+     * « Conserver hors ligne » les relance).
+     */
+    @Query(
+        "SELECT COUNT(*) FROM media m WHERE m.id IN (:ids) AND m.hasCloud = 1 AND m.hasOffline = 0 " +
+            "AND NOT EXISTS(SELECT 1 FROM download_task t WHERE t.mediaId = m.id AND t.state IN ('QUEUED', 'RUNNING'))",
+    )
+    suspend fun countKeepableOffline(ids: List<Long>): Int
+
+    /** Médias parmi [ids] qui ont une copie hors ligne visible (« Libérer l'espace »). */
+    @Query("SELECT COUNT(*) FROM media WHERE id IN (:ids) AND hasOffline = 1")
+    suspend fun countWithOfflineCopy(ids: List<Long>): Int
+
     /** Ligne de grille observable pour un seul média (contexte Single). */
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE m.id = :id")
     fun observeRow(id: Long): Flow<MediaRow?>
