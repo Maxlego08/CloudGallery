@@ -25,6 +25,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.AppSettings
 import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
+import fr.eva.cloudgallery.domain.model.PrecacheOutcome
+import fr.eva.cloudgallery.domain.model.PrecacheState
 import fr.eva.cloudgallery.domain.model.StorageUsage
 import fr.eva.cloudgallery.domain.model.THUMBNAIL_CACHE_CHOICES
 import fr.eva.cloudgallery.ui.components.OneUiBackButton
@@ -57,14 +60,17 @@ import fr.eva.cloudgallery.ui.components.OneUiDialog
 import fr.eva.cloudgallery.ui.components.OneUiDivider
 import fr.eva.cloudgallery.ui.components.OneUiLargeTitleHeader
 import fr.eva.cloudgallery.ui.components.OneUiListItem
+import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
+import fr.eva.cloudgallery.ui.components.OneUiSwitchItem
 import fr.eva.cloudgallery.ui.components.OneUiTopBar
 import fr.eva.cloudgallery.ui.components.rememberCollapsedTitleAlpha
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 
 /**
- * Page Stockage (Paramètres) : espace occupé par niveau (miniatures et aperçus, originaux,
- * copies hors ligne), plafonds des caches et vidage du cache non épinglé avec confirmation.
+ * Page Stockage (Paramètres) : mise en cache de tout OneDrive (estimation, confirmation,
+ * progression, arrêt, « Garder à jour »), espace occupé par niveau (miniatures et aperçus,
+ * originaux, copies hors ligne), plafonds des caches et vidage du cache non épinglé avec confirmation.
  * Mesure refaite à chaque retour sur la page.
  */
 @Composable
@@ -78,6 +84,8 @@ fun StorageScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val usage by viewModel.usage.collectAsStateWithLifecycle()
     val clearing by viewModel.clearing.collectAsStateWithLifecycle()
+    val precacheState by viewModel.precacheState.collectAsStateWithLifecycle()
+    val precacheDialog by viewModel.precacheDialog.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val resources = LocalResources.current
     val listState = rememberLazyListState()
@@ -99,9 +107,14 @@ fun StorageScreen(
             val text = when (event) {
                 StorageEvent.CLEARED -> resources.getString(R.string.storage_cleared)
                 StorageEvent.CLEAR_FAILED -> resources.getString(R.string.storage_clear_failed)
+                StorageEvent.ESTIMATE_FAILED -> resources.getString(R.string.precache_estimate_failed)
             }
             Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
         }
+    }
+    // Passage terminé : nouvelle mesure de l'espace occupé.
+    LaunchedEffect(precacheState is PrecacheState.Finished) {
+        if (precacheState is PrecacheState.Finished) viewModel.refresh()
     }
 
     Column(
@@ -134,6 +147,9 @@ fun StorageScreen(
                         settings = currentSettings,
                         usage = usage,
                         clearing = clearing,
+                        precacheState = precacheState,
+                        onPrecacheClick = viewModel::onPrecacheClick,
+                        onKeepUpdatedChange = viewModel::setPrecacheKeepUpdated,
                         onThumbnailCapClick = { showThumbnailCapDialog = true },
                         onOriginalsCapClick = { showOriginalsCapDialog = true },
                         onClearClick = { showClearDialog = true },
@@ -146,6 +162,13 @@ fun StorageScreen(
     }
 
     val currentSettings = settings
+    PrecacheDialogs(
+        dialog = precacheDialog,
+        wifiOnly = currentSettings?.offlineWifiOnly ?: true,
+        onDismiss = viewModel::dismissPrecacheDialog,
+        onConfirm = viewModel::confirmPrecache,
+        onConfirmCancel = viewModel::confirmCancelPrecache,
+    )
     if (showClearDialog) {
         OneUiDialog(
             title = stringResource(R.string.storage_clear_title),
@@ -190,6 +213,9 @@ private fun StorageContent(
     settings: AppSettings,
     usage: StorageUsage?,
     clearing: Boolean,
+    precacheState: PrecacheState,
+    onPrecacheClick: () -> Unit,
+    onKeepUpdatedChange: (Boolean) -> Unit,
     onThumbnailCapClick: () -> Unit,
     onOriginalsCapClick: () -> Unit,
     onClearClick: () -> Unit,
@@ -205,6 +231,33 @@ private fun StorageContent(
                     sizeText(it.cacheBytes + it.offlineBytes) + " · " +
                         stringResource(R.string.storage_free_on_device, sizeText(it.freeBytes))
                 },
+            )
+        }
+
+        // Mise en cache de tout OneDrive (vignettes et aperçus hors du plafond LRU).
+        OneUiCategoryHeader(stringResource(R.string.precache_section))
+        OneUiCard {
+            OneUiListItem(
+                title = stringResource(R.string.precache_action),
+                subtitle = precacheSubtitle(precacheState, usage),
+                onClick = onPrecacheClick,
+            )
+            val running = precacheState as? PrecacheState.Running
+            if (running != null && running.total > 0) {
+                LinearProgressIndicator(
+                    progress = { running.done.toFloat() / running.total },
+                    color = OneUiTheme.colors.accent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = indent, end = indent, bottom = 12.dp),
+                )
+            }
+            OneUiDivider(startIndent = indent)
+            OneUiSwitchItem(
+                title = stringResource(R.string.precache_keep_updated),
+                subtitle = stringResource(R.string.precache_keep_updated_summary),
+                checked = settings.precacheKeepUpdated,
+                onCheckedChange = onKeepUpdatedChange,
             )
         }
 
@@ -276,6 +329,93 @@ private fun StorageContent(
                 onClick = onOfflineClick,
             )
         }
+    }
+}
+
+/** Sous-titre de « Mettre en cache tout OneDrive » d'après l'état du passage. */
+@Composable
+private fun precacheSubtitle(state: PrecacheState, usage: StorageUsage?): String {
+    val size = usage?.takeIf { it.precacheBytes > 0 }?.let {
+        stringResource(R.string.precache_size_summary, sizeText(it.precacheBytes), pluralStringResource(R.plurals.common_items_count, it.precacheFiles, it.precacheFiles))
+    }
+    return when (state) {
+        PrecacheState.Idle -> size ?: stringResource(R.string.precache_idle_summary)
+        PrecacheState.Waiting -> stringResource(R.string.precache_waiting)
+        is PrecacheState.Running -> if (state.total <= 0) {
+            stringResource(R.string.precache_preparing)
+        } else {
+            stringResource(R.string.precache_progress, state.done.coerceAtMost(state.total), state.total, sizeText(state.bytes))
+        } + "\n" + stringResource(R.string.precache_tap_to_cancel)
+        is PrecacheState.Finished -> when (state.outcome) {
+            PrecacheOutcome.COMPLETED -> stringResource(
+                R.string.precache_done,
+                pluralStringResource(R.plurals.common_items_count, state.total, state.total),
+            )
+            PrecacheOutcome.LOW_SPACE -> stringResource(R.string.precache_low_space)
+            PrecacheOutcome.SIGNED_OUT -> stringResource(R.string.precache_signed_out)
+        } + (size?.let { "\n$it" } ?: "")
+    }
+}
+
+/** Estimation en cours, confirmation (ou « tout est déjà en cache »), arrêt du passage. */
+@Composable
+private fun PrecacheDialogs(
+    dialog: PrecacheDialog?,
+    wifiOnly: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    onConfirmCancel: () -> Unit,
+) {
+    when (dialog) {
+        null -> Unit
+        PrecacheDialog.Estimating -> OneUiProgressDialog(
+            title = stringResource(R.string.precache_action),
+            message = stringResource(R.string.precache_estimating),
+            progress = null,
+            cancelLabel = stringResource(R.string.common_cancel),
+            onCancel = onDismiss,
+        )
+        is PrecacheDialog.Confirm -> {
+            val estimate = dialog.estimate
+            if (estimate.missing == 0) {
+                OneUiDialog(
+                    title = stringResource(R.string.precache_nothing_title),
+                    message = stringResource(
+                        R.string.precache_nothing_message,
+                        pluralStringResource(R.plurals.common_items_count, estimate.total, estimate.total),
+                    ),
+                    onDismiss = onDismiss,
+                    confirmLabel = stringResource(R.string.common_ok),
+                    onConfirm = onDismiss,
+                )
+            } else {
+                val network = stringResource(if (wifiOnly) R.string.precache_network_wifi else R.string.precache_network_any)
+                val message = stringResource(
+                    R.string.precache_confirm_message,
+                    pluralStringResource(R.plurals.common_items_count, estimate.missing, estimate.missing),
+                    pluralStringResource(R.plurals.common_items_count, estimate.total, estimate.total),
+                    sizeText(estimate.estimatedBytes),
+                    sizeText(estimate.freeBytes),
+                    network,
+                ) + if (estimate.enoughSpace) "" else stringResource(R.string.precache_confirm_low_space)
+                OneUiDialog(
+                    title = stringResource(R.string.precache_confirm_title),
+                    message = message,
+                    onDismiss = onDismiss,
+                    dismissLabel = stringResource(R.string.common_cancel),
+                    confirmLabel = stringResource(R.string.precache_confirm),
+                    onConfirm = onConfirm,
+                )
+            }
+        }
+        PrecacheDialog.ConfirmCancel -> OneUiDialog(
+            title = stringResource(R.string.precache_cancel_title),
+            message = stringResource(R.string.precache_cancel_message),
+            onDismiss = onDismiss,
+            dismissLabel = stringResource(R.string.common_cancel),
+            confirmLabel = stringResource(R.string.precache_cancel_confirm),
+            onConfirm = onConfirmCancel,
+        )
     }
 }
 

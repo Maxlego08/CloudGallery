@@ -5,12 +5,15 @@ import coil3.SingletonImageLoader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
 import fr.eva.cloudgallery.data.cloud.offline.OfflineStore
+import fr.eva.cloudgallery.data.cloud.precache.CloudPrecacheStore
+import fr.eva.cloudgallery.data.cloud.precache.PrecacheCleaner
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailCache
 import fr.eva.cloudgallery.data.cloud.thumb.ThumbnailCacheLimit
 import fr.eva.cloudgallery.data.db.dao.CachedFileDao
 import fr.eva.cloudgallery.data.db.entity.CacheKind
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.StorageUsage
+import fr.eva.cloudgallery.domain.repository.SettingsRepository
 import fr.eva.cloudgallery.domain.repository.StorageRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -31,14 +34,20 @@ class StorageRepositoryImpl @Inject constructor(
     private val cachedFiles: CachedFileDao,
     private val thumbnails: CloudThumbnailCache,
     private val thumbnailLimit: ThumbnailCacheLimit,
+    private val precache: CloudPrecacheStore,
+    private val precacheCleaner: PrecacheCleaner,
+    private val settings: SettingsRepository,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : StorageRepository {
 
     override suspend fun usage(): StorageUsage = withContext(io) {
         val disk = SingletonImageLoader.get(context).diskCache
+        val precached = precache.usage()
         StorageUsage(
             thumbnailBytes = disk?.size ?: 0L,
             thumbnailMaxBytes = disk?.maxSize ?: thumbnailLimit.effectiveBytes,
+            precacheBytes = precached.bytes,
+            precacheFiles = precached.files,
             originalBytes = directoryBytes(File(context.cacheDir, CloudOriginalStore.ORIGINALS_DIR)),
             originalCount = cachedFiles.listByKind(CacheKind.ORIGINAL).size,
             offlineBytes = directoryBytes(File(context.filesDir, OfflineStore.OFFLINE_DIR)),
@@ -49,6 +58,10 @@ class StorageRepositoryImpl @Inject constructor(
 
     override suspend fun clearCache(): Unit = withContext(io) {
         thumbnails.clear()
+        // Mise en cache de tout OneDrive arrêtée et vidée ; « Garder à jour » désactivé, sans
+        // quoi tout serait retéléchargé à la synchro suivante.
+        settings.setPrecacheKeepUpdated(false)
+        precacheCleaner.clearAll()
         originals.get().clearCache()
     }
 

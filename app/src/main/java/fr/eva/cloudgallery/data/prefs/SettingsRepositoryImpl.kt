@@ -74,6 +74,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = set(Keys.BACKGROUND_SYNC_INTERVAL, interval.name)
     override suspend fun setBackgroundSyncWifiOnly(enabled: Boolean) = set(Keys.BACKGROUND_SYNC_WIFI_ONLY, enabled)
     override suspend fun setOneDriveOnlyChosen(chosen: Boolean) = set(Keys.ONEDRIVE_ONLY_CHOSEN, chosen)
+    override suspend fun setPrecacheKeepUpdated(enabled: Boolean) = set(Keys.PRECACHE_KEEP_UPDATED, enabled)
     override suspend fun setThumbnailCacheMaxBytes(bytes: Long) {
         require(bytes in THUMBNAIL_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
         set(Keys.THUMBNAIL_CACHE_MAX_BYTES, bytes)
@@ -103,6 +104,7 @@ class SettingsRepositoryImpl @Inject constructor(
             backgroundSyncInterval = enumOrDefault(this[Keys.BACKGROUND_SYNC_INTERVAL], d.backgroundSyncInterval),
             backgroundSyncWifiOnly = this[Keys.BACKGROUND_SYNC_WIFI_ONLY] ?: d.backgroundSyncWifiOnly,
             oneDriveOnlyChosen = this[Keys.ONEDRIVE_ONLY_CHOSEN] ?: d.oneDriveOnlyChosen,
+            precacheKeepUpdated = this[Keys.PRECACHE_KEEP_UPDATED] ?: d.precacheKeepUpdated,
         )
     }
 
@@ -124,6 +126,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val BACKGROUND_SYNC_INTERVAL = stringPreferencesKey("background_sync_interval")
         val BACKGROUND_SYNC_WIFI_ONLY = booleanPreferencesKey("background_sync_wifi_only")
         val ONEDRIVE_ONLY_CHOSEN = booleanPreferencesKey("onedrive_only_chosen")
+        val PRECACHE_KEEP_UPDATED = booleanPreferencesKey("precache_keep_updated")
     }
 
     private companion object {

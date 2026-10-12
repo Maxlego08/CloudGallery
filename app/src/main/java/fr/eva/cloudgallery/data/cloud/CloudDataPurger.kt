@@ -3,6 +3,7 @@ package fr.eva.cloudgallery.data.cloud
 import androidx.room.withTransaction
 import fr.eva.cloudgallery.data.cloud.content.CloudOriginalStore
 import fr.eva.cloudgallery.data.cloud.offline.OfflineStore
+import fr.eva.cloudgallery.data.cloud.precache.PrecacheCleaner
 import fr.eva.cloudgallery.data.cloud.sync.CloudSyncThrottleStore
 import fr.eva.cloudgallery.data.cloud.sync.ONEDRIVE_PROVIDER
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailCache
@@ -47,6 +48,7 @@ class CloudDataPurger @Inject constructor(
     private val downloadUrls: CloudDownloadUrlProvider,
     private val originals: CloudOriginalStore,
     private val offlineStore: OfflineStore,
+    private val precache: PrecacheCleaner,
     private val generation: CloudDataGeneration,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) {
@@ -72,8 +74,9 @@ class CloudDataPurger @Inject constructor(
      * ligne, médias devenus orphelins (avec, par cascade, leurs favoris, ajouts aux albums et
      * positions de lecture), albums OneDrive, dossiers OneDrive, curseur, lignes des fichiers
      * OneDrive copiés et file de téléchargement. Un média qui a aussi une source locale est
-     * conservé. Les copies hors ligne, les originaux téléchargés et les miniatures OneDrive en
-     * cache (disque et mémoire) sont ensuite supprimés, ainsi que la pause de synchronisation
+     * conservé. Les copies hors ligne, les originaux téléchargés, les miniatures OneDrive en
+     * cache (disque et mémoire) et la mise en cache de tout OneDrive (passages arrêtés) sont
+     * ensuite supprimés, ainsi que la pause de synchronisation
      * demandée par Graph pour ce compte.
      *
      * Avant tout, le numéro de vidage est incrémenté (un téléchargement en cours n'enregistre plus
@@ -99,6 +102,7 @@ class CloudDataPurger @Inject constructor(
         offlineStore.clear()
         originals.clearAll()
         thumbnails.clear()
+        precache.clearAll()
         throttle.clear()
     }
 

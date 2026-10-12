@@ -376,9 +376,10 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
       lecteur gardent leur zoom arrière.
 - [ ] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
       atteindre n'importe quelle date sans faire défiler toute la grille.
-- [ ] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
+- [x] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
       taille écran de tous les éléments OneDrive, gardés hors du plafond LRU, pour une navigation
-      fluide (zoom maximal et vidéos restent en ligne).
+      fluide (zoom maximal et vidéos restent en ligne). Paramètres > Stockage, estimation et
+      confirmation, WorkManager en service de premier plan `dataSync`, reprise, « Garder à jour ».
 - [ ] Dossier sécurisé Samsung : action « Déplacer vers le Dossier sécurisé » pour les photos du
       téléphone (partage Android vers une appli du Dossier sécurisé, puis corbeille des originaux
       après confirmation). Pas d'API Knox privée.
@@ -386,6 +387,18 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 ### Vérifications sur l'appareil (améliorations)
 - [ ] Retour depuis Paramètres, Stockage, un album, la recherche : glissement vers la droite, au
       bouton et au geste (aperçu prédictif).
+- [ ] Mise en cache de tout OneDrive : estimation cohérente (nombre d'éléments OneDrive seuls),
+      notification de progression avec « Annuler », progression dans la page Stockage ; appli
+      fermée pendant le passage : il continue ; mode avion puis retour : « En attente » puis reprise
+      sans retélécharger (logcat `OneDrivePrecache`) ; ensuite, mode avion : grille et visionneuse
+      d'éléments OneDrive affichées sans réseau ; taille affichée dans Stockage ; « Vider le cache »
+      : tout supprimé, « Garder à jour » décoché.
+- [ ] Mise en cache : vérifier que la grille au zoom par défaut et la visionneuse ne refont aucune
+      requête de miniature (logcat OkHttp / Graph) pour un élément déjà en cache, et que le palier
+      2048 est accepté par Graph (sinon aperçus enregistrés en 1600).
+- [ ] Mise en cache : « Garder à jour » activé, ajout d'une photo sur OneDrive depuis un autre
+      appareil, synchro : la photo est mise en cache en arrière-plan ; Android 15, passage de plus
+      de 6 h : interrompu par le système puis repris.
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 

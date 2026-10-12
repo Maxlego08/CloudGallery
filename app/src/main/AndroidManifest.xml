@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <!-- Progression des copies hors ligne (demandée au premier « Conserver hors ligne », facultative) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Mise en cache de tout OneDrive : travail WorkManager en service de premier plan (dataSync) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".CloudGalleryApp"
@@ -112,6 +115,15 @@
             android:name=".data.cloud.offline.OfflineTransferJobService"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!--
+           Service de premier plan de WorkManager (mise en cache de tout OneDrive) : type déclaré
+           obligatoire depuis Android 14 pour setForeground(ForegroundInfo(…, DATA_SYNC)).
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- Bouton « Annuler » de la notification des copies hors ligne (intent explicite). -->
         <receiver

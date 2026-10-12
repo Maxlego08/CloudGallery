@@ -18,7 +18,7 @@ internal const val DEFAULT_CLOUD_THUMB_PX = 384
  * Paliers de taille, identiques à ceux des miniatures locales : de petites variations de taille
  * de cellule (zoom de la grille) réutilisent la même miniature.
  */
-private val CLOUD_THUMB_BUCKETS = intArrayOf(96, 192, 256, 384, 512, 768, 1024)
+internal val CLOUD_THUMB_BUCKETS = intArrayOf(96, 192, 256, 384, 512, 768, 1024)
 
 /** Côté de l'aperçu de la visionneuse par défaut (taille personnalisée, proportions d'origine). */
 internal const val CLOUD_PREVIEW_PX = 1600

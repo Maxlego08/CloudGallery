@@ -102,6 +102,8 @@ class CloudDataPurgerTest {
             downloadUrls = urls,
             originals = originals,
             offlineStore = OfflineStore(rootProvider = { offlineDir }, storage = { null }, io = Dispatchers.IO, clock = { 0L }),
+            // Mise en cache de l'appli installée et WorkManager jamais touchés par le test.
+            precache = { precacheClears++ },
             generation = generation,
             io = Dispatchers.IO,
         )
@@ -116,6 +118,7 @@ class CloudDataPurgerTest {
     }
 
     private val thumbnails = FakeThumbnailCache()
+    private var precacheClears = 0
 
     @After
     fun tearDown() {
@@ -178,6 +181,7 @@ class CloudDataPurgerTest {
         assertNull(db.syncCursorDao().get(ONEDRIVE_PROVIDER))
         // Miniatures OneDrive vidées après la transaction.
         assertEquals(1, thumbnails.clears)
+        assertEquals(1, precacheClears)
 
         // Local intact : média, favori, album virtuel et son membre local.
         assertNotNull(mediaDao.getById(local))

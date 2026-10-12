@@ -67,6 +67,11 @@ data class AppSettings(
      * qu'un accès est accordé (un retrait ultérieur de l'accès redemande).
      */
     val oneDriveOnlyChosen: Boolean = false,
+    /**
+     * Mise en cache de tout OneDrive tenue à jour : après chaque synchronisation, les nouveaux
+     * éléments (ou nouvelles versions) sont mis en cache en arrière-plan. Désactivé par défaut.
+     */
+    val precacheKeepUpdated: Boolean = false,
 )
 
 /** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */

@@ -11,6 +11,7 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import fr.eva.cloudgallery.data.cloud.offline.OfflineThumbnailFetcher
+import fr.eva.cloudgallery.data.cloud.precache.OneDrivePrecacheScheduler
 import fr.eva.cloudgallery.data.cloud.stream.RedactingMedia3Logger
 import fr.eva.cloudgallery.data.cloud.sync.BackgroundSyncScheduler
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailFetcher
@@ -53,6 +54,10 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
     @Inject
     lateinit var searchIndexer: SearchIndexer
 
+    /** Mise en cache de tout OneDrive tenue à jour (ou nettoyée) après chaque synchronisation. */
+    @Inject
+    lateinit var precacheScheduler: OneDrivePrecacheScheduler
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
@@ -64,6 +69,7 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
         thumbnailCacheLimit.preload()
         backgroundSync.start()
         searchIndexer.start()
+        precacheScheduler.start()
         // Synchro incrémentale MediaStore -> Room à chaque retour de l'appli au premier plan.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {

@@ -9,6 +9,12 @@ data class StorageUsage(
     val thumbnailBytes: Long,
     /** Plafond du cache des miniatures en vigueur (ouvert au démarrage), null s'il est inconnu. */
     val thumbnailMaxBytes: Long?,
+    /**
+     * Mise en cache de tout OneDrive : vignettes et aperçus gardés hors du plafond ci-dessus
+     * ([precacheFiles] fichiers).
+     */
+    val precacheBytes: Long,
+    val precacheFiles: Int,
     /** Originaux OneDrive temporaires (zoom profond, partage). */
     val originalBytes: Long,
     val originalCount: Int,
@@ -18,6 +24,6 @@ data class StorageUsage(
     /** Espace encore libre sur le volume de l'appli. */
     val freeBytes: Long,
 ) {
-    /** Cache vidable (miniatures, aperçus et originaux). */
-    val cacheBytes: Long get() = thumbnailBytes + originalBytes
+    /** Cache vidable (miniatures, aperçus, mise en cache de tout OneDrive et originaux). */
+    val cacheBytes: Long get() = thumbnailBytes + precacheBytes + originalBytes
 }

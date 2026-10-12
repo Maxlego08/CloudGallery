@@ -8,6 +8,9 @@ import dagger.hilt.components.SingletonComponent
 import fr.eva.cloudgallery.data.cloud.CloudSessionCoordinator
 import fr.eva.cloudgallery.data.cloud.auth.MsalAuthService
 import fr.eva.cloudgallery.data.cloud.offline.OfflineRepositoryImpl
+import fr.eva.cloudgallery.data.cloud.precache.OneDrivePrecacheRepositoryImpl
+import fr.eva.cloudgallery.data.cloud.precache.PrecacheCleaner
+import fr.eva.cloudgallery.data.cloud.precache.WorkManagerPrecacheCleaner
 import fr.eva.cloudgallery.data.cloud.sync.OneDriveSyncer
 import fr.eva.cloudgallery.data.cloud.thumb.CloudThumbnailCache
 import fr.eva.cloudgallery.data.cloud.thumb.CoilCloudThumbnailCache
@@ -15,6 +18,7 @@ import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
 import fr.eva.cloudgallery.domain.repository.CloudMediaSyncer
 import fr.eva.cloudgallery.domain.repository.CloudTokenProvider
 import fr.eva.cloudgallery.domain.repository.OfflineRepository
+import fr.eva.cloudgallery.domain.repository.OneDrivePrecacheRepository
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -42,6 +46,12 @@ abstract class CloudModule {
 
     @Binds @Singleton
     abstract fun bindOfflineRepository(impl: OfflineRepositoryImpl): OfflineRepository
+
+    @Binds @Singleton
+    abstract fun bindOneDrivePrecacheRepository(impl: OneDrivePrecacheRepositoryImpl): OneDrivePrecacheRepository
+
+    @Binds @Singleton
+    abstract fun bindPrecacheCleaner(impl: WorkManagerPrecacheCleaner): PrecacheCleaner
 }
 
 @Module

@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Update
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
+import fr.eva.cloudgallery.domain.model.MediaType
 import kotlinx.coroutines.flow.Flow
 
 internal const val ROW_COLUMNS = """
@@ -220,4 +221,32 @@ interface MediaDao {
         """,
     )
     suspend fun refreshSourceFlags(ids: List<Long>)
+
+    /**
+     * Médias dont la miniature et l'aperçu viennent de OneDrive (élément OneDrive visible, aucun
+     * fichier local) : mise en cache de tout OneDrive, par pages décroissantes d'identifiant
+     * (les plus récents d'abord), [beforeId] exclu.
+     */
+    @Query(
+        """
+        SELECT id, mediaType, width, height, dateModified, cloudItemId, cloudCTag FROM media
+        WHERE cloudItemId IS NOT NULL AND hasLocal = 0 AND id < :beforeId
+        ORDER BY id DESC LIMIT :limit
+        """,
+    )
+    suspend fun precacheCandidates(beforeId: Long, limit: Int): List<PrecacheRow>
+
+    @Query("SELECT COUNT(*) FROM media WHERE cloudItemId IS NOT NULL AND hasLocal = 0")
+    suspend fun countPrecacheCandidates(): Int
 }
+
+/** Média à mettre en cache (voir [MediaDao.precacheCandidates]). */
+data class PrecacheRow(
+    val id: Long,
+    val mediaType: MediaType,
+    val width: Int,
+    val height: Int,
+    val dateModified: Long,
+    val cloudItemId: String,
+    val cloudCTag: String?,
+)

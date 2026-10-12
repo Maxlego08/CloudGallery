@@ -23,6 +23,8 @@ import fr.eva.cloudgallery.domain.model.KeepOfflineResult
 import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.model.OfflineQueueState
 import fr.eva.cloudgallery.domain.model.SignInOutcome
+import fr.eva.cloudgallery.domain.model.PrecacheEstimate
+import fr.eva.cloudgallery.domain.model.PrecacheState
 import fr.eva.cloudgallery.domain.model.SpaceSaverCandidate
 import fr.eva.cloudgallery.domain.model.SpaceSaverList
 import fr.eva.cloudgallery.domain.model.StorageUsage
@@ -161,6 +163,7 @@ interface SettingsRepository {
     suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     suspend fun setBackgroundSyncWifiOnly(enabled: Boolean)
     suspend fun setOneDriveOnlyChosen(chosen: Boolean)
+    suspend fun setPrecacheKeepUpdated(enabled: Boolean)
 }
 
 /** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */
@@ -176,6 +179,25 @@ interface StorageRepository {
 
     /** Nouveau plafond des originaux (déjà enregistré) : nettoyage aussitôt (dispatcher d'E/S). */
     suspend fun applyOriginalsCap()
+}
+
+/**
+ * « Mettre en cache tout OneDrive » : vignettes de grille et aperçus de la visionneuse de tous
+ * les éléments OneDrive, téléchargés en arrière-plan (WorkManager) et gardés hors du plafond du
+ * cache des miniatures.
+ */
+interface OneDrivePrecacheRepository {
+    /** État du passage en cours ou du dernier passage. */
+    val state: Flow<PrecacheState>
+
+    /** Éléments concernés, restant à mettre en cache, taille estimée et espace libre (dispatcher d'E/S). */
+    suspend fun estimate(): PrecacheEstimate
+
+    /** Lance (ou laisse continuer) le passage ; reprend sans retélécharger ce qui est déjà en cache. */
+    fun start()
+
+    /** Arrête le passage en cours ; ce qui est déjà en cache est gardé. */
+    fun cancel()
 }
 
 /**
