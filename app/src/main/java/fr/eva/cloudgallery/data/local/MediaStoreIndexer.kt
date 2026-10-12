@@ -22,6 +22,8 @@ import fr.eva.cloudgallery.data.db.entity.AlbumEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.data.db.entity.SyncCursorEntity
+import fr.eva.cloudgallery.data.dedup.LocalHashScheduler
+import fr.eva.cloudgallery.data.dedup.MediaMerger
 import fr.eva.cloudgallery.di.ApplicationScope
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AlbumType
@@ -65,6 +67,8 @@ class MediaStoreIndexer @Inject constructor(
     private val db: AppDatabase,
     @param:IoDispatcher private val io: CoroutineDispatcher,
     @param:ApplicationScope private val appScope: CoroutineScope,
+    private val merger: MediaMerger,
+    private val hashScheduler: LocalHashScheduler,
 ) : LocalMediaIndexer {
 
     private val resolver: ContentResolver get() = context.contentResolver
@@ -221,6 +225,7 @@ class MediaStoreIndexer @Inject constructor(
             )
             val count = sourceDao.count(SourceKind.LOCAL)
             _state.update { it.copy(lastSyncAt = now, indexedCount = count, lastError = warning) }
+            afterIndexUpdate()
         } catch (e: CancellationException) {
             throw e
         } catch (e: SecurityException) {
@@ -231,6 +236,22 @@ class MediaStoreIndexer @Inject constructor(
             fail(context.getString(R.string.data_error_sync_failed, e.message ?: e.javaClass.simpleName))
         } finally {
             _state.update { it.copy(running = false) }
+        }
+    }
+
+    /**
+     * Après une synchro réussie : fusion / défusion avec OneDrive (fichiers modifiés, éléments
+     * revenus) et calcul des empreintes des nouveaux fichiers (en charge). Un échec ici ne remet
+     * pas en cause l'indexation.
+     */
+    private suspend fun afterIndexUpdate() {
+        try {
+            merger.reconcile()
+            hashScheduler.onLocalIndexUpdated()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Dédoublonnage après l'indexation impossible", e)
         }
     }
 
