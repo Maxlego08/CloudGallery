@@ -33,7 +33,16 @@ import kotlinx.coroutines.flow.StateFlow
 /** Accès en lecture à la bibliothèque unifiée (locale + cloud), indépendamment de la source. */
 interface MediaRepository {
     /** Médias du contexte, du plus récent au plus ancien (dateTaken DESC, id DESC). */
-    fun pagedMedia(context: MediaContext): Flow<PagingData<MediaSummary>>
+    fun pagedMedia(context: MediaContext): Flow<PagingData<MediaSummary>> = pagedMedia(context, 0)
+
+    /**
+     * Comme [pagedMedia], la première page commençant au rang [initialOffset] de la liste triée
+     * (saut du défilement rapide) ; les pages précédentes se chargent en remontant.
+     */
+    fun pagedMedia(context: MediaContext, initialOffset: Int): Flow<PagingData<MediaSummary>>
+
+    /** Dates de prise de vue du contexte, dans le même ordre que [pagedMedia] (défilement rapide). */
+    fun observeDates(context: MediaContext): Flow<List<Long>>
 
     /** Identifiants du contexte, dans le même ordre que [pagedMedia]. Utilisé par la visionneuse. */
     fun observeMediaIds(context: MediaContext): Flow<List<Long>>

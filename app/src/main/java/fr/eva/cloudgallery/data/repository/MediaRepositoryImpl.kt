@@ -74,22 +74,34 @@ class MediaRepositoryImpl @Inject constructor(
     ) { showCloud, access -> includeCloudOnlyInLibrary(showCloud, access) }
         .distinctUntilChanged()
 
-    override fun pagedMedia(context: MediaContext): Flow<PagingData<MediaSummary>> = when (context) {
+    override fun pagedMedia(context: MediaContext, initialOffset: Int): Flow<PagingData<MediaSummary>> = when (context) {
         is MediaContext.Single -> mediaDao.observeRow(context.mediaId)
             .map { row -> PagingData.from(listOfNotNull(row?.toSummary())) }
             .flowOn(io)
-        MediaContext.Timeline -> includeCloudOnly.flatMapLatest { cloud -> pager { mediaDao.pagingTimeline(cloud) } }
-        MediaContext.Videos -> includeCloudOnly.flatMapLatest { cloud -> pager { mediaDao.pagingVideos(cloud) } }
-        MediaContext.Favorites -> pager { mediaDao.pagingFavorites() }
-        is MediaContext.Album -> pager { mediaDao.pagingAlbum(context.albumId) }
+        MediaContext.Timeline -> includeCloudOnly.flatMapLatest { cloud -> pager(initialOffset) { mediaDao.pagingTimeline(cloud) } }
+        MediaContext.Videos -> includeCloudOnly.flatMapLatest { cloud -> pager(initialOffset) { mediaDao.pagingVideos(cloud) } }
+        MediaContext.Favorites -> pager(initialOffset) { mediaDao.pagingFavorites() }
+        is MediaContext.Album -> pager(initialOffset) { mediaDao.pagingAlbum(context.albumId) }
         // Saisie sans mot : aucun résultat (pas de requête FTS).
         is MediaContext.Search -> ftsMatchExpression(context.query)
-            ?.let { match -> pager { searchDao.pagingSearch(match) } }
+            ?.let { match -> pager(initialOffset) { searchDao.pagingSearch(match) } }
             ?: flowOf(PagingData.empty())
     }
 
-    private fun pager(source: () -> PagingSource<Int, MediaRow>): Flow<PagingData<MediaSummary>> =
-        Pager(PAGING_CONFIG, pagingSourceFactory = source).flow.map { data -> data.map { row -> row.toSummary() } }
+    /** [initialOffset] : rang de la première ligne chargée (clé de LimitOffsetPagingSource de Room). */
+    private fun pager(initialOffset: Int, source: () -> PagingSource<Int, MediaRow>): Flow<PagingData<MediaSummary>> =
+        Pager(PAGING_CONFIG, initialKey = initialOffset.takeIf { it > 0 }, pagingSourceFactory = source)
+            .flow
+            .map { data -> data.map { row -> row.toSummary() } }
+
+    override fun observeDates(context: MediaContext): Flow<List<Long>> = when (context) {
+        MediaContext.Timeline -> includeCloudOnly.flatMapLatest { mediaDao.observeTimelineDates(it) }
+        MediaContext.Favorites -> mediaDao.observeFavoriteDates()
+        MediaContext.Videos -> includeCloudOnly.flatMapLatest { mediaDao.observeVideoDates(it) }
+        is MediaContext.Album -> mediaDao.observeAlbumDates(context.albumId)
+        is MediaContext.Single -> mediaDao.observeById(context.mediaId).map { listOfNotNull(it?.dateTaken) }
+        is MediaContext.Search -> ftsMatchExpression(context.query)?.let { searchDao.observeSearchDates(it) } ?: flowOf(emptyList())
+    }.distinctUntilChanged().flowOn(io)
 
     override fun observeMediaIds(context: MediaContext): Flow<List<Long>> = when (context) {
         MediaContext.Timeline -> includeCloudOnly.flatMapLatest { mediaDao.observeTimelineIds(it) }

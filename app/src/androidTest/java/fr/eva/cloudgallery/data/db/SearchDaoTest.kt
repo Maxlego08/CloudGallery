@@ -144,6 +144,7 @@ class SearchDaoTest {
 
         assertEquals(listOf(cloudOnly), search("nuage"))
         assertEquals(1, db.searchDao().observeSearchCount(ftsMatchExpression("photos")!!).first())
+        assertEquals(1, db.searchDao().observeSearchDates(ftsMatchExpression("photos")!!).first().size)
         // Média sans source visible : absent des résultats ; dossier masqué : non indexé.
         assertEquals(emptyList<Long>(), search("cache"))
         assertEquals(emptyList<Long>(), search("corbeille"))

@@ -45,6 +45,10 @@ Fonctions disponibles (phases 1 et 2 pour les médias locaux, phase 3 pour OneDr
 - **Grille Photos** paginée, triée par date de prise de vue (`dateTaken DESC, id DESC`). Cinq niveaux
   de zoom au pincement (2, 3, 4, 6 ou 9 colonnes en portrait, ×1,75 en paysage), regroupement par jour
   (niveaux 0 à 2) ou par mois (niveaux 3 et 4). Le niveau choisi est mémorisé.
+- **Défilement rapide** : poignée à droite des grilles (Photos, albums, favoris, vidéos, recherche),
+  visible pendant le défilement, avec une bulle de date au glisser. Sa position couvre toute la
+  liste (dates de tous les médias lues en base) ; une date hors des pages chargées recharge la
+  pagination à partir de son premier média (`Pager(initialKey = rang)`).
 - **Mode sélection** : appui long, glissement pour étendre la sélection (y compris sur des éléments
   pas encore chargés), sélection d'un jour ou d'un mois entier. Actions : favori, partage, ajout à un
   album, copie vers un dossier, suppression.
@@ -905,6 +909,7 @@ CloudGallery.
 | `ui/util/ShareLogicTest` | Plan de partage (fichier local, copie hors ligne, téléchargement), plafonds 20 éléments / 500 Mo, éléments OneDrive sans compte, pourcentage de progression |
 | `ui/grid/GridSeparatorsTest` | En-têtes jour/mois |
 | `ui/grid/GridZoomLevelsTest` | Niveaux de zoom, colonnes, regroupement |
+| `ui/grid/FastScrollLogicTest` | Défilement rapide : rang d'une date ou d'une période, fraction de la poignée, libellé de la bulle |
 | `ui/video/VideoPlayerLogicTest` | Classement des erreurs de lecture (réseau, lien, échecs OneDrive trouvés dans la chaîne des causes), actions « Réessayer » / « Se connecter », position de reprise, seek borné, zones de double appui, vitesses, format d'image |
 | `ui/video/PlaybackSourceResolverTest` | Priorité des sources de lecture (fichier local, copie hors ligne intacte, puis streaming OneDrive si le compte est accessible), copie tronquée ignorée, raison d'indisponibilité |
 | `ui/viewer/CropMathTest` | Géométrie du rognage |
