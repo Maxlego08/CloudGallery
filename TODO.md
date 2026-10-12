@@ -299,25 +299,54 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
 
 ## Phase 6 — Dédoublonnage, économiseur d'espace, recherche, albums mixtes
 
-- [ ] Calculer l'empreinte des fichiers locaux (QuickXorHash, compatible OneDrive) en arrière-plan,
-      par lots, sous un budget CPU/batterie. Renseigner `media.contentHash`.
-- [ ] Fusionner local et cloud **uniquement sur hash de contenu identique (+ taille)**, **jamais sur
-      le nom de fichier**. Un média logique reçoit alors une source `LOCAL` et une source `ONEDRIVE`.
-- [ ] Défaire la fusion si le hash diverge ensuite (fichier modifié d'un côté).
+Décisions (phase 6) : empreintes calculées en charge seulement ; économiseur d'espace sur les
+photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec Android.
+
+- [x] Empreinte QuickXorHash des fichiers locaux (`data/dedup/QuickXorHash`, testée contre une
+      implémentation bit à bit indépendante) : `LocalHashWorker` en charge et batterie non faible,
+      lots de 100 fichiers / 1 Go (doublons probables d'abord : taille présente sur OneDrive),
+      8 min par passage puis passage enchaîné, quotidien de rattrapage ; enregistrée avec la
+      signature du fichier (`hashSignature`) seulement s'il n'a pas changé pendant le calcul ;
+      `media.contentHash` = `qxh:<empreinte>`.
+- [x] Fusion local / OneDrive **uniquement sur QuickXorHash et taille identiques** (`MediaMerger`) :
+      le média du fichier local reçoit la source OneDrive (et sa copie hors ligne) ; favori,
+      albums, couverture d'album, fichiers en cache, téléchargements et position de lecture du
+      média OneDrive lui sont transférés. Doublons identiques : appariement déterministe par ordre
+      des sources. Pas de fusion pendant un téléchargement en cours. Lancée après l'indexation
+      locale, chaque passage OneDrive et chaque lot d'empreintes.
+- [x] Défusion : tailles différentes, ou deux empreintes connues différentes (contenu modifié sur
+      OneDrive, ou empreinte locale recalculée) ; une empreinte locale seulement périmée (fichier
+      touché, même taille) garde la fusion jusqu'au calcul suivant. La source OneDrive repart dans
+      un nouveau média avec sa copie hors ligne, son original et ses téléchargements ; favoris et
+      albums restent sur le média du fichier local.
 - [ ] Économiseur d'espace : proposer de supprimer les copies locales **déjà présentes sur OneDrive
       et vérifiées par hash**, avec une liste revue par l'utilisateur, un résumé de l'espace libéré et
       une confirmation explicite, puis `MediaStore.createTrashRequest` (corbeille récupérable par
       défaut). Ne jamais le déclencher automatiquement.
 - [ ] Recherche plein texte : table FTS Room (`@Fts4`) sur le nom, le dossier et la date (puis le
       lieu si on ajoute le géocodage). Écran de recherche et suggestions.
-- [ ] Albums virtuels mêlant sources locales et OneDrive (les références `album_media` pointent déjà
-      vers le média logique). Vérifier le comportement quand une source disparaît.
-- [ ] Albums-dossiers : `ALBUM_MEMBERS` / `ALBUM_ROWS` comptent encore les sources masquées comme
-      membres du dossier (sans effet tant qu'un média n'a qu'une source ; à corriger avec la fusion).
-- [ ] Dates OneDrive : `photo.takenDateTime` peut être l'heure locale EXIF présentée comme UTC ; à
-      prendre en compte pour rapprocher un élément OneDrive de sa copie locale.
+- [x] Albums virtuels mêlant sources locales et OneDrive : un média fusionné reste dans l'album tant
+      qu'une de ses sources est visible, puis est masqué (jamais supprimé) ; testé
+      (`MediaMergerTest`).
+- [x] Albums-dossiers : `ALBUM_MEMBERS` / `ALBUM_ROWS` (`FOLDER_MEMBER_SOURCE`) ne comptent une source
+      masquée que si le média n'a aucune source visible rattachée à un dossier : un média fusionné
+      n'est que dans les dossiers de ses sources visibles ; une copie conservée hors ligne reste
+      dans son dossier OneDrive comme avant.
+- [x] Dates OneDrive : sans effet sur le rapprochement, qui ne se fait que sur l'empreinte et la
+      taille ; un média fusionné garde la date du fichier local (EXIF/MediaStore), jamais remplacée
+      par la synchro OneDrive.
 - [ ] Éventuellement, synchroniser les favoris avec `MediaStore.createFavoriteRequest` (avec la
       confirmation système), à condition que cela n'écrase pas les favoris Samsung existants.
+
+### Vérifications sur l'appareil (phase 6)
+- [ ] Empreintes : appareil branché, `adb shell dumpsys jobscheduler | grep -A5 local_hash` montre le
+      travail ; logcat `MediaMerger` « N élément(s) OneDrive rattaché(s) » ; une photo sauvegardée
+      sur OneDrive n'apparaît plus qu'une fois dans Photos avec « Afficher OneDrive » activé ;
+      débranché pendant le calcul : arrêt aussitôt, reprise à la charge suivante.
+- [ ] Empreinte locale identique à celle de Graph pour une même photo (comparer `quickXorHash` des
+      deux sources dans la base, `adb shell run-as … sqlite3`), photo et vidéo de plusieurs Go.
+- [ ] Défusion : photo modifiée (recadrage) sur le téléphone puis indexée et rehachée : deux
+      médias, favori resté sur la photo du téléphone ; nouvelle version sur OneDrive : idem.
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 
@@ -393,15 +422,16 @@ animations :
 - [ ] OneDrive en lecture seule : un élément présent uniquement sur OneDrive peut être zoomé
       (original), lu, partagé et ouvert ailleurs, mais ni modifié, ni supprimé, ni copié vers un
       dossier du téléphone, même conservé hors ligne (copie de l'appli, lecture seule).
-- [ ] Doublons : un média présent sur le téléphone et sur OneDrive est deux médias (réglage
-      « Afficher les éléments OneDrive dans Photos » désactivé par défaut ; fusion en phase 6).
+- [ ] Doublons : un fichier du téléphone et son élément OneDrive ne deviennent un seul média
+      qu'une fois l'empreinte locale calculée (en charge) ; d'ici là, deux médias (réglage
+      « Afficher les éléments OneDrive dans Photos » désactivé par défaut). Un fichier modifié après
+      sa sauvegarde n'est jamais fusionné.
 - [ ] Sans permission médias, OneDrive est consultable seulement après « Utiliser OneDrive
       seulement » (phase 5) ; un build sans OneDrive n'affiche que l'écran d'autorisation.
 - [ ] Pas de synchro en arrière-plan : `work-runtime-ktx` et `hilt-work` sont présents mais ne
       servent pas.
 - [ ] Les favoris et albums personnalisés sont propres à l'application. Ils sont perdus à la
       désinstallation (base exclue des sauvegardes) et ne sont pas partagés avec Samsung Galerie.
-- [ ] `media.contentHash` n'est renseigné que pour OneDrive (`qxh:`) : pas de dédoublonnage.
 - [ ] Table `user_settings` inutilisée (les réglages sont dans DataStore) : l'utiliser ou la
       supprimer par migration.
 - [ ] Pas de recherche, pas de GIF animés, pas de Motion Photos, pas de pleine résolution au-delà
