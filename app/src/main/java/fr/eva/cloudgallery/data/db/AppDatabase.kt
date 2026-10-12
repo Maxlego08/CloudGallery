@@ -21,6 +21,7 @@ import fr.eva.cloudgallery.data.db.entity.CloudFolderEntity
 import fr.eva.cloudgallery.data.db.entity.DownloadTaskEntity
 import fr.eva.cloudgallery.data.db.entity.FavoriteEntity
 import fr.eva.cloudgallery.data.db.entity.MediaEntity
+import fr.eva.cloudgallery.data.db.entity.MediaFtsEntity
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.data.db.entity.PlaybackPositionEntity
 import fr.eva.cloudgallery.data.db.entity.SyncCursorEntity
@@ -43,8 +44,9 @@ import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
         UserSettingEntity::class,
         PlaybackPositionEntity::class,
         CloudFolderEntity::class,
+        MediaFtsEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -118,5 +120,22 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE cloud_folder ADD COLUMN deletedAt INTEGER")
             }
         }
+
+        /**
+         * v6 : dédoublonnage et recherche. Signature du fichier local au calcul de son empreinte
+         * (`media_source.hashSignature`, null : à calculer) et index de recherche plein texte
+         * `media_fts` (vide : reconstruit par la couche données).
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_source ADD COLUMN hashSignature TEXT")
+                db.execSQL(MEDIA_FTS_CREATE_SQL)
+            }
+        }
+
+        /** Création de `media_fts`, identique au schéma exporté (app/schemas, version 6). */
+        internal const val MEDIA_FTS_CREATE_SQL =
+            "CREATE VIRTUAL TABLE IF NOT EXISTS `media_fts` USING FTS4(`name` TEXT NOT NULL, " +
+                "`folders` TEXT NOT NULL, `dates` TEXT NOT NULL, tokenize=unicode61)"
     }
 }
