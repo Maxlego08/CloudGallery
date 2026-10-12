@@ -7,6 +7,7 @@ import androidx.paging.PagingData
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 import fr.eva.cloudgallery.domain.model.CloudAuthRequiredException
 import fr.eva.cloudgallery.domain.model.CloudException
@@ -147,6 +148,8 @@ interface SettingsRepository {
 
     /** [bytes] : une des valeurs de `THUMBNAIL_CACHE_CHOICES` (appliquée au prochain démarrage). */
     suspend fun setThumbnailCacheMaxBytes(bytes: Long)
+    suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
+    suspend fun setBackgroundSyncWifiOnly(enabled: Boolean)
 }
 
 /** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */
@@ -226,6 +229,19 @@ interface CloudMediaSyncer {
 
     /** Demande une synchronisation (sans attendre). Sans effet si OneDrive est indisponible. */
     fun requestSync(reason: CloudSyncReason)
+
+    /**
+     * Synchronisation dont on attend la fin (travail de fond) : regroupée avec les demandes en
+     * cours comme [requestSync]. Vrai si OneDrive a été interrogé (même en échec).
+     */
+    suspend fun syncAndWait(reason: CloudSyncReason): Boolean
+
+    /**
+     * Le compte MSAL [accountId] peut accéder aux données de l'index : aucun autre lecteur
+     * détecté, et compte vérifié par le dernier passage (ou aucun compte encore vérifié).
+     * Valeurs conservées hors de la mémoire : vrai dès le démarrage du processus.
+     */
+    suspend fun accountAllowed(accountId: String?): Boolean
 
     /**
      * Interrompt la synchronisation en cours et exécute [block] en exclusion mutuelle avec toute

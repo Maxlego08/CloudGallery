@@ -28,6 +28,15 @@ internal const val DELTA_SELECT_VERSION = "s1"
 /** Intervalle minimal entre deux synchronisations déclenchées par le retour au premier plan. */
 internal const val FOREGROUND_SYNC_MIN_INTERVAL_MS = 5 * 60_000L
 
+/**
+ * Accès au contenu OneDrive pour le compte connecté [currentAccountId] : jamais après la
+ * détection d'un autre lecteur ([mismatch]) ; sinon seulement pour le compte vérifié par le
+ * dernier passage ([verifiedAccountId]). Aucun compte vérifié (index vide, ou données d'avant
+ * cette vérification) : accès permis, le prochain passage vérifie le lecteur.
+ */
+internal fun cloudAccountAllowed(currentAccountId: String?, verifiedAccountId: String?, mismatch: Boolean): Boolean =
+    !mismatch && (verifiedAccountId == null || verifiedAccountId == currentAccountId)
+
 private const val CLOUD_BUCKET_PREFIX = "onedrive:"
 
 /** Profondeur maximale d'un chemin de dossiers (protection contre un cycle de parents). */

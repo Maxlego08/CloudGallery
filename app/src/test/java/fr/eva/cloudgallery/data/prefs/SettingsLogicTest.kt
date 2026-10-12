@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -114,6 +115,23 @@ class SettingsLogicTest {
         assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setThumbnailCacheMaxBytes(256L * 1024 * 1024) } }
         // Indépendant du plafond des originaux.
         assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
+    }
+
+    /** Décision utilisateur (phase 5) : synchro de fond réglable, toutes les 6 h par défaut, sur tout réseau. */
+    @Test
+    fun backgroundSync_every6HoursByDefault_onAnyNetwork() = runTest {
+        assertEquals(BackgroundSyncInterval.EVERY_6_HOURS, AppSettings().backgroundSyncInterval)
+        assertFalse(AppSettings().backgroundSyncWifiOnly)
+        val repository = SettingsRepositoryImpl(InMemoryDataStore())
+        assertEquals(BackgroundSyncInterval.EVERY_6_HOURS, repository.settings.first().backgroundSyncInterval)
+        repository.setBackgroundSyncInterval(BackgroundSyncInterval.OFF)
+        repository.setBackgroundSyncWifiOnly(true)
+        assertEquals(BackgroundSyncInterval.OFF, repository.settings.first().backgroundSyncInterval)
+        assertTrue(repository.settings.first().backgroundSyncWifiOnly)
+        // Indépendant du réglage Wi-Fi des copies hors ligne.
+        assertTrue(repository.settings.first().offlineWifiOnly)
+        assertEquals(null, BackgroundSyncInterval.OFF.hours)
+        assertEquals(listOf(1L, 6L, 24L), BackgroundSyncInterval.entries.mapNotNull { it.hours })
     }
 
     @Test

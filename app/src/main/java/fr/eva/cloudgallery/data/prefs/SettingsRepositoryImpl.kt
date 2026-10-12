@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.ORIGINALS_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.THUMBNAIL_CACHE_CHOICES
 import fr.eva.cloudgallery.domain.model.ThemeMode
@@ -70,6 +71,8 @@ class SettingsRepositoryImpl @Inject constructor(
         require(bytes in ORIGINALS_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
         set(Keys.ORIGINALS_CACHE_MAX_BYTES, bytes)
     }
+    override suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = set(Keys.BACKGROUND_SYNC_INTERVAL, interval.name)
+    override suspend fun setBackgroundSyncWifiOnly(enabled: Boolean) = set(Keys.BACKGROUND_SYNC_WIFI_ONLY, enabled)
     override suspend fun setThumbnailCacheMaxBytes(bytes: Long) {
         require(bytes in THUMBNAIL_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
         set(Keys.THUMBNAIL_CACHE_MAX_BYTES, bytes)
@@ -96,6 +99,8 @@ class SettingsRepositoryImpl @Inject constructor(
             offlineNotificationsAsked = this[Keys.OFFLINE_NOTIFICATIONS_ASKED] ?: d.offlineNotificationsAsked,
             originalsCacheMaxBytes = choiceOrDefault(this[Keys.ORIGINALS_CACHE_MAX_BYTES], ORIGINALS_CACHE_CHOICES, d.originalsCacheMaxBytes),
             thumbnailCacheMaxBytes = choiceOrDefault(this[Keys.THUMBNAIL_CACHE_MAX_BYTES], THUMBNAIL_CACHE_CHOICES, d.thumbnailCacheMaxBytes),
+            backgroundSyncInterval = enumOrDefault(this[Keys.BACKGROUND_SYNC_INTERVAL], d.backgroundSyncInterval),
+            backgroundSyncWifiOnly = this[Keys.BACKGROUND_SYNC_WIFI_ONLY] ?: d.backgroundSyncWifiOnly,
         )
     }
 
@@ -114,6 +119,8 @@ class SettingsRepositoryImpl @Inject constructor(
         val OFFLINE_NOTIFICATIONS_ASKED = booleanPreferencesKey("offline_notifications_asked")
         val ORIGINALS_CACHE_MAX_BYTES = longPreferencesKey("originals_cache_max_bytes")
         val THUMBNAIL_CACHE_MAX_BYTES = longPreferencesKey("thumbnail_cache_max_bytes")
+        val BACKGROUND_SYNC_INTERVAL = stringPreferencesKey("background_sync_interval")
+        val BACKGROUND_SYNC_WIFI_ONLY = booleanPreferencesKey("background_sync_wifi_only")
     }
 
     private companion object {

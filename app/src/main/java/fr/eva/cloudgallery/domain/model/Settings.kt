@@ -2,6 +2,14 @@ package fr.eva.cloudgallery.domain.model
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** Fréquence de la synchronisation OneDrive en arrière-plan ([hours] : null si désactivée). */
+enum class BackgroundSyncInterval(val hours: Long?) {
+    OFF(null),
+    HOURLY(1),
+    EVERY_6_HOURS(6),
+    DAILY(24),
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Index du niveau de zoom de la grille Photos (voir GridZoomLevels). */
@@ -46,6 +54,13 @@ data class AppSettings(
      * [THUMBNAIL_CACHE_CHOICES]. Appliqué à l'ouverture du cache, donc au prochain démarrage.
      */
     val thumbnailCacheMaxBytes: Long = DEFAULT_THUMBNAIL_CACHE_BYTES,
+    /**
+     * Synchronisation OneDrive en arrière-plan (WorkManager), en plus de celle du retour au
+     * premier plan. Décision utilisateur : réglable, toutes les 6 h par défaut.
+     */
+    val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.EVERY_6_HOURS,
+    /** Synchronisation en arrière-plan uniquement sur un réseau non facturé (Wi-Fi). */
+    val backgroundSyncWifiOnly: Boolean = false,
 )
 
 /** Plafonds proposés pour le cache des originaux OneDrive (octets, unités décimales comme l'affichage). */

@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.BuildConfig
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
@@ -81,6 +82,7 @@ fun SettingsScreen(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    var showSyncIntervalDialog by rememberSaveable { mutableStateOf(false) }
     var showReindexDialog by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -116,6 +118,8 @@ fun SettingsScreen(
                         cloudSyncState = cloudSyncState,
                         onOpenAccount = onOpenAccount,
                         onOpenStorage = onOpenStorage,
+                        onSyncIntervalClick = { showSyncIntervalDialog = true },
+                        onBackgroundSyncWifiOnly = viewModel::setBackgroundSyncWifiOnly,
                         onShowCloudInPhotos = viewModel::setShowCloudInPhotos,
                         onLoadOriginalsOnMobileData = viewModel::setLoadOriginalsOnMobileData,
                         onOfflineWifiOnly = viewModel::setOfflineWifiOnly,
@@ -142,6 +146,16 @@ fun SettingsScreen(
             onDismiss = { showThemeDialog = false },
         )
     }
+    if (showSyncIntervalDialog && current != null) {
+        SyncIntervalDialog(
+            selected = current.backgroundSyncInterval,
+            onSelect = {
+                viewModel.setBackgroundSyncInterval(it)
+                showSyncIntervalDialog = false
+            },
+            onDismiss = { showSyncIntervalDialog = false },
+        )
+    }
     if (showReindexDialog) {
         OneUiDialog(
             title = stringResource(R.string.settings_reindex_title),
@@ -165,6 +179,8 @@ private fun SettingsContent(
     cloudSyncState: CloudSyncState,
     onOpenAccount: () -> Unit,
     onOpenStorage: () -> Unit,
+    onSyncIntervalClick: () -> Unit,
+    onBackgroundSyncWifiOnly: (Boolean) -> Unit,
     onShowCloudInPhotos: (Boolean) -> Unit,
     onLoadOriginalsOnMobileData: (Boolean) -> Unit,
     onOfflineWifiOnly: (Boolean) -> Unit,
@@ -193,6 +209,21 @@ private fun SettingsContent(
                         title = stringResource(R.string.settings_cloud_sync_state),
                         subtitle = cloudSyncStatusText(cloudSyncState),
                         trailing = if (cloudSyncState.running) RunningTrailing else null,
+                    )
+                }
+                OneUiDivider(startIndent = indent)
+                OneUiListItem(
+                    title = stringResource(R.string.settings_background_sync),
+                    subtitle = syncIntervalLabel(settings.backgroundSyncInterval),
+                    onClick = onSyncIntervalClick,
+                )
+                if (settings.backgroundSyncInterval != BackgroundSyncInterval.OFF) {
+                    OneUiDivider(startIndent = indent)
+                    OneUiSwitchItem(
+                        title = stringResource(R.string.settings_background_sync_wifi_title),
+                        subtitle = stringResource(R.string.settings_background_sync_wifi_summary),
+                        checked = settings.backgroundSyncWifiOnly,
+                        onCheckedChange = onBackgroundSyncWifiOnly,
                     )
                 }
                 OneUiDivider(startIndent = indent)
@@ -304,6 +335,31 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
 }
 
+@Composable
+private fun syncIntervalLabel(interval: BackgroundSyncInterval): String = when (interval) {
+    BackgroundSyncInterval.OFF -> stringResource(R.string.settings_background_sync_off)
+    BackgroundSyncInterval.HOURLY -> stringResource(R.string.settings_background_sync_hourly)
+    BackgroundSyncInterval.EVERY_6_HOURS -> stringResource(R.string.settings_background_sync_6h)
+    BackgroundSyncInterval.DAILY -> stringResource(R.string.settings_background_sync_daily)
+}
+
+/** Fréquence de la synchro en arrière-plan : un toucher sur une option l'applique et ferme la boîte. */
+@Composable
+private fun SyncIntervalDialog(
+    selected: BackgroundSyncInterval,
+    onSelect: (BackgroundSyncInterval) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ChoiceDialog(
+        title = stringResource(R.string.settings_background_sync),
+        options = BackgroundSyncInterval.entries,
+        selected = selected,
+        label = { syncIntervalLabel(it) },
+        onSelect = onSelect,
+        onDismiss = onDismiss,
+    )
+}
+
 /** Choix du thème : un toucher sur une option l'applique et ferme la boîte. */
 @Composable
 private fun ThemeDialog(
@@ -311,25 +367,45 @@ private fun ThemeDialog(
     onSelect: (ThemeMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    ChoiceDialog(
+        title = stringResource(R.string.settings_theme),
+        options = ThemeMode.entries,
+        selected = selected,
+        label = { themeLabel(it) },
+        onSelect = onSelect,
+        onDismiss = onDismiss,
+    )
+}
+
+/** Liste d'options à boutons radio dans une boîte One UI (« Annuler » seul bouton). */
+@Composable
+private fun <T> ChoiceDialog(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val colors = OneUiTheme.colors
     OneUiDialog(
-        title = stringResource(R.string.settings_theme),
+        title = title,
         onDismiss = onDismiss,
         confirmLabel = stringResource(R.string.common_cancel),
         onConfirm = onDismiss,
     ) {
         Column(Modifier.selectableGroup()) {
-            ThemeMode.entries.forEach { mode ->
+            options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
-                        .selectable(selected = mode == selected, role = Role.RadioButton, onClick = { onSelect(mode) })
+                        .selectable(selected = option == selected, role = Role.RadioButton, onClick = { onSelect(option) })
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
-                        selected = mode == selected,
+                        selected = option == selected,
                         onClick = null,
                         colors = RadioButtonDefaults.colors(
                             selectedColor = colors.accent,
@@ -337,7 +413,7 @@ private fun ThemeDialog(
                         ),
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text(themeLabel(mode), style = OneUiTheme.typography.listTitle, color = colors.textPrimary)
+                    Text(label(option), style = OneUiTheme.typography.listTitle, color = colors.textPrimary)
                 }
             }
         }

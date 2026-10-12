@@ -237,9 +237,14 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       copies hors ligne) avec confirmation.
 - [x] Coil : cache disque séparé de `cached_file` (décision), plafond réglable 100 / 250 / 500 Mo /
       1 Go (250 Mo par défaut, `ThumbnailCacheLimit`), appliqué au prochain démarrage.
-- [ ] WorkManager périodique (`@HiltWorker`, `hilt-work` déjà présent) pour le delta OneDrive, avec
-      contrainte réseau et option Wi-Fi seulement. Prévoir aussi un rattrapage MediaStore en arrière-
-      plan, éventuellement avec un `ContentUriTrigger`.
+- [x] WorkManager périodique pour le delta OneDrive (`OneDriveSyncWorker`, `@HiltWorker`) :
+      Paramètres > Compte « Synchroniser en arrière-plan » (désactivée / 1 h / 6 h / 24 h, 6 h par
+      défaut) et « Synchroniser en Wi-Fi uniquement » ; batterie non faible ; planifié pour un
+      compte connecté, annulé à la déconnexion (`BackgroundSyncScheduler`) ; initialiseur
+      WorkManager par défaut retiré (`Configuration.Provider`).
+- [ ] Rattrapage MediaStore en arrière-plan (`ContentUriTrigger`) : pas fait, l'index local est déjà
+      rattrapé à chaque ouverture (`MediaSyncCoordinator`) ; utile seulement pour une future
+      fonction de fond qui lirait l'index local.
 - [x] Afficher l'état de synchro OneDrive dans Paramètres (dernier delta, erreurs, nombre
       d'éléments) : fait en phase 3.
 - [ ] Première énumération OneDrive reprenable après un arrêt du processus (aujourd'hui elle
@@ -254,15 +259,24 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
       des sources masquées y font référence : la restauration d'un dossier pourrait alors cibler
       ses seuls descendants, au lieu de déclencher une énumération complète à chaque nouveau
       dossier pendant les 30 jours qui suivent la suppression d'un dossier (migration de schéma).
-- [ ] Changement de compte détecté dès le démarrage (aujourd'hui au premier passage de synchro) :
-      jusque-là, une miniature non encore en cache d'un élément de l'ancien compte peut encore être
-      demandée avec le jeton du nouveau compte.
+- [x] Changement de compte bloqué dès le démarrage : compte MSAL vérifié et « autre compte »
+      enregistrés (`CloudSyncThrottleStore`) ; `CloudAccessGuard` refuse tout accès à un compte non
+      vérifié ou après la détection d'un autre lecteur, sans attendre le premier passage, qui part
+      alors sans délai. Données d'avant la phase 5 (aucun compte vérifié) : accès permis jusqu'au
+      prochain passage, qui vérifie.
 
 ### Vérifications sur l'appareil (phase 5)
 - [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
       le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
       plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
       arrêt forcé.
+- [ ] Synchro en arrière-plan : `adb shell dumpsys jobscheduler | grep -A5 onedrive` (ou App
+      Inspection > Background Task Inspector) montre le travail périodique ; désactivée : annulé ;
+      déconnexion : annulé ; passage forcé (`adb shell cmd jobscheduler run -f fr.eva.cloudgallery
+      <id>`) appli fermée : nouveaux éléments visibles à l'ouverture sans attendre.
+- [ ] Autre compte : déconnexion sans purge impossible, donc tester avec « Données restantes »
+      puis connexion à un autre compte ; arrêt forcé avant la fin du premier passage : au
+      redémarrage, aucune miniature de l'ancien compte demandée, carte « Autre compte OneDrive ».
 - [ ] Plafond des originaux à 500 Mo avec 1 Go d'originaux : les moins récents partent aussitôt,
       sauf ceux ouverts depuis moins de 30 min ; un original partagé vers Gmail reste lisible.
 

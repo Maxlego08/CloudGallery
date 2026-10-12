@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
@@ -57,6 +58,10 @@ class SettingsViewModel @Inject constructor(
     fun setConfirmBeforeDelete(enabled: Boolean) = update { settingsRepository.setConfirmBeforeDelete(enabled) }
     fun setShowCloudInPhotos(enabled: Boolean) = update { settingsRepository.setShowCloudInPhotos(enabled) }
     fun setLoadOriginalsOnMobileData(enabled: Boolean) = update { settingsRepository.setLoadOriginalsOnMobileData(enabled) }
+
+    /** Synchro de fond : le travail périodique suit le réglage (BackgroundSyncScheduler). */
+    fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = update { settingsRepository.setBackgroundSyncInterval(interval) }
+    fun setBackgroundSyncWifiOnly(enabled: Boolean) = update { settingsRepository.setBackgroundSyncWifiOnly(enabled) }
     /**
      * « Wi-Fi uniquement » : le travail de téléchargement en cours ou planifié est aussitôt adapté
      * (appli visible : replanification acceptée par le système).

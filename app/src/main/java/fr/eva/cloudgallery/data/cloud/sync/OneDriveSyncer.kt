@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -102,13 +103,36 @@ class OneDriveSyncer @Inject constructor(
     override fun requestSync(reason: CloudSyncReason) {
         if (!feature.enabled) return
         val ticket = requestCounter.incrementAndGet()
-        scope.launch(runs + io) {
-            mutex.withLock {
-                if (lastStartedRequest >= ticket) return@withLock
-                val startTicket = requestCounter.get()
-                if (runGuarded(reason)) lastStartedRequest = startTicket
-            }
+        scope.launch(runs + io) { runRequest(ticket, reason) }
+    }
+
+    override suspend fun syncAndWait(reason: CloudSyncReason): Boolean {
+        if (!feature.enabled) return false
+        val ticket = requestCounter.incrementAndGet()
+        // Enfant de [runs] : interrompu comme les autres passages par exclusive(). L'appelant
+        // annulé (travail arrêté par WorkManager : réseau perdu) arrête aussi le passage.
+        val run = scope.async(runs + io) { runRequest(ticket, reason) }
+        return try {
+            run.await()
+        } catch (e: CancellationException) {
+            run.cancel()
+            throw e
         }
+    }
+
+    /** Vrai si un passage a interrogé OneDrive pour cette demande (ou un passage démarré après elle). */
+    private suspend fun runRequest(ticket: Long, reason: CloudSyncReason): Boolean = mutex.withLock {
+        if (lastStartedRequest >= ticket) return@withLock true
+        val startTicket = requestCounter.get()
+        val ran = runGuarded(reason)
+        if (ran) lastStartedRequest = startTicket
+        ran
+    }
+
+    override suspend fun accountAllowed(accountId: String?): Boolean = withContext(io) {
+        if (!stateLoaded) reloadState()
+        !_state.value.accountMismatch &&
+            cloudAccountAllowed(accountId, throttle.verifiedAccountId(), throttle.accountMismatch())
     }
 
     override suspend fun <T> exclusive(block: suspend () -> T): T {
@@ -130,16 +154,21 @@ class OneDriveSyncer @Inject constructor(
         if (!stateLoaded) reloadState()
         // Etat du compte pas encore lu (démarrage du processus) ou lecture précédente en échec.
         auth.refreshIfNeeded()
-        if (auth.state.value !is CloudAccountState.SignedIn) return false
+        val signedIn = auth.state.value as? CloudAccountState.SignedIn ?: return false
+        val accountId = signedIn.account.id
         val now = System.currentTimeMillis()
         val current = _state.value
         if (now < current.retryNotBefore) return false
-        if (reason == CloudSyncReason.FOREGROUND && !shouldRunForegroundSync(current.lastSyncAt, current.retryNotBefore, now)) {
+        // Compte pas encore vérifié (autre compte connecté) : passage sans attendre l'intervalle,
+        // l'accès au contenu reste bloqué jusque-là.
+        val verified = cloudAccountAllowed(accountId, throttle.verifiedAccountId(), mismatch = false)
+        val skippable = reason == CloudSyncReason.FOREGROUND || reason == CloudSyncReason.BACKGROUND
+        if (skippable && verified && !shouldRunForegroundSync(current.lastSyncAt, current.retryNotBefore, now)) {
             return false
         }
         _state.update { it.copy(running = true, processedItems = 0) }
         try {
-            runSync()
+            runSync(accountId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -153,7 +182,7 @@ class OneDriveSyncer @Inject constructor(
         return true
     }
 
-    private suspend fun runSync() {
+    private suspend fun runSync(accountId: String?) {
         val driveId = graph.drive().id?.takeIf { it.isNotBlank() }
             ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Lecteur OneDrive sans identifiant"))
         val previous = cursorDao.get(ONEDRIVE_PROVIDER)
@@ -167,9 +196,13 @@ class OneDriveSyncer @Inject constructor(
         if (start is SyncStart.AccountMismatch) {
             Log.w(TAG, "OneDrive connecté différent de celui de l'index : synchronisation suspendue")
             _state.update { it.copy(accountMismatch = true) }
+            // Conservé : l'accès reste bloqué après un redémarrage, jusqu'à la purge.
+            withContext(NonCancellable) { throttle.setAccountMismatch() }
             return
         }
         _state.update { it.copy(accountMismatch = false) }
+        // Lecteur conforme à l'index : ce compte est vérifié (avant l'énumération, qui peut être longue).
+        accountId?.let { throttle.setVerified(it) }
 
         val version = cloudCursorVersion(driveId, DELTA_SELECT_VERSION)
         val initialUrl = graph.initialDeltaUrl()
@@ -231,7 +264,7 @@ class OneDriveSyncer @Inject constructor(
             )
             _state.update { it.copy(retryNotBefore = 0L) }
             try {
-                throttle.clear()
+                throttle.clearRetry()
             } catch (e: Exception) {
                 Log.w(TAG, "Effacement de la pause Microsoft Graph impossible", e)
             }
@@ -293,12 +326,15 @@ class OneDriveSyncer @Inject constructor(
             val cursor = cursorDao.get(ONEDRIVE_PROVIDER)
             val count = writer.visibleCount()
             val pausedUntil = restoredRetryNotBefore(throttle.retryNotBefore(), System.currentTimeMillis())
+            val mismatch = throttle.accountMismatch()
             stateLoaded = true
             _state.update {
                 it.copy(
                     itemCount = count,
                     // Pause Graph enregistrée (survit au redémarrage du processus et à exclusive()).
                     retryNotBefore = maxOf(it.retryNotBefore, pausedUntil),
+                    // Autre compte détecté (survit au redémarrage du processus, effacé par la purge).
+                    accountMismatch = it.accountMismatch || mismatch,
                     lastSyncAt = cursor?.lastSyncAt ?: 0L,
                     lastFullSyncAt = cursor?.lastFullSyncAt ?: 0L,
                     // Avec un curseur, l'erreur enregistrée fait foi ; sans curseur, seule la mémoire la porte.

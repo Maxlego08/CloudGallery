@@ -20,6 +20,7 @@ import fr.eva.cloudgallery.data.net.NetworkStatus
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumType
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 import fr.eva.cloudgallery.domain.model.ThemeMode
@@ -73,6 +74,8 @@ class OfflineRepositoryTest {
         override suspend fun setOfflineNotificationsAsked(asked: Boolean) = Unit
         override suspend fun setOriginalsCacheMaxBytes(bytes: Long) = Unit
         override suspend fun setThumbnailCacheMaxBytes(bytes: Long) = Unit
+        override suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = Unit
+        override suspend fun setBackgroundSyncWifiOnly(enabled: Boolean) = Unit
     }
 
     @Before

@@ -53,6 +53,13 @@
     <string name="settings_reindex_confirm">Réindexer</string>
     <string name="settings_section_account">Compte</string>
     <string name="settings_cloud_sync_state">Synchronisation OneDrive</string>
+    <string name="settings_background_sync">Synchroniser en arrière-plan</string>
+    <string name="settings_background_sync_off">Désactivée : seulement à l\'ouverture de l\'appli</string>
+    <string name="settings_background_sync_hourly">Toutes les heures</string>
+    <string name="settings_background_sync_6h">Toutes les 6 heures</string>
+    <string name="settings_background_sync_daily">Une fois par jour</string>
+    <string name="settings_background_sync_wifi_title">Synchroniser en Wi-Fi uniquement</string>
+    <string name="settings_background_sync_wifi_summary">La synchronisation en arrière-plan attend un réseau Wi-Fi non facturé. À l\'ouverture de l\'appli, OneDrive est toujours synchronisé.</string>
     <string name="settings_show_cloud_in_photos">Afficher les éléments OneDrive dans Photos</string>
     <string name="settings_originals_mobile_title">Charger les originaux sur réseau mobile</string>
     <string name="settings_originals_mobile_summary">Au zoom, télécharge l\'original OneDrive sans demander, même sur données mobiles ou avec l\'économiseur de données. Désactivé, il vous est proposé avec sa taille. En Wi-Fi, il est toujours chargé automatiquement.</string>

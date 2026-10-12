@@ -362,4 +362,18 @@ class OneDriveLogicTest {
         assertEquals(0L, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS + 1, now))
         assertEquals(now + MAX_STORED_THROTTLE_MS, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS, now))
     }
+
+    @Test
+    fun accountAllowed_onlyForTheVerifiedAccount_andNeverAfterAMismatch() {
+        // Index lié au compte A par le dernier passage.
+        assertTrue(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = false))
+        // Autre compte connecté : bloqué jusqu'à ce qu'un passage vérifie son lecteur.
+        assertFalse(cloudAccountAllowed("B", verifiedAccountId = "A", mismatch = false))
+        assertFalse(cloudAccountAllowed(null, verifiedAccountId = "A", mismatch = false))
+        // Aucun compte vérifié (index vide, ou données d'avant la vérification) : permis.
+        assertTrue(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = false))
+        // Autre lecteur détecté : bloqué même pour le compte vérifié, jusqu'à la purge.
+        assertFalse(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = true))
+        assertFalse(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = true))
+    }
 }

@@ -409,7 +409,7 @@ class MsalAuthService @Inject constructor(
         /** Intervalle minimal entre deux relectures automatiques du compte après une erreur. */
         const val ERROR_RETRY_INTERVAL_MS = 30_000L
 
-        fun IAccount.toCloudAccount() = CloudAccount(username = username?.takeIf { it.isNotBlank() })
+        fun IAccount.toCloudAccount() = CloudAccount(username = username?.takeIf { it.isNotBlank() }, id = id?.takeIf { it.isNotBlank() })
 
         /** Type et code d'erreur seulement : les messages MSAL peuvent contenir des données de compte. */
         fun describe(error: Throwable): String =
