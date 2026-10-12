@@ -44,7 +44,7 @@ import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
         PlaybackPositionEntity::class,
         CloudFolderEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -105,6 +105,17 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE download_task ADD COLUMN cloudItemId TEXT")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN cTag TEXT")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v5 : marqueur de suppression des dossiers OneDrive (`cloud_folder.deletedAt`). Lignes
+         * existantes : dossiers présents (null). Les dossiers supprimés avant cette version n'ont
+         * plus de ligne : leurs éléments masqués restent détectés comme orphelins.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE cloud_folder ADD COLUMN deletedAt INTEGER")
             }
         }
     }

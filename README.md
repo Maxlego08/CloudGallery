@@ -184,15 +184,16 @@ non nulle signifie « fichier local utilisable ». En phase 3, un élément OneD
 propre média logique (aucune fusion avec un fichier local, voir les limitations).
 
 Migrations : 1→2 (phase 2), 2→3 (phase 3 : colonnes `media.cloudItemId` / `media.cloudCTag`,
-table `cloud_folder`) et 3→4 (phase 4 : `cached_file.version`, `download_task.cloudItemId` / `cTag` /
-`attempts`), testées par `MigrationTest` (2→3, 1→3, 3→4, 2→4, 1→4).
+table `cloud_folder`), 3→4 (phase 4 : `cached_file.version`, `download_task.cloudItemId` / `cTag` /
+`attempts`) et 4→5 (phase 5 : `cloud_folder.deletedAt`), testées par `MigrationTest` (2→3, 1→3,
+3→4, 2→4, 1→4, 4→5, 3→5, 2→5, 1→5).
 
 | Table | Rôle |
 |---|---|
 | `media` | Média logique : type, nom, MIME, `dateTaken` (EXIF/MediaStore, à défaut date d'ajout puis de modification ; pour OneDrive `photo.takenDateTime`, puis `fileSystemInfo.createdDateTime`, puis `createdDateTime`), dimensions, durée, taille, orientation, `primaryUri`, indicateurs de sources, `cloudItemId` / `cloudCTag` (miniatures OneDrive), `contentHash` (`qxh:<quickXorHash>` pour OneDrive ; pas encore calculé pour les fichiers locaux). Index `(dateTaken, id)`, `(mediaType, dateTaken)`, `displayName`, `contentHash` |
 | `media_source` | Une source physique d'un média. `kind` + `externalId` unique (`image:123` / `video:45` pour MediaStore, car les `_ID` images et vidéos peuvent se chevaucher ; id d'élément pour OneDrive), `uri`, `bucketKey` (`local:<BUCKET_ID>` ou `onedrive:<id du dossier parent>`), chemin relatif (`OneDrive/Photos/2024/` pour OneDrive), `generation` (GENERATION_MODIFIED), `eTag`/`cTag`/`sha1Hash`/`quickXorHash` (OneDrive), `volumeName`, `missingSince` (source masquée mais conservée) |
 | `album` | Album-dossier (`LOCAL_FOLDER` ou `CLOUD_FOLDER`, `sourceKey` = bucketKey) ou album virtuel (`sourceKey` null). Nom personnalisé, épingle, ordre, couverture, masquage. Un dossier personnalisé n'est jamais supprimé automatiquement (sauf à la déconnexion OneDrive, après confirmation) |
-| `cloud_folder` | Dossiers OneDrive connus (id, parent, nom, racine) : noms et chemins des albums OneDrive, masquage du contenu d'un dossier supprimé |
+| `cloud_folder` | Dossiers OneDrive connus (id, parent, nom, racine) : noms et chemins des albums OneDrive, masquage du contenu d'un dossier supprimé. `deletedAt` : marqueur de suppression, gardé tant que le sous-arbre du dossier contient des éléments masqués (restauration depuis la corbeille) ; jamais montré |
 | `album_media` | Appartenance d'un média à un album virtuel (références, pas de copie) |
 | `favorite` | Favoris propres à l'application (`mediaId`, date d'ajout) |
 | `cached_file` | Fichiers OneDrive copiés sur l'appareil, un par média et par niveau (`ORIGINAL` : originaux temporaires ; `OFFLINE` : copies hors ligne, `pinned`), chemin relatif au dossier du niveau, taille, `lastAccessAt` (nettoyage), `version` = cTag du contenu copié (null = jamais considéré à jour), `pinned` = conservé hors ligne (jamais évincé). Remplacement d'une copie : `CachedFileDao.replace` (même ligne) |
@@ -386,13 +387,15 @@ rattrapés au prochain passage au premier plan grâce au curseur de génération
   et épingle possibles ; pas de suppression ni de « Copier vers » un dossier OneDrive.
 - **Suppressions** : un élément `deleted` est **masqué** (`missingSince`), puis retiré de l'index
   après **30 jours**. Un dossier supprimé ne masque son contenu qu'en fin de passage, s'il est
-  toujours absent ; un dossier restauré depuis la corbeille OneDrive déclenche une énumération
-  complète : quand un nouveau dossier apparaît alors que des éléments masqués sont dans ce dossier
-  ou dans un dossier retiré de l'index (sous-dossiers d'un dossier supprimé), le deltaLink est
-  effacé dans la transaction de la page (même interrompu, le passage suivant repart d'une
-  énumération complète) et l'énumération démarre aussitôt. Pendant les 30 jours qui suivent la
-  suppression d'un dossier contenant des médias, la création d'un nouveau dossier déclenche donc
-  aussi une énumération complète. `410 Gone` (jeton delta expiré) : nouvelle énumération complète depuis l'URL `Location`
+  toujours absent ; sa ligne `cloud_folder` est alors marquée supprimée (`deletedAt`), avec ses
+  sous-dossiers et dossiers intermédiaires, tant que son sous-arbre contient des éléments masqués
+  (retirée une fois ceux-ci purgés). Un dossier marqué qui réapparaît (restauré depuis la corbeille
+  OneDrive) avec des éléments masqués dans son sous-arbre déclenche une énumération complète (ses
+  éléments ne sont pas forcément renvoyés un par un) : le deltaLink est effacé dans la transaction
+  de la page (même interrompu, le passage suivant repart d'une énumération complète) et
+  l'énumération démarre aussitôt. Un nouveau dossier (sans marqueur) n'en déclenche plus, sauf s'il
+  reste des éléments masqués d'un dossier supprimé avant la v5 (sans marqueur), jusqu'à leur purge.
+  `410 Gone` (jeton delta expiré) : nouvelle énumération complète depuis l'URL `Location`
   (au plus deux par passage), puis les éléments non revus sont masqués. Rien n'est supprimé
   immédiatement ; aucun fichier local ni OneDrive n'est touché.
 - **Déclenchement** : après la connexion, au retour au premier plan (au plus une fois toutes les

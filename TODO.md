@@ -255,10 +255,12 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
 - [ ] Copies hors ligne : relancer automatiquement un nouveau téléchargement détecté par une synchro
       en arrière-plan (aujourd'hui au premier plan seulement : la tâche lancée par l'utilisateur ne
       peut être planifiée qu'appli visible) ; couvertures d'album et EXIF depuis la copie hors ligne.
-- [ ] Garder les lignes `cloud_folder` des dossiers supprimés (marqueur de suppression) tant que
-      des sources masquées y font référence : la restauration d'un dossier pourrait alors cibler
-      ses seuls descendants, au lieu de déclencher une énumération complète à chaque nouveau
-      dossier pendant les 30 jours qui suivent la suppression d'un dossier (migration de schéma).
+- [x] Marqueur de suppression des dossiers OneDrive (base v5, `cloud_folder.deletedAt`) : un dossier
+      supprimé (et ses dossiers intermédiaires) reste marqué tant que son sous-arbre a des éléments
+      masqués, puis est retiré après leur purge (`planFolderTombstones`). Seul un marqueur restauré
+      avec des éléments masqués déclenche une énumération complète ; un nouveau dossier n'en
+      déclenche plus (sauf éléments masqués orphelins d'avant la v5, jusqu'à leur purge). Le delta
+      limité au dossier restauré n'est pas utilisé (fusion avec le delta du lecteur non vérifiée).
 - [x] Changement de compte bloqué dès le démarrage : compte MSAL vérifié et « autre compte »
       enregistrés (`CloudSyncThrottleStore`) ; `CloudAccessGuard` refuse tout accès à un compte non
       vérifié ou après la détection d'un autre lecteur, sans attendre le premier passage, qui part
@@ -277,6 +279,9 @@ l'onglet Photos montre OneDrive quel que soit le réglage.
 - [ ] Autre compte : déconnexion sans purge impossible, donc tester avec « Données restantes »
       puis connexion à un autre compte ; arrêt forcé avant la fin du premier passage : au
       redémarrage, aucune miniature de l'ancien compte demandée, carte « Autre compte OneDrive ».
+- [ ] Dossiers supprimés (OneDrive web) : dossier de photos supprimé puis, avant 30 jours, nouveau
+      dossier créé (synchro incrémentale, pas d'énumération complète dans le logcat `OneDriveSync`),
+      puis dossier restauré depuis la corbeille (énumération complète, photos et album de retour).
 - [ ] Plafond des originaux à 500 Mo avec 1 Go d'originaux : les moins récents partent aussitôt,
       sauf ceux ouverts depuis moins de 30 min ; un original partagé vers Gmail reste lisible.
 

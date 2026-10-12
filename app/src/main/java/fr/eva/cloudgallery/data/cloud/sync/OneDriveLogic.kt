@@ -238,6 +238,57 @@ internal fun descendantFolderIds(roots: Set<String>, folders: Collection<CloudFo
     return result
 }
 
+/**
+ * Vrai si le sous-arbre d'un des dossiers [roots] (eux compris, parcours par `parentId` sur
+ * [folders], dossiers marqués compris) contient un dossier de [hiddenFolders] (dossiers qui ont
+ * des sources OneDrive masquées).
+ */
+internal fun subtreeHasHiddenItems(
+    roots: Set<String>,
+    folders: Collection<CloudFolderFields>,
+    hiddenFolders: Set<String>,
+): Boolean = roots.isNotEmpty() && roots.any { it in selfAndAncestorIds(hiddenFolders, folders) }
+
+/** Dossiers à marquer supprimés ([mark]) et lignes à retirer de l'index ([delete]) en fin de passage. */
+internal data class FolderTombstonePlan(val mark: Set<String>, val delete: Set<String>)
+
+/**
+ * Marqueurs de suppression des dossiers OneDrive (fin de passage). Candidats : dossiers absents
+ * à la fin de ce passage ([gone]) et marqueurs déjà présents ([markers]), sauf ceux qui gardent
+ * des éléments visibles ([keepVisible], cas limite : ligne laissée telle quelle).
+ *
+ * Un candidat reste (ou devient) marqueur tant que son sous-arbre contient des sources masquées
+ * ([hiddenFolders]) : s'il est restauré depuis la corbeille, ses éléments masqués peuvent ne pas
+ * être renvoyés un par un par le delta, et c'est le marqueur qui le signale (énumération complète
+ * seulement dans ce cas). Les dossiers intermédiaires sans élément sont gardés aussi : sans eux,
+ * un sous-dossier masqué ne serait plus rattaché au dossier restauré. Sinon la ligne est retirée
+ * (rien à restaurer : un dossier qui revient est alors traité comme un nouveau dossier).
+ */
+internal fun planFolderTombstones(
+    folders: Collection<CloudFolderFields>,
+    markers: Set<String>,
+    gone: Set<String>,
+    keepVisible: Set<String>,
+    hiddenFolders: Set<String>,
+): FolderTombstonePlan {
+    val candidates = (gone + markers) - keepVisible
+    if (candidates.isEmpty()) return FolderTombstonePlan(emptySet(), emptySet())
+    val hiddenOrAncestors = selfAndAncestorIds(hiddenFolders, folders)
+    val kept = candidates.filterTo(HashSet()) { it in hiddenOrAncestors }
+    return FolderTombstonePlan(mark = kept - markers, delete = candidates - kept)
+}
+
+/** [ids] et tous leurs ancêtres connus (remontée par `parentId`, cycles ignorés). */
+private fun selfAndAncestorIds(ids: Set<String>, folders: Collection<CloudFolderFields>): Set<String> {
+    val parentOf = folders.associate { it.itemId to it.parentId }
+    val result = HashSet<String>()
+    for (id in ids) {
+        var current: String? = id
+        while (current != null && result.add(current)) current = parentOf[current]
+    }
+    return result
+}
+
 /** Source OneDrive de l'index (pour le plan de retrait). */
 internal data class CloudStamp(
     val sourceId: Long,
