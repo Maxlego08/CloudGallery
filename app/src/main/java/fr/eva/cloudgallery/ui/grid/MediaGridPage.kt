@@ -83,6 +83,9 @@ data class GridExtraAction(val icon: ImageVector, val label: String, val onClick
 
 private const val LARGE_TITLE_KEY = "large_title"
 
+/** Éléments de la grille avant les éléments paginés : la ligne de titre ([largeTitleItem] ou [compactCountItem]). */
+private const val GRID_LEADING_ITEMS = 1
+
 /**
  * Ecran de grille complet partagé par Photos et les collections : grand titre, barre supérieure
  * dont le titre apparaît au défilement, grille paginée, mode sélection avec barre d'actions,
@@ -134,6 +137,8 @@ fun MediaGridPage(
     val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
     val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
     val items = viewModel.gridItems.collectAsLazyPagingItems()
+    val fastScrollIndex by viewModel.fastScrollIndex.collectAsStateWithLifecycle()
+    val gridGrouping by viewModel.gridGrouping.collectAsStateWithLifecycle()
     // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
     val withNotificationPermission = rememberNotificationPermissionGate(
         alreadyAsked = settings?.offlineNotificationsAsked ?: true,
@@ -228,6 +233,20 @@ fun MediaGridPage(
                     header = header,
                     modifier = Modifier.fillMaxSize(),
                 )
+                val scrollIndex = fastScrollIndex
+                val scrollGrouping = gridGrouping
+                if (scrollIndex != null && scrollGrouping != null && scrollIndex.size >= FAST_SCROLL_MIN_ITEMS) {
+                    FastScroller(
+                        state = gridState,
+                        items = items,
+                        index = scrollIndex,
+                        grouping = scrollGrouping,
+                        leadingItems = GRID_LEADING_ITEMS,
+                        topPadding = gridTop,
+                        bottomPadding = gridBottom,
+                        onJump = viewModel::jumpTo,
+                    )
+                }
             }
         }
 

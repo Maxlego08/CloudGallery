@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -150,7 +151,17 @@ abstract class MediaGridViewModel(
      */
     private val pagingScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.Default)
 
-    private val basePaging: Flow<PagingData<GridItem.Media>> = deps.mediaRepository.pagedMedia(mediaContext)
+    /**
+     * Saut du défilement rapide : la pagination repart du rang demandé (une nouvelle demande, même
+     * identique, recrée le Pager : [JumpRequest.seq]).
+     */
+    private data class JumpRequest(val offset: Int, val seq: Int)
+
+    private val jumpRequest = MutableStateFlow(JumpRequest(0, 0))
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val basePaging: Flow<PagingData<GridItem.Media>> = jumpRequest
+        .flatMapLatest { request -> deps.mediaRepository.pagedMedia(mediaContext, request.offset) }
         .map { data -> data.map { GridItem.Media(it) } }
         .cachedIn(pagingScope)
 
@@ -167,6 +178,21 @@ abstract class MediaGridViewModel(
 
     val count: StateFlow<Int?> = deps.mediaRepository.observeCount(mediaContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Regroupement courant (jour / mois), pour la bulle et les clés d'en-tête du défilement rapide. */
+    val gridGrouping: StateFlow<GridGrouping?> = grouping
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Dates de tous les médias du contexte (défilement rapide), construites hors du thread principal. */
+    val fastScrollIndex: StateFlow<FastScrollIndex?> = deps.mediaRepository.observeDates(mediaContext)
+        .map { dates -> FastScrollIndex(dates.toLongArray()) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Recharge la grille à partir du média de rang [offset] (cible hors des pages chargées). */
+    fun jumpTo(offset: Int) {
+        jumpRequest.update { JumpRequest(offset.coerceAtLeast(0), it.seq + 1) }
+    }
 
     private val _selection = MutableStateFlow<Set<Long>>(emptySet())
     val selection: StateFlow<Set<Long>> = _selection.asStateFlow()

@@ -69,6 +69,10 @@ interface SearchDao {
     @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE AND $MATCHES")
     fun observeSearchCount(match: String): Flow<Int>
 
+    /** Dates des résultats dans l'ordre de la grille (défilement rapide). */
+    @Query("SELECT m.dateTaken FROM media m WHERE $VISIBLE AND $MATCHES $ORDER")
+    fun observeSearchDates(match: String): Flow<List<Long>>
+
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND $MATCHES AND $IN_PERIOD $ORDER")
     suspend fun searchIdsInPeriod(match: String, startMs: Long, endMs: Long): List<Long>
 

@@ -256,6 +256,35 @@ class MediaDaoTest {
     }
 
     @Test
+    fun dates_followGridOrderAndFilters() = runTest {
+        val (a, _, c) = seed()
+        val dao = db.mediaDao()
+        val cloudImage = dao.insert(media(9_000))
+        db.mediaSourceDao().insert(cloudSource(cloudImage, "od-img"))
+        dao.refreshSourceFlags(listOf(cloudImage))
+        db.favoriteDao().insertAll(listOf(FavoriteEntity(a, 1)))
+
+        assertEquals(listOf(5_000L, 1_000L, 1_000L), dao.observeTimelineDates(includeCloudOnly = false).first())
+        assertEquals(listOf(9_000L, 5_000L, 1_000L, 1_000L), dao.observeTimelineDates(includeCloudOnly = true).first())
+        assertEquals(listOf(5_000L), dao.observeVideoDates(includeCloudOnly = false).first())
+        assertEquals(listOf(1_000L), dao.observeFavoriteDates().first())
+        assertEquals(c, dao.observeTimelineIds(includeCloudOnly = false).first().first())
+    }
+
+    @Test
+    fun pagingTimeline_initialKey_startsAtRankAndPrependsBefore() = runTest {
+        val (a, b, c) = seed()
+        val source = db.mediaDao().pagingTimeline(includeCloudOnly = true)
+        val result = source.load(PagingSource.LoadParams.Refresh(key = 1, loadSize = 10, placeholdersEnabled = false))
+        val page = result as PagingSource.LoadResult.Page
+        assertEquals(listOf(b, a), page.data.map { it.id })
+        val prevKey = page.prevKey
+        assertNotNull(prevKey)
+        val before = source.load(PagingSource.LoadParams.Prepend(key = prevKey!!, loadSize = 10, placeholdersEnabled = false))
+        assertEquals(listOf(c), (before as PagingSource.LoadResult.Page).data.map { it.id })
+    }
+
+    @Test
     fun customizedFolderAlbum_isNeverDeleted() = runTest {
         val albumDao = db.albumDao()
         val plain = albumDao.insert(

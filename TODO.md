@@ -374,8 +374,11 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 - [x] Retour : l'écran sort en glissant entièrement vers la droite (sans fondu), l'écran précédent
       revient avec un léger décalage ; suit le geste de retour prédictif. La visionneuse et le
       lecteur gardent leur zoom arrière.
-- [ ] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
-      atteindre n'importe quelle date sans faire défiler toute la grille.
+- [x] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
+      atteindre n'importe quelle date sans faire défiler toute la grille. Photos et toutes les
+      collections (`ui/grid/FastScroller.kt`) ; position calculée sur les dates de tous les
+      médias du contexte (requêtes `observe*Dates`) ; saut hors des pages chargées par
+      rechargement de la pagination au rang du premier média de la période.
 - [ ] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
       taille écran de tous les éléments OneDrive, gardés hors du plafond LRU, pour une navigation
       fluide (zoom maximal et vidéos restent en ligne).
@@ -397,6 +400,15 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
       refus de la boîte système : rien n'est supprimé ; partage annulé (retour sans choisir) : la
       question apparaît, « Garder » ; photo regroupée avec OneDrive : message affiché, l'élément reste
       visible via OneDrive. Comportement sur un appareil sans Dossier sécurisé configuré.
+- [ ] Défilement rapide : la poignée apparaît au défilement et disparaît ~1,5 s après ; glisser du
+      12 octobre 2026 à janvier 2025 : bulle « Janvier 2025 » (zoom mois) ou « 15 janv. 2025 »
+      (zoom jour), vibration légère à chaque mois, grille placée sur l'en-tête visé au lâcher ;
+      remonter ensuite jusqu'en haut (pages précédentes chargées sans saut visible) ; position
+      cohérente avec « Afficher OneDrive » activé et désactivé, dans un album, les favoris et une
+      recherche ; sélection par glisser et pincement inchangés près du bord droit ; poignée au-dessus
+      de la barre d'onglets et de la barre d'actions en mode sélection ; durée de chargement des
+      dates sur la vraie bibliothèque. `connectedDebugAndroidTest` : `MediaDaoTest`
+      (`dates_followGridOrderAndFilters`, `pagingTimeline_initialKey_startsAtRankAndPrependsBefore`).
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 

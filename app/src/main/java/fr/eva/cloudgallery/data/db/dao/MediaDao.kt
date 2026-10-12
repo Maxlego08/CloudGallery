@@ -93,6 +93,20 @@ interface MediaDao {
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) $ORDER")
     fun observeAlbumIds(albumId: Long): Flow<List<Long>>
 
+    // --- Dates ordonnées (défilement rapide), même ordre que les grilles ------------------
+
+    @Query("SELECT m.dateTaken FROM media m WHERE $LIBRARY $ORDER")
+    fun observeTimelineDates(includeCloudOnly: Boolean): Flow<List<Long>>
+
+    @Query("SELECT m.dateTaken FROM media m WHERE $LIBRARY AND m.mediaType = 'VIDEO' $ORDER")
+    fun observeVideoDates(includeCloudOnly: Boolean): Flow<List<Long>>
+
+    @Query("SELECT m.dateTaken FROM media m WHERE $VISIBLE AND m.id IN (SELECT mediaId FROM favorite) $ORDER")
+    fun observeFavoriteDates(): Flow<List<Long>>
+
+    @Query("SELECT m.dateTaken FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) $ORDER")
+    fun observeAlbumDates(albumId: Long): Flow<List<Long>>
+
     // --- Comptages ----------------------------------------------------------------------
 
     @Query("SELECT COUNT(*) FROM media m WHERE $LIBRARY")
