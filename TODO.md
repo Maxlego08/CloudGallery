@@ -379,13 +379,24 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 - [ ] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
       taille écran de tous les éléments OneDrive, gardés hors du plafond LRU, pour une navigation
       fluide (zoom maximal et vidéos restent en ligne).
-- [ ] Dossier sécurisé Samsung : action « Déplacer vers le Dossier sécurisé » pour les photos du
+- [x] Dossier sécurisé Samsung : action « Déplacer vers le Dossier sécurisé » pour les photos du
       téléphone (partage Android vers une appli du Dossier sécurisé, puis corbeille des originaux
-      après confirmation). Pas d'API Knox privée.
+      après confirmation). Pas d'API Knox privée. Menu « Plus » de la sélection et de la
+      visionneuse, seulement si `com.samsung.knox.securefolder` est installé ; 100 éléments au plus
+      par envoi ; toujours la corbeille (`ui/securefolder/`).
 
 ### Vérifications sur l'appareil (améliorations)
 - [ ] Retour depuis Paramètres, Stockage, un album, la recherche : glissement vers la droite, au
       bouton et au geste (aperçu prédictif).
+- [ ] Dossier sécurisé : l'entrée apparaît (sélection avec une photo du téléphone, visionneuse) et
+      pas pour un élément uniquement OneDrive ; une appli du Dossier sécurisé (sa Galerie) apparaît
+      dans le menu de partage, sinon l'activer dans les paramètres du Dossier sécurisé et noter le
+      libellé exact du réglage ; photo et vidéo, plusieurs éléments (10, 100) : tous arrivent dans le
+      Dossier sécurisé ? ; au retour, « Garder les originaux » : rien n'est supprimé ; « Mettre les
+      originaux à la corbeille » : boîte système, fichiers dans la corbeille Samsung (restaurables) ;
+      refus de la boîte système : rien n'est supprimé ; partage annulé (retour sans choisir) : la
+      question apparaît, « Garder » ; photo regroupée avec OneDrive : message affiché, l'élément reste
+      visible via OneDrive. Comportement sur un appareil sans Dossier sécurisé configuré.
 
 ## Phase 7 — Fidélité visuelle, images lourdes, finitions
 

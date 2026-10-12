@@ -17,6 +17,11 @@
     <!-- Progression des copies hors ligne (demandée au premier « Conserver hors ligne », facultative) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- « Déplacer vers le Dossier sécurisé » : proposé seulement si l'appli Samsung est installée -->
+    <queries>
+        <package android:name="com.samsung.knox.securefolder" />
+    </queries>
+
     <application
         android:name=".CloudGalleryApp"
         android:allowBackup="true"

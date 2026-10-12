@@ -72,6 +72,8 @@ import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
 import fr.eva.cloudgallery.ui.offline.OfflineMenuState
 import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
 import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderDialogs
+import fr.eva.cloudgallery.ui.securefolder.secureFolderActionVisible
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.shareMedia
 import fr.eva.cloudgallery.ui.util.progressPercent
@@ -129,6 +131,8 @@ fun MediaGridPage(
     val dayIds by viewModel.dayIds.collectAsStateWithLifecycle()
     val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
     val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
+    val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
+    val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
     val items = viewModel.gridItems.collectAsLazyPagingItems()
     // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
     val withNotificationPermission = rememberNotificationPermissionGate(
@@ -301,6 +305,8 @@ fun MediaGridPage(
                 add(OneUiAction(Icons.Filled.MoreVert, moreLabel, enabled) { moreOpen = true })
             }
             val offlineMenu = selectionOfflineMenu(selection, selectionTargets)
+            val secureFolderLabel = stringResource(R.string.secure_folder_move)
+            val showSecureFolder = secureFolderActionVisible(secureFolderAvailable, actionCounts(selection, selectionTargets).local)
             val keepOfflineLabel = stringResource(R.string.offline_keep)
             val releaseOfflineLabel = stringResource(R.string.offline_release)
             val moreItems = buildList {
@@ -308,6 +314,10 @@ fun MediaGridPage(
                     add(OneUiMenuItem(addToAlbumLabel) { moreOpen = false; showAlbumPicker = true })
                 }
                 add(OneUiMenuItem(copyLabel, enabled = localEnabled) { moreOpen = false; showCopyDialog = true })
+                // Fichiers du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                if (showSecureFolder) {
+                    add(OneUiMenuItem(secureFolderLabel) { moreOpen = false; viewModel.moveToSecureFolder() })
+                }
                 // Copies hors ligne : éléments OneDrive à conserver, copies à libérer.
                 if (offlineMenu == OfflineMenuState.KEEP || offlineMenu == OfflineMenuState.BOTH) {
                     add(
@@ -408,6 +418,15 @@ fun MediaGridPage(
             onDismiss = viewModel::dismissOfflinePrompt,
         )
     }
+
+    SecureFolderDialogs(
+        prompt = secureFolderPrompt,
+        onShareLaunched = viewModel::onSecureFolderShareLaunched,
+        onShareReturned = viewModel::onSecureFolderShareReturned,
+        onTrash = viewModel::trashAfterSecureFolder,
+        onCancel = viewModel::cancelSecureFolder,
+        onKeep = viewModel::keepOriginalsAfterSecureFolder,
+    )
 
     if (showAlbumPicker) {
         AlbumPickerSheet(
