@@ -1,5 +1,10 @@
 package fr.eva.cloudgallery.ui.grid
 
+import fr.eva.cloudgallery.ui.viewer.LocalMediaBounds
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Rect
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -645,10 +650,16 @@ private fun MediaCell(
         if (offlineOnly) append(", ").append(offlineLabel)
     }
 
+    // Position à l'écran pour la transition vers la visionneuse (et le retour sur cette vignette).
+    val bounds = LocalMediaBounds.current
+    DisposableEffect(bounds, media.id) { onDispose { bounds?.remove(media.id) } }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
+            .onGloballyPositioned { bounds?.update(media, Rect(it.positionInWindow(), it.size.toSize())) }
+            .graphicsLayer { alpha = if (bounds?.hiddenId == media.id) 0f else 1f }
             .semantics {
                 contentDescription = description
                 if (selectionMode) this.selected = selected

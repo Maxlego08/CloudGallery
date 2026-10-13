@@ -3,6 +3,17 @@ package fr.eva.cloudgallery.ui.viewer
 import android.text.format.Formatter
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
+import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.ui.image.ThumbnailImage
+import fr.eva.cloudgallery.ui.image.offlineThumbnail
+import kotlinx.coroutines.flow.first
+import kotlin.math.max
+import kotlin.math.roundToInt
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -37,6 +48,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.util.lerp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -104,7 +129,11 @@ private val ScrimColor = Color(0x99000000)
  * Le ViewModel lit [fr.eva.cloudgallery.ui.navigation.ViewerRoute] via SavedStateHandle.
  */
 @Composable
-fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
+fun ViewerScreen(
+    onBack: () -> Unit,
+    onPlayVideo: (mediaId: Long) -> Unit,
+    transition: ViewerTransition = ViewerTransition.Static,
+) {
     val viewModel: ViewerViewModel = hiltViewModel()
     val ids by viewModel.ids.collectAsStateWithLifecycle()
     val media by viewModel.currentMedia.collectAsStateWithLifecycle()
@@ -180,12 +209,74 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
     val chromeShown = chromeVisible && dismissProgress < 0.02f && !showCropEditor
     ImmersiveSystemBars(visible = chromeShown || showCropEditor)
 
+    // Transition grille ↔ visionneuse (ViewerTransition.kt) : la photo part de sa vignette et y
+    // revient quand la grille l'affiche ; sinon (ouverture depuis une autre appli, vignette hors
+    // écran) fondu et léger zoom.
+    val registry = LocalMediaBounds.current
+    var rootOffset by remember { mutableStateOf(Offset.Zero) }
+    var rootSize by remember { mutableStateOf(Size.Zero) }
+    val entry = registry?.entryOf(currentId)
+    val cell = entry?.rect?.translate(-rootOffset)
+    // Dimensions : détails chargés, sinon média de la grille (connu dès la première image).
+    val dims = current?.takeIf { it.id == currentId }?.let { Triple(it.width, it.height, it.orientation) }
+        ?: entry?.media?.let { Triple(it.width, it.height, it.orientation) }
+    val fitted = dims?.let { (w, h, orientation) ->
+        val swap = orientation % 180 != 0
+        ViewerZoomGeometry.fittedRect(rootSize, if (swap) h else w, if (swap) w else h)
+    }
+    /** Vignette et rectangle ajusté de la photo courante (repère de la visionneuse), si connus. */
+    val zoomRects: Pair<Rect, Rect>? = if (cell != null && fitted != null) cell to fitted else null
+    val shared = zoomRects != null
+    val closing = transition.closing
+    // Barres : masquées aussitôt au retour, affichées en fondu passée la moitié de l'ouverture.
+    val opening by remember(transition) { derivedStateOf { !transition.closing && transition.progress < 0.6f } }
+    val chromeOnScreen = chromeShown && !closing && !opening
+    SideEffect { registry?.hiddenId = if (closing && shared) currentId else null }
+    DisposableEffect(registry) { onDispose { registry?.hiddenId = null } }
+
+    // Miniature de la grille (déjà en cache mémoire) sous les pages : la photo est visible dès la
+    // première image de l'ouverture, sans attendre les identifiants ni l'image de la visionneuse.
+    // Retirée au premier geste (page suivante, zoom, glisser) et au retour.
+    val openedId = remember { currentId }
+    val openedEntry = remember { registry?.entryOf(currentId) }
+    var pagerMoved by remember { mutableStateOf(false) }
+    val showGridThumb = openedEntry != null && fitted != null && currentId == openedId &&
+        !closing && !pagerMoved && !currentZoomed && dismissProgress == 0f
+    // Pages (identifiants, images pleine taille) composées une fois l'ouverture terminée : leur
+    // construction pendant l'animation la faisait saccader. La miniature tient lieu de photo.
+    val openingDone by remember(transition) { derivedStateOf { transition.closing || transition.progress >= 1f } }
+    val pagerReady = openedEntry == null || openingDone
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(ViewerColors.background),
+            .onGloballyPositioned {
+                rootOffset = it.positionInWindow()
+                rootSize = it.size.toSize()
+            }
+            .graphicsLayer {
+                if (!shared) {
+                    val p = transition.progress
+                    alpha = p
+                    scaleX = lerp(0.92f, 1f, p)
+                    scaleY = scaleX
+                }
+            }
+            .drawBehind {
+                // Fond noir dès l'ouverture, transparent dès le retour : la grille est visible tout
+                // de suite (y compris la première image, avant que la grille ne donne ses positions).
+                if (!closing) drawRect(ViewerColors.background)
+            },
     ) {
-        if (!idList.isNullOrEmpty()) {
+        if (showGridThumb && openedEntry != null && fitted != null) {
+            GridThumbnailLayer(
+                media = openedEntry.media,
+                fitted = fitted,
+                requestSide = openedEntry.rect.width,
+                modifier = Modifier.fillMaxSize().zoomFromCell(zoomRects) { transition.progress },
+            )
+        }
+        if (!idList.isNullOrEmpty() && pagerReady) {
             val currentIds by rememberUpdatedState(idList)
             val pagerState = rememberPagerState(
                 initialPage = idList.indexOf(currentId).coerceAtLeast(0),
@@ -193,6 +284,10 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             val scope = rememberCoroutineScope()
             val velocityThreshold = with(LocalDensity.current) { 400.dp.toPx() }
 
+            LaunchedEffect(pagerState) {
+                snapshotFlow { abs(pagerState.currentPageOffsetFraction) > 0.001f }.first { it }
+                pagerMoved = true
+            }
             LaunchedEffect(pagerState) {
                 snapshotFlow { currentIds.getOrNull(pagerState.currentPage) }
                     .filterNotNull()
@@ -202,7 +297,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zoomFromCell(zoomRects) { transition.progress },
                 beyondViewportPageCount = 1,
                 pageSpacing = 12.dp,
                 userScrollEnabled = !currentZoomed,
@@ -244,9 +341,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             }
 
             AnimatedVisibility(
-                visible = chromeShown,
+                visible = chromeOnScreen,
                 enter = fadeIn(),
-                exit = fadeOut(),
+                exit = if (closing) ExitTransition.None else fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 Column(
@@ -289,9 +386,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
         }
 
         AnimatedVisibility(
-            visible = chromeShown,
+            visible = chromeOnScreen,
             enter = fadeIn(),
-            exit = fadeOut(),
+            exit = if (closing) ExitTransition.None else fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             ViewerTopBar(
@@ -664,4 +761,62 @@ private fun SharePreparationDialog(preparation: SharePreparation, onCancel: () -
         cancelLabel = stringResource(R.string.common_cancel),
         onCancel = onCancel,
     )
+}
+
+/**
+ * Pendant la transition grille ↔ visionneuse : contenu agrandi depuis la vignette (repère du
+ * conteneur, centre de [rects].second pour pivot) et découpé de la vignette au rectangle ajusté.
+ */
+private fun Modifier.zoomFromCell(rects: Pair<Rect, Rect>?, progress: () -> Float): Modifier {
+    val (cellRect, fittedRect) = rects ?: return this
+    return this
+        .drawWithContent {
+            val p = progress()
+            if (p >= 1f) {
+                drawContent()
+            } else {
+                val clip = ViewerZoomGeometry.frame(cellRect, fittedRect, p).clip
+                clipRect(clip.left, clip.top, clip.right, clip.bottom) { this@drawWithContent.drawContent() }
+            }
+        }
+        .graphicsLayer {
+            val frame = ViewerZoomGeometry.frame(cellRect, fittedRect, progress())
+            scaleX = frame.scale
+            scaleY = frame.scale
+            translationX = frame.translation.x
+            translationY = frame.translation.y
+        }
+}
+
+/**
+ * Miniature de la grille dans le rectangle ajusté [fitted] : demandée à la taille des vignettes
+ * ([requestSide] px pour le grand côté, même palier de cache Coil que la grille) puis agrandie.
+ */
+@Composable
+private fun GridThumbnailLayer(media: MediaSummary, fitted: Rect, requestSide: Float, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val k = (requestSide / max(fitted.width, fitted.height)).coerceAtMost(1f)
+    Box(modifier) {
+        Box(
+            Modifier
+                .offset { IntOffset(fitted.left.roundToInt(), fitted.top.roundToInt()) }
+                .size(with(density) { (fitted.width * k).toDp() }, with(density) { (fitted.height * k).toDp() })
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = 1f / k
+                    scaleY = 1f / k
+                },
+        ) {
+            ThumbnailImage(
+                uri = media.uri,
+                isVideo = media.type == MediaType.VIDEO,
+                version = media.dateModified,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+                cloud = media.cloudThumb,
+                offline = remember(media) { media.offlineThumbnail() },
+                placeholder = false,
+            )
+        }
+    }
 }
