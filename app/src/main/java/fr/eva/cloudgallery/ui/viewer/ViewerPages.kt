@@ -218,6 +218,7 @@ private fun VideoPage(
             version = media.dateModified,
             modifier = Modifier.matchParentSize(),
             contentScale = ContentScale.Fit,
+            placeholder = false,
         )
         Column(
             modifier = Modifier.align(Alignment.Center),
@@ -460,6 +461,7 @@ private fun CloudVideoPage(
                 version = media.dateModified,
                 offline = offline,
                 contentScale = ContentScale.Fit,
+                placeholder = false,
                 modifier = Modifier.matchParentSize(),
             )
         }

@@ -507,6 +507,7 @@ internal fun ZoomableImage(
                             version = source.dateModified,
                             modifier = Modifier.matchParentSize(),
                             contentScale = ContentScale.Fit,
+                            placeholder = false,
                         )
                     } else if (source is ViewerImageSource.File && source.cloud != null) {
                         // Aperçu OneDrive pendant le décodage du fichier (copie hors ligne : cache seulement).

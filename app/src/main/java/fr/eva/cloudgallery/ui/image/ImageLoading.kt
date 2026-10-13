@@ -73,7 +73,8 @@ fun buildAppImageLoader(
 
 /**
  * Miniature carrée pour les grilles et couvertures d'album. Dessine la couleur
- * `OneUiTheme.colors.placeholder` pendant le chargement, en cas d'erreur ou sans source.
+ * `OneUiTheme.colors.placeholder` (si [placeholder]) en cas d'erreur ou sans source, animée
+ * pendant le chargement ([LoadingSkeleton]).
  * Fichier local ([uri], toujours prioritaire) via MediaStore, sinon miniature OneDrive ([cloud]),
  * sinon (ou si la miniature OneDrive est indisponible, hors connexion par exemple) image tirée de
  * la copie hors ligne ([offline]). [version] (dateModified) invalide le cache local après une
@@ -88,8 +89,10 @@ fun ThumbnailImage(
     contentScale: ContentScale = ContentScale.Crop,
     cloud: CloudThumbRef? = null,
     offline: OfflineThumbnail? = null,
+    /** Faux dans la visionneuse : fond noir (transparent) au lieu de la couleur d'attente. */
+    placeholder: Boolean = true,
 ) {
-    Box(modifier.background(OneUiTheme.colors.placeholder)) {
+    Box(if (placeholder) modifier.background(OneUiTheme.colors.placeholder) else modifier) {
         // Miniature OneDrive en échec : repli sur la copie hors ligne (si elle existe).
         var cloudFailed by remember(cloud) { mutableStateOf(false) }
         val model: Any? = remember(uri, isVideo, version, cloud, offline, cloudFailed) {
@@ -101,15 +104,18 @@ fun ThumbnailImage(
             }
         }
         if (model != null) {
+            // Chargement en cours : fond animé (LoadingSkeleton) ; chargée ou en échec : fond fixe.
+            var settled by remember(model) { mutableStateOf(false) }
+            if (placeholder && !settled) LoadingSkeleton(Modifier.matchParentSize())
             AsyncImage(
                 model = model,
                 contentDescription = null,
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
-                onError = if (model is CloudThumbnail && offline != null) {
-                    { cloudFailed = true }
-                } else {
-                    null
+                onSuccess = { settled = true },
+                onError = {
+                    settled = true
+                    if (model is CloudThumbnail && offline != null) cloudFailed = true
                 },
             )
         }
