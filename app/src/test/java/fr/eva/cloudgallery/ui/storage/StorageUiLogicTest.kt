@@ -4,14 +4,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Page Stockage : plafond des miniatures en attente de redémarrage, vidage proposé. */
+/** Storage page: thumbnail cap pending restart, offered clearing. */
 class StorageUiLogicTest {
 
     @Test
     fun thumbnailCap_pendingOnlyWhenTheOpenCacheUsesAnotherCap() {
         assertFalse(thumbnailCapPendingRestart(250_000_000L, 250_000_000L))
         assertTrue(thumbnailCapPendingRestart(500_000_000L, 250_000_000L))
-        // Cache pas encore ouvert : le réglage sera lu à son ouverture.
+        // Cache not opened yet: the setting will be read when it opens.
         assertFalse(thumbnailCapPendingRestart(500_000_000L, null))
     }
 

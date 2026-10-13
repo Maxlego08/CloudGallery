@@ -13,8 +13,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Priorité des sources de lecture. android.net.Uri n'existe pas en test JVM : la branche
- * « fichier local » est vérifiée sur la fonction pure [PlaybackSourceResolver.choose].
+ * Playback source priority. android.net.Uri does not exist in JVM tests: the
+ * "local file" branch is checked on the pure function [PlaybackSourceResolver.choose].
  */
 class PlaybackSourceResolverTest {
 
@@ -30,7 +30,7 @@ class PlaybackSourceResolverTest {
         bucketName = "Photos", relativePath = "OneDrive/Photos/", sizeBytes = 1, dateModified = 0, cTag = cTag,
     )
 
-    /** Source locale sans URI (cas dégradé) : jamais lue comme un fichier local. */
+    /** Local source without a URI (degraded case): never played as a local file. */
     private fun localWithoutUri() = MediaSourceInfo(
         id = 2, kind = SourceKind.LOCAL, externalId = "video:2", uri = null, bucketKey = "local:1",
         bucketName = "Camera", relativePath = "DCIM/Camera/", sizeBytes = 1, dateModified = 0,
@@ -89,7 +89,7 @@ class PlaybackSourceResolverTest {
             Choice.OFFLINE,
             PlaybackSourceResolver.choose(hasLocalFile = false, hasCloudItem = true, remoteAllowed = true, offlineFileOk = true),
         )
-        // Copie conservée d'un élément supprimé de OneDrive : lue sans compte.
+        // Kept copy of an item deleted from OneDrive: played without an account.
         assertEquals(
             Choice.OFFLINE,
             PlaybackSourceResolver.choose(hasLocalFile = false, hasCloudItem = false, remoteAllowed = false, offlineFileOk = true),
@@ -123,7 +123,7 @@ class PlaybackSourceResolverTest {
         assertTrue(PlaybackSourceResolver.isOfflineFileUsable(d.offlineCopy))
         assertFalse(PlaybackSourceResolver.needsRemote(d, offlineFileOk = true))
         assertEquals(PlaybackSource.Offline(copy, "video/mp4"), PlaybackSourceResolver.resolve(d, remoteAllowed = false, offlineFileOk = true))
-        // Taille différente (copie tronquée) : inutilisable.
+        // Different size (truncated copy): unusable.
         assertFalse(PlaybackSourceResolver.isOfflineFileUsable(copy.copy(sizeBytes = 5)))
         assertFalse(PlaybackSourceResolver.isOfflineFileUsable(null))
     }

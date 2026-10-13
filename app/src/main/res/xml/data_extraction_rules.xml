@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Sauvegarde cloud et transfert d'appareil : la base Room est exclue (identifiants MediaStore
-   propres à l'appareil, voir backup_rules.xml). Le cache de jetons MSAL (OneDrive) est exclu
-   aussi : chiffré par une clé Keystore, il ne peut pas être restauré sur un autre appareil.
-   Même chose pour la clé MSAL enveloppée par le Keystore (app_<paquet>/adalks, répertoire
-   utilisé uniquement par MSAL) et pour l'état de synchronisation OneDrive (cloud_sync.xml).
-   Les recherches récentes (search_history.xml) restent sur l'appareil.
-   Les copies hors ligne OneDrive (files/offline/) sont exclues (téléchargeables de nouveau).
-   Les autres préférences restent sauvegardées.
+   Cloud backup and device transfer: the Room database is excluded (device-specific MediaStore
+   IDs, see backup_rules.xml). The MSAL token cache (OneDrive) is excluded too: encrypted with
+   a Keystore key, it cannot be restored on another device.
+   Same for the MSAL key wrapped by the Keystore (app_<package>/adalks, a directory used only
+   by MSAL) and for the OneDrive sync state (cloud_sync.xml).
+   Recent searches (search_history.xml) stay on the device.
+   OneDrive offline copies (files/offline/) are excluded (downloadable again).
+   The other preferences remain backed up.
 -->
 <data-extraction-rules>
     <cloud-backup>

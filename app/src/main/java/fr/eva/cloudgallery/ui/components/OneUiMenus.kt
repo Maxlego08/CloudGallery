@@ -20,8 +20,8 @@ data class OneUiMenuItem(
 )
 
 /**
- * Menu contextuel One UI (coins très arrondis, fond « sheet », sans icônes).
- * À ancrer dans un Box contenant le bouton ⋮. Chaque clic ferme le menu puis exécute l'action.
+ * One UI context menu (very rounded corners, "sheet" background, no icons).
+ * To be anchored in a Box containing the ⋮ button. Each click closes the menu then runs the action.
  */
 @Composable
 fun OneUiOverflowMenu(

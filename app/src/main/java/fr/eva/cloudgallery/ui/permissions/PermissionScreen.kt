@@ -48,10 +48,10 @@ import fr.eva.cloudgallery.ui.components.OneUiPillButton
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Ecran d'accueil / d'autorisation affiché tant qu'aucun accès aux médias n'est accordé.
- * Explique pourquoi l'accès est nécessaire, puis lance la demande système ; en cas de refus
- * définitif, propose d'ouvrir les paramètres de l'appli. [onUseOneDriveOnly] (OneDrive présent
- * dans ce build) : « Utiliser OneDrive seulement », parcourir OneDrive sans accès local.
+ * Welcome / permission screen shown as long as no media access is granted.
+ * Explains why access is needed, then launches the system request; on a permanent
+ * denial, offers to open the app settings. [onUseOneDriveOnly] (OneDrive present
+ * in this build): "Use OneDrive only", browse OneDrive without local access.
  */
 @Composable
 fun PermissionScreen(
@@ -134,7 +134,7 @@ fun PermissionScreen(
                     onClick = controller::openAppSettings,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // Le système peut encore redemander si la boîte a seulement été fermée.
+                // The system can still ask again if the dialog was merely dismissed.
                 OneUiPillButton(
                     text = stringResource(R.string.common_retry),
                     onClick = controller::request,
@@ -175,9 +175,9 @@ private fun ReasonRow(icon: ImageVector, text: String) {
 }
 
 /**
- * Bandeau fin affiché au-dessus de la barre d'onglets en mode d'accès partiel :
- * « Accès limité à certaines photos — Gérer ». « Gérer » relance la demande système
- * (sélection d'autres éléments ou autorisation complète).
+ * Thin banner shown above the tab bar in partial access mode:
+ * "Access limited to some photos — Manage". "Manage" relaunches the system request
+ * (selecting other items or granting full access).
  */
 @Composable
 fun PartialAccessBanner(
@@ -193,9 +193,9 @@ fun PartialAccessBanner(
 }
 
 /**
- * Bandeau fin de l'usage « OneDrive seul » au-dessus de la barre d'onglets : « Photos du
- * téléphone non autorisées — Autoriser ». [onAllow] relance la demande système, ou ouvre les
- * paramètres de l'appli après un refus définitif.
+ * Thin banner for "OneDrive only" usage above the tab bar: "Phone photos
+ * not allowed — Allow". [onAllow] relaunches the system request, or opens the
+ * app settings after a permanent denial.
  */
 @Composable
 fun NoLocalAccessBanner(

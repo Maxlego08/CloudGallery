@@ -5,15 +5,15 @@ import fr.eva.cloudgallery.data.search.nameMatchesSearch
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 
 /*
- * Logique pure de l'écran de recherche (testée en JVM).
+ * Pure logic of the search screen (tested on the JVM).
  */
 
-/** Albums proposés au plus pendant la saisie. */
+/** Maximum number of albums suggested while typing. */
 internal const val MAX_ALBUM_SUGGESTIONS = 5
 
 /**
- * Albums proposés pour la saisie [input] : non vides, dont chaque mot de la saisie commence un
- * mot du nom (accents et casse ignorés), dans l'ordre reçu. Saisie vide : aucun.
+ * Albums suggested for the input [input]: non-empty ones where each word of the input starts a
+ * word of the name (ignoring accents and case), in the order received. Empty input: none.
  */
 internal fun albumSuggestions(albums: List<AlbumSummary>, input: String, max: Int = MAX_ALBUM_SUGGESTIONS): List<AlbumSummary> =
     albums.asSequence()
@@ -21,12 +21,12 @@ internal fun albumSuggestions(albums: List<AlbumSummary>, input: String, max: In
         .take(max)
         .toList()
 
-/** Recherches récentes proposées : toutes si la saisie est vide, sinon celles qui y correspondent. */
+/** Suggested recent searches: all of them if the input is empty, otherwise the matching ones. */
 internal fun recentSuggestions(recent: List<String>, input: String): List<String> =
     if (input.isBlank()) recent else recent.filter { nameMatchesSearch(it, input) }
 
-/** Une saisie ne lance une recherche que si elle contient au moins un mot. */
+/** An input only starts a search if it contains at least one word. */
 internal fun canSubmitSearch(input: String): Boolean = ftsMatchExpression(input) != null
 
-/** Saisie gardée pour la recherche lancée : espaces de début et de fin retirés. */
+/** Input kept for the submitted search: leading and trailing spaces removed. */
 internal fun submittedQuery(input: String): String = input.trim()

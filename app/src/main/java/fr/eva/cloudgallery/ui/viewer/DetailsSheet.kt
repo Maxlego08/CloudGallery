@@ -51,8 +51,8 @@ import fr.eva.cloudgallery.ui.util.Formatters
 import java.util.Locale
 
 /**
- * Panneau « Détails » façon One UI : date, fichier, caractéristiques, appareil photo (EXIF), lieu, provenance.
- * L'EXIF ([exif]) est lu hors du thread principal par le ViewModel.
+ * One UI-style "Details" sheet: date, file, specs, camera (EXIF), location, source.
+ * The EXIF ([exif]) is read off the main thread by the ViewModel.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +68,7 @@ internal fun DetailsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // Ouvert au-dessus de la visionneuse (fond noir) : icônes de barre d'état claires.
+        // Opened over the viewer (black background): light status bar icons.
         properties = fullscreenSheetProperties(),
         shape = RoundedCornerShape(topStart = radius, topEnd = radius),
         containerColor = colors.sheet,
@@ -116,8 +116,8 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
             DetailRow(icon = Icons.Outlined.CalendarToday, primary = Formatters.fullDateTime(media.dateTaken))
         }
 
-        // Fichier
-        // Chemin du fichier local, sinon de l'élément OneDrive (une copie hors ligne n'en a pas).
+        // File
+        // Path of the local file, otherwise of the OneDrive item (an offline copy has none).
         val path = media.localSource?.relativePath
             ?: media.cloudSource?.relativePath
             ?: media.sources.firstNotNullOfOrNull { it.relativePath }
@@ -127,7 +127,7 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
             secondary = path?.let { stringResource(R.string.viewer_details_path, it) },
         )
 
-        // Caractéristiques
+        // Specs
         val size = media.sizeBytes.takeIf { it > 0 }
             ?: media.localSource?.sizeBytes?.takeIf { it > 0 }
             ?: media.sources.maxOfOrNull { it.sizeBytes }?.takeIf { it > 0 }
@@ -142,7 +142,7 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
             secondary = media.mimeType,
         )
 
-        // Appareil photo (EXIF)
+        // Camera (EXIF)
         if (exif != null && exif.mediaId == media.id && exif.loading) {
             DetailRow(icon = Icons.Outlined.PhotoCamera, primary = stringResource(R.string.common_loading))
         } else if (info != null && info.hasCameraInfo) {
@@ -165,7 +165,7 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
             )
         }
 
-        // Lieu
+        // Location
         if (info != null && info.latitude != null && info.longitude != null) {
             val lat = info.latitude
             val lon = info.longitude
@@ -178,13 +178,13 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(geo)))
                     } catch (_: ActivityNotFoundException) {
-                        // Aucune application de cartes installée : rien à faire.
+                        // No maps app installed: nothing to do.
                     }
                 },
             )
         }
 
-        // Provenance
+        // Source
         val provenance = buildList {
             if (media.hasLocal) add(stringResource(R.string.common_on_device))
             if (media.hasCloud) add(stringResource(R.string.common_onedrive))
@@ -198,7 +198,7 @@ private fun DetailsContent(media: MediaDetails, exif: ExifState?, offlineStatus:
             )
         }
 
-        // Copie hors ligne : état du téléchargement, copie présente (taille) ou dernière copie.
+        // Offline copy: download state, present copy (size) or last copy.
         if (offlineStatus != null) {
             DetailRow(icon = Icons.Outlined.OfflinePin, primary = offlineStatus)
         }

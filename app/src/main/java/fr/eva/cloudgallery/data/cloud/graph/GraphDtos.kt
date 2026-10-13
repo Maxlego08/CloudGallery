@@ -6,19 +6,19 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /*
- * Réponses Microsoft Graph (OneDrive personnel). Tous les champs sont facultatifs : les facettes
- * n'apparaissent que lorsqu'elles s'appliquent, et un élément supprimé n'a que `id` et `deleted`.
- * Les dates restent des chaînes ISO 8601, analysées par la logique de synchronisation.
+ * Microsoft Graph responses (personal OneDrive). All fields are optional: facets only appear
+ * when they apply, and a deleted item has only `id` and `deleted`.
+ * Dates remain ISO 8601 strings, parsed by the sync logic.
  */
 
-/** Lecture tolérante : champs inconnus ignorés, valeurs nulles inattendues remplacées par le défaut. */
+/** Lenient parsing: unknown fields ignored, unexpected nulls replaced by the default. */
 internal val GraphJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
     coerceInputValues = true
 }
 
-/** Page de la requête delta : `nextLink` tant qu'il reste des pages, `deltaLink` sur la dernière. */
+/** Delta query page: `nextLink` while pages remain, `deltaLink` on the last one. */
 @Serializable
 data class DeltaPage(
     val value: List<DriveItemDto> = emptyList(),
@@ -78,7 +78,7 @@ data class ImageFacetDto(
     val height: Int? = null,
 )
 
-/** Facette vidéo : [duration] en millisecondes. */
+/** Video facet: [duration] in milliseconds. */
 @Serializable
 data class VideoFacetDto(
     val duration: Long? = null,
@@ -86,7 +86,7 @@ data class VideoFacetDto(
     val height: Int? = null,
 )
 
-/** Parent d'un élément. `path` n'est jamais renvoyé par delta : suivre les éléments par id. */
+/** Parent of an item. `path` is never returned by delta: track items by id. */
 @Serializable
 data class ItemReferenceDto(
     val id: String? = null,
@@ -121,8 +121,8 @@ data class QuotaDto(
 )
 
 /**
- * Réponse de `GET /me/drive/items/{id}?$select=…,@microsoft.graph.downloadUrl`. Classe ordinaire
- * (pas une data class) : [toString] ne contient jamais l'URL pré-authentifiée.
+ * Response of `GET /me/drive/items/{id}?$select=…,@microsoft.graph.downloadUrl`. Plain class
+ * (not a data class): [toString] never contains the pre-authenticated URL.
  */
 @Serializable
 class DownloadInfoDto(
@@ -136,7 +136,7 @@ class DownloadInfoDto(
     override fun toString(): String = "DownloadInfoDto(id=$id, size=$size)"
 }
 
-/** Lien web d'un élément (`$select=webUrl`). */
+/** Web link of an item (`$select=webUrl`). */
 @Serializable
 data class WebUrlDto(val webUrl: String? = null)
 

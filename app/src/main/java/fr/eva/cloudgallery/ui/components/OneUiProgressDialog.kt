@@ -8,8 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * Boîte de progression One UI avec un seul bouton d'annulation. [progress] : 0..1, ou null pour
- * une progression indéterminée. Retour et toucher hors de la boîte annulent aussi.
+ * One UI progress dialog with a single cancel button. [progress]: 0..1, or null for
+ * indeterminate progress. Back and touching outside the dialog also cancel.
  */
 @Composable
 fun OneUiProgressDialog(

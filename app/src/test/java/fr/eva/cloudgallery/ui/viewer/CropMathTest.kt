@@ -16,18 +16,18 @@ class CropMathTest {
         assertEquals("bottom", expected.bottom, actual.bottom, eps)
     }
 
-    /** Proportion en pixels d'un rectangle normalisé sur une image de proportion [imageAspect]. */
+    /** Pixel aspect ratio of a normalized rectangle on an image with aspect ratio [imageAspect]. */
     private fun pixelRatio(rect: CropRect, imageAspect: Float) = rect.width * imageAspect / rect.height
 
     @Test
     fun fitAspect_squareInLandscape() {
-        // Image 4:3, carré : largeur normalisée 0,75, pleine hauteur, centré.
+        // 4:3 image, square: normalized width 0.75, full height, centered.
         assertRect(CropRect(0.125f, 0f, 0.875f, 1f), CropMath.fitAspect(1f, 4f / 3f))
     }
 
     @Test
     fun fitAspect_wideInPortrait() {
-        // Image 3:4, 16:9 : pleine largeur, hauteur = (3/4) / (16/9) = 0,421875.
+        // 3:4 image, 16:9: full width, height = (3/4) / (16/9) = 0.421875.
         val r = CropMath.fitAspect(16f / 9f, 3f / 4f)
         assertEquals(1f, r.width, eps)
         assertEquals(0.421875f, r.height, eps)
@@ -88,7 +88,7 @@ class CropMathTest {
     fun rotateClockwise() {
         val r = CropRect(0.1f, 0.2f, 0.5f, 0.6f)
         assertRect(CropRect(0.4f, 0.1f, 0.8f, 0.5f), CropMath.rotateClockwise(r))
-        // 4 rotations = identité.
+        // 4 rotations = identity.
         var x = r
         repeat(4) { x = CropMath.rotateClockwise(x) }
         assertRect(r, x)
@@ -96,14 +96,14 @@ class CropMathTest {
 
     @Test
     fun normalize() {
-        // Coins inversés : remis dans l'ordre puis normalisés.
+        // Swapped corners: reordered then normalized.
         assertRect(CropRect(0.25f, 0.5f, 0.75f, 1f), CropMath.normalize(300f, 400f, 100f, 200f, 400f, 400f))
         assertRect(CropRect.Full, CropMath.normalize(0f, 0f, 10f, 10f, 0f, 0f))
     }
 
     @Test
     fun hitTest() {
-        // Rectangle 100..300 x 100..300, tolérance 20.
+        // Rectangle 100..300 x 100..300, tolerance 20.
         fun hit(x: Float, y: Float) = CropMath.hitTest(x, y, 100f, 100f, 300f, 300f, 20f)
         assertEquals(CropHandle.TopLeft, hit(105f, 95f))
         assertEquals(CropHandle.BottomRight, hit(310f, 290f))

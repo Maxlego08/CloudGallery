@@ -52,9 +52,9 @@ import fr.eva.cloudgallery.ui.settings.indexStatusText
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Onglet « Menu » : accès aux collections (Favoris, Vidéos), au compte OneDrive (si ce build
- * le permet), aux paramètres et à l'état de l'indexation locale. Pas d'entrée Corbeille : la
- * corbeille système n'est pas consultable de façon fiable par une appli tierce.
+ * "Menu" tab: access to collections (Favourites, Videos), to the OneDrive account (if this build
+ * allows it), to settings and to the local indexing status. No Trash entry: the
+ * system trash cannot be reliably browsed by a third-party app.
  */
 @Composable
 fun MenuScreen(
@@ -126,11 +126,11 @@ fun MenuScreen(
                             onClick = if (indexState.running) null else viewModel::syncNow,
                             trailing = if (indexState.running) RunningTrailing else null,
                         )
-                        // Masquée quand ce build n'embarque pas de configuration OneDrive.
+                        // Hidden when this build does not ship a OneDrive configuration.
                         if (viewModel.cloudAvailable) {
                             OneUiDivider(startIndent = dimens.cardPadding + 40.dp)
-                            // Copies hors ligne à vérifier (éléments supprimés de OneDrive) en priorité ;
-                            // sinon, compte connecté : état de la synchronisation ; sinon, état du compte.
+                            // Offline copies to review (items deleted from OneDrive) take priority;
+                            // otherwise, signed-in account: sync status; otherwise, account status.
                             val signedIn = cloudState is CloudAccountState.SignedIn
                             OneUiListItem(
                                 title = stringResource(R.string.common_onedrive),
@@ -167,7 +167,7 @@ fun MenuScreen(
 
 private val RunningTrailing: @Composable () -> Unit = { IndexRunningIndicator() }
 
-/** Pastille de comptage (éléments qui attendent une décision de l'utilisateur). */
+/** Count badge (items awaiting a user decision). */
 @Composable
 private fun CountBadge(count: Int) {
     Box(

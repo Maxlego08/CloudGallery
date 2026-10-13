@@ -17,7 +17,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.io.IOException
 
-/** Boucle de requête Graph avec un transport factice (aucun accès réseau). */
+/** Graph request loop with a fake transport (no network access). */
 class GraphCallerTest {
 
     private val url = "https://graph.microsoft.com/v1.0/me/drive"
@@ -68,7 +68,7 @@ class GraphCallerTest {
             .build()
     }
 
-    private val ioFailure: (Request) -> Response = { throw IOException("connexion coupée") }
+    private val ioFailure: (Request) -> Response = { throw IOException("connection dropped") }
 
     @Test
     fun success_sendsBearerAndUserAgent() = runTest {
@@ -86,7 +86,7 @@ class GraphCallerTest {
         val h = Harness()
         try {
             h.caller.get("https://example.com/delta") { it.code }
-            fail("URL hors Graph acceptée")
+            fail("non-Graph URL accepted")
         } catch (e: CloudException) {
             assertEquals(CloudErrorCode.SERVER, e.code)
         }
@@ -100,7 +100,7 @@ class GraphCallerTest {
         assertEquals(200, h.caller.get(url) { it.code })
         assertEquals(listOf(false, true), h.tokens.calls)
         assertEquals("Bearer fresh", h.requests[1].header("Authorization"))
-        // Un premier 401 (jeton expiré) ne demande pas de reconnexion.
+        // A first 401 (expired token) does not require signing in again.
         assertTrue(h.tokens.rejected.isEmpty())
     }
 
@@ -109,12 +109,12 @@ class GraphCallerTest {
         val h = Harness(response(401), response(401))
         try {
             h.caller.get(url) { it.code }
-            fail("401 répété accepté")
+            fail("repeated 401 accepted")
         } catch (e: CloudAuthRequiredException) {
             assertEquals(CloudErrorCode.AUTH_REQUIRED, e.code)
         }
         assertEquals(2, h.requests.size)
-        // Jeton tout juste renouvelé refusé : signalé au fournisseur (compte à reconnecter).
+        // Freshly renewed token rejected: reported to the provider (account must sign in again).
         assertEquals(listOf("fresh"), h.tokens.rejected)
     }
 
@@ -138,12 +138,12 @@ class GraphCallerTest {
         val h = Harness(response(429, headers = mapOf("Retry-After" to "3600")))
         try {
             h.caller.get(url) { it.code }
-            fail("Retry-After d'une heure attendu")
+            fail("one-hour Retry-After expected")
         } catch (e: CloudThrottledException) {
             assertEquals(3_600_000L, e.retryAfterMs)
         }
         assertTrue(h.sleeps.isEmpty())
-        // La pause annoncée vaut pour toutes les requêtes suivantes, même au-delà de 10 minutes.
+        // The announced pause applies to all following requests, even beyond 10 minutes.
         assertEquals(3_600_000L, h.gate.remainingMs())
     }
 
@@ -152,14 +152,14 @@ class GraphCallerTest {
         val h = Harness(response(429, headers = mapOf("Retry-After" to "3600")))
         try {
             h.caller.get(url) { it.code }
-            fail("Retry-After d'une heure attendu")
+            fail("one-hour Retry-After expected")
         } catch (_: CloudThrottledException) {
         }
         h.now += 60_000L
-        // Miniature demandée pendant la pause : ni jeton, ni requête, ni attente.
+        // Thumbnail requested during the pause: no token, no request, no wait.
         try {
             h.caller.get(url, maxRetries = 1) { it.code }
-            fail("pause globale ignorée")
+            fail("global pause ignored")
         } catch (e: CloudThrottledException) {
             assertEquals(3_540_000L, e.retryAfterMs)
         }
@@ -174,12 +174,12 @@ class GraphCallerTest {
         val h = Harness(*steps)
         try {
             h.caller.get(url) { it.code }
-            fail("abandon attendu")
+            fail("give-up expected")
         } catch (e: CloudThrottledException) {
             assertEquals(3_000L, e.retryAfterMs)
         }
         assertEquals(MAX_RETRIES + 1, h.requests.size)
-        // Dernier Retry-After respecté par les requêtes suivantes malgré l'abandon.
+        // Last Retry-After honoured by following requests despite giving up.
         assertEquals(3_000L, h.gate.remainingMs())
     }
 
@@ -189,7 +189,7 @@ class GraphCallerTest {
         val h = Harness(*steps)
         try {
             h.caller.get(url) { it.code }
-            fail("abandon attendu")
+            fail("give-up expected")
         } catch (e: GraphHttpException) {
             assertEquals(502, e.status)
             assertEquals(CloudErrorCode.SERVER, e.code)
@@ -205,7 +205,7 @@ class GraphCallerTest {
         )
         try {
             h.caller.get(url) { it.code }
-            fail("410 attendu")
+            fail("410 expected")
         } catch (e: GraphResyncRequiredException) {
             assertEquals(location, e.location)
         }
@@ -216,7 +216,7 @@ class GraphCallerTest {
         val h = Harness(response(404, body = """{"error":{"code":"itemNotFound","message":"x"}}"""))
         try {
             h.caller.get(url) { it.code }
-            fail("404 attendu")
+            fail("404 expected")
         } catch (e: GraphHttpException) {
             assertEquals(404, e.status)
             assertEquals("itemNotFound", e.graphCode)
@@ -228,7 +228,7 @@ class GraphCallerTest {
         val h = Harness(response(403, body = "<html>"))
         try {
             h.caller.get(url) { it.code }
-            fail("403 attendu")
+            fail("403 expected")
         } catch (e: GraphHttpException) {
             assertEquals(CloudErrorCode.DECLINED, e.code)
             assertNull(e.graphCode)
@@ -244,7 +244,7 @@ class GraphCallerTest {
         val ko = Harness(ioFailure, ioFailure, ioFailure)
         try {
             ko.caller.get(url) { it.code }
-            fail("erreur réseau attendue")
+            fail("network error expected")
         } catch (e: CloudException) {
             assertEquals(CloudErrorCode.NETWORK, e.code)
         }
@@ -273,13 +273,13 @@ class GraphCallerTest {
         val h = Harness(response(429, headers = mapOf("Retry-After" to "7")))
         try {
             h.caller.get(url, maxRetries = 0) { it.code }
-            fail("abandon immédiat attendu")
+            fail("immediate give-up expected")
         } catch (e: CloudThrottledException) {
             assertEquals(7_000L, e.retryAfterMs)
         }
         assertEquals(1, h.requests.size)
         assertTrue(h.sleeps.isEmpty())
-        // La pause demandée par Graph s'applique quand même aux requêtes suivantes.
+        // The pause requested by Graph still applies to following requests.
         assertEquals(7_000L, h.gate.remainingMs())
     }
 
@@ -288,7 +288,7 @@ class GraphCallerTest {
         val h = Harness(response(503), response(503))
         try {
             h.caller.get(url, maxRetries = 1) { it.code }
-            fail("abandon attendu")
+            fail("give-up expected")
         } catch (e: GraphHttpException) {
             assertEquals(503, e.status)
         }

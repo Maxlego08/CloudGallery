@@ -18,18 +18,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Tenue à jour de l'index de recherche `media_fts` d'après la base, sans dépendre des
- * synchronisations : toute écriture dans `media`, `media_source`, `album` ou `album_media`
- * (indexation MediaStore, synchro OneDrive, fusion, purge, renommage d'album…) relance, après
- * [REFRESH_DEBOUNCE_MS] sans nouvelle écriture, une mise à jour incrémentale
- * ([SearchDao.refreshIndex]). Le premier passage, au démarrage, remplit l'index après la
- * migration v6 ou le rattrape s'il a été interrompu.
+ * Keeps the `media_fts` search index up to date from the database, without depending on the
+ * syncs: any write to `media`, `media_source`, `album` or `album_media` (MediaStore indexing,
+ * OneDrive sync, merge, purge, album rename…) triggers, after [REFRESH_DEBOUNCE_MS] without a
+ * new write, an incremental update ([SearchDao.refreshIndex]). The first pass, at startup,
+ * fills the index after the v6 migration or catches it up if it was interrupted.
  *
- * Coût : chaque passage recalcule les libellés de tous les médias pour les comparer à l'index
- * (sous-requêtes indexées), puis ne réécrit que les entrées changées. Pour 100 000 médias, de
- * l'ordre d'une à quelques secondes sur le dispatcher d'E/S, une fois en fin de synchro ; le
- * premier remplissage écrit en plus les 100 000 entrées. Une synchro qui écrit sans cesse retarde
- * la mise à jour jusqu'à sa fin (une recherche pendant ce temps trouve l'état précédent).
+ * Cost: each pass recomputes the labels of all media to compare them with the index (indexed
+ * subqueries), then only rewrites the entries that changed. For 100,000 media, on the order of
+ * one to a few seconds on the I/O dispatcher, once at the end of a sync; the first fill also
+ * writes the 100,000 entries. A sync that keeps writing delays the update until it ends (a
+ * search in the meantime finds the previous state).
  */
 @Singleton
 class SearchIndexer @Inject constructor(
@@ -40,7 +39,7 @@ class SearchIndexer @Inject constructor(
 ) {
     private val started = AtomicBoolean(false)
 
-    /** Suivi des tables pour la durée du processus (Application.onCreate). Idempotent. */
+    /** Watches the tables for the lifetime of the process (Application.onCreate). Idempotent. */
     @OptIn(FlowPreview::class)
     fun start() {
         if (!started.compareAndSet(false, true)) return
@@ -57,12 +56,12 @@ class SearchIndexer @Inject constructor(
             val start = SystemClock.elapsedRealtime()
             val removed = dao.refreshIndex()
             val ms = SystemClock.elapsedRealtime() - start
-            if (removed > 0 || ms > SLOW_REFRESH_MS) Log.i(TAG, "Index de recherche à jour : $removed entrées retirées, $ms ms")
+            if (removed > 0 || ms > SLOW_REFRESH_MS) Log.i(TAG, "Search index up to date: $removed entries removed, $ms ms")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Repris à la prochaine écriture (ou au prochain démarrage) : la recherche garde l'état précédent.
-            Log.w(TAG, "Mise à jour de l'index de recherche impossible", e)
+            // Retried on the next write (or the next startup): search keeps the previous state.
+            Log.w(TAG, "Search index update failed", e)
         }
     }
 

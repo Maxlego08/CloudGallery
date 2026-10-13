@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Economiseur d'espace : copies proposées et revérification avant la corbeille. */
+/** Space saver: offered copies and re-check before moving to trash. */
 class SpaceSaverLogicTest {
 
     private fun row(id: Long, merged: Boolean = true, userData: Boolean = false, type: MediaType = MediaType.IMAGE) =
@@ -43,7 +43,7 @@ class SpaceSaverLogicTest {
                 row(4, merged = false, userData = true, type = MediaType.VIDEO),
             ),
         )
-        // Favori ou album d'un média distinct de l'élément OneDrive : écarté (il serait perdu).
+        // Favorite or album of a media distinct from the OneDrive item: excluded (it would be lost).
         assertEquals(listOf(1L, 2L, 3L), list.candidates.map { it.sourceId })
         assertEquals(1, list.excludedUserData)
         assertEquals("content://media/external/images/media/1", list.candidates.first().uri)
@@ -61,9 +61,9 @@ class SpaceSaverLogicTest {
         val reviewed = listOf(candidate(1), candidate(2), candidate(3), candidate(4))
         val fresh = listOf(
             candidate(1),
-            candidate(2, size = 9), // contenu modifié depuis la revue
-            candidate(3, uri = "autre"), // ré-identifiée par MediaStore
-            // 4 : plus proposée (élément OneDrive supprimé, empreinte périmée…)
+            candidate(2, size = 9), // content modified since the review
+            candidate(3, uri = "autre"), // re-identified by MediaStore
+            // 4: no longer offered (OneDrive item deleted, stale hash…)
         )
         assertEquals(listOf(1L), stillCandidates(reviewed, fresh).map { it.sourceId })
     }

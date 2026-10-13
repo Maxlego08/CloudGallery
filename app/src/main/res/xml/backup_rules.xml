@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Sauvegarde automatique (Android 11 et moins) : la base Room n'est pas sauvegardée. Elle
-   référence les médias par _ID MediaStore, propre à l'appareil : restaurée ailleurs, elle
-   rattacherait favoris et albums à d'autres photos. L'index est reconstruit depuis MediaStore.
-   Le cache de jetons MSAL (OneDrive) est exclu : chiffré par une clé Keystore propre à
-   l'appareil, il serait illisible une fois restauré. Il faut simplement se reconnecter.
-   La clé de chiffrement MSAL enveloppée par le Keystore (app_<paquet>/adalks, répertoire
-   utilisé uniquement par MSAL) est exclue pour la même raison, ainsi que l'état de
-   synchronisation OneDrive (cloud_sync.xml), lié à l'index local. Les recherches récentes
-   (search_history.xml) restent sur l'appareil.
-   La configuration MSAL générée vit dans noBackupFilesDir (jamais sauvegardé).
-   Les copies hors ligne OneDrive (files/offline/) sont exclues : volumineuses, liées à l'index
-   local, et téléchargeables de nouveau.
+   Auto backup (Android 11 and lower): the Room database is not backed up. It references
+   media by MediaStore _ID, which is device-specific: restored elsewhere, it would attach
+   favorites and albums to other photos. The index is rebuilt from MediaStore.
+   The MSAL token cache (OneDrive) is excluded: encrypted with a device-specific Keystore key,
+   it would be unreadable once restored. The user simply has to sign in again.
+   The MSAL encryption key wrapped by the Keystore (app_<package>/adalks, a directory used
+   only by MSAL) is excluded for the same reason, as is the OneDrive sync state
+   (cloud_sync.xml), tied to the local index. Recent searches (search_history.xml) stay on
+   the device.
+   The generated MSAL configuration lives in noBackupFilesDir (never backed up).
+   OneDrive offline copies (files/offline/) are excluded: large, tied to the local index, and
+   downloadable again.
 -->
 <full-backup-content>
     <exclude domain="database" path="." />

@@ -49,9 +49,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Photos (Timeline) et Vidéos suivent le réglage « Afficher les éléments OneDrive dans Photos »
- * (grille, identifiants, nombres), et montrent OneDrive d'office sans accès aux photos du
- * téléphone ; Favoris, albums et média unique montrent tout le visible.
+ * Photos (Timeline) and Videos follow the "Show OneDrive items in Photos" setting (grid, ids,
+ * counts), and show OneDrive by default without access to the phone's photos; Favorites, albums
+ * and single media show everything visible.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -67,7 +67,7 @@ class MediaRepositoryImpl @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : MediaRepository {
 
-    /** Eléments uniquement OneDrive dans Photos et Vidéos ([includeCloudOnlyInLibrary]). */
+    /** OneDrive-only items in Photos and Videos ([includeCloudOnlyInLibrary]). */
     private val includeCloudOnly: Flow<Boolean> = combine(
         settingsRepository.settings.map { it.showCloudInPhotos },
         mediaAccess.access,
@@ -82,15 +82,15 @@ class MediaRepositoryImpl @Inject constructor(
         MediaContext.Videos -> includeCloudOnly.flatMapLatest { cloud -> pager(initialOffset) { mediaDao.pagingVideos(cloud) } }
         MediaContext.Favorites -> pager(initialOffset) { mediaDao.pagingFavorites() }
         is MediaContext.Album -> pager(initialOffset) { mediaDao.pagingAlbum(context.albumId) }
-        // Saisie sans mot : aucun résultat (pas de requête FTS).
+        // Input without any word: no results (no FTS query).
         is MediaContext.Search -> ftsMatchExpression(context.query)
             ?.let { match -> pager(initialOffset) { searchDao.pagingSearch(match) } }
             ?: flowOf(PagingData.empty())
     }
 
     /**
-     * [initialOffset] : rang de la première ligne chargée (clé de LimitOffsetPagingSource de Room).
-     * Le rechargement après invalidation reste à la même position ([AbsoluteRefreshPagingSource]).
+     * [initialOffset]: offset of the first loaded row (key of Room's LimitOffsetPagingSource).
+     * Reloading after invalidation stays at the same position ([AbsoluteRefreshPagingSource]).
      */
     private fun pager(initialOffset: Int, source: () -> PagingSource<Int, MediaRow>): Flow<PagingData<MediaSummary>> =
         Pager(
@@ -119,7 +119,7 @@ class MediaRepositoryImpl @Inject constructor(
         is MediaContext.Search -> ftsMatchExpression(context.query)?.let { searchDao.observeSearchIds(it) } ?: flowOf(emptyList())
     }.distinctUntilChanged().flowOn(io)
 
-    /** Observe aussi la copie hors ligne : la visionneuse bascule sur le fichier dès qu'il est enregistré. */
+    /** Also observes the offline copy: the viewer switches to the file as soon as it is saved. */
     override fun observeMedia(id: Long): Flow<MediaDetails?> = combine(
         mediaDao.observeById(id),
         sourceDao.observeForMedia(id),
@@ -138,7 +138,7 @@ class MediaRepositoryImpl @Inject constructor(
         )
     }
 
-    /** Fichier d'une copie hors ligne enregistrée (chemin relatif vérifié, aucune E/S). */
+    /** File of a saved offline copy (relative path checked, no I/O). */
     private fun CachedFileEntity.toOfflineFile(): OfflineFile? =
         offlineStore.fileOf(path)?.let { OfflineFile(it, sizeBytes, version) }
 
@@ -209,7 +209,7 @@ class MediaRepositoryImpl @Inject constructor(
         val candidates = externalIdCandidates(uri)
         if (candidates.isEmpty()) return@withContext null
         lookup(candidates)?.let { return@withContext it }
-        // Pas encore indexé (photo qui vient d'être prise, par exemple) : synchro incrémentale puis nouvel essai.
+        // Not indexed yet (a photo that was just taken, for instance): incremental sync, then retry.
         runCatching { indexer.sync(full = false) }
         lookup(candidates)
     }
@@ -225,8 +225,8 @@ class MediaRepositoryImpl @Inject constructor(
                 ?.let { externalIdFromMediaDocumentId(it) }
                 ?.let { listOf(it) }
                 .orEmpty()
-            // TODO: URI du sélecteur de photos (content://media/picker/...) et URI FileProvider tierces :
-            //  non rattachables à une source MediaStore, la visionneuse doit alors les afficher sans index.
+            // TODO: photo picker URIs (content://media/picker/...) and third-party FileProvider URIs:
+            //  cannot be tied to a MediaStore source, the viewer must then display them without an index.
             else -> emptyList()
         }
     }
@@ -236,9 +236,9 @@ class MediaRepositoryImpl @Inject constructor(
         const val MEDIA_DOCUMENTS_AUTHORITY = "com.android.providers.media.documents"
 
         /**
-         * Sans emplacements réservés : les en-têtes de jour/mois sont insérés entre éléments chargés,
-         * des emplacements vides (comptés comme des cellules) feraient sauter la grille à l'arrivée
-         * de chaque page. [PagingConfig.maxSize] borne la mémoire après un long défilement (100k médias).
+         * No placeholders: day/month headers are inserted between loaded items, so empty
+         * placeholders (counted as cells) would make the grid jump whenever a page arrives.
+         * [PagingConfig.maxSize] bounds memory after a long scroll (100k media).
          */
         val PAGING_CONFIG = PagingConfig(
             pageSize = 150,

@@ -14,7 +14,7 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
-/** Métadonnées EXIF utiles au panneau Détails (valeurs brutes, formatées par [ExifReader.Companion]). */
+/** EXIF metadata used by the Details sheet (raw values, formatted by [ExifReader.Companion]). */
 data class ExifInfo(
     val make: String?,
     val model: String?,
@@ -29,7 +29,7 @@ data class ExifInfo(
     val hasCameraInfo: Boolean
         get() = camera != null || focalLengthMm != null || fNumber != null || exposureSeconds != null || iso != null
 
-    /** « Samsung Galaxy S22 » : le modèle seul s'il contient déjà la marque. */
+    /** "Samsung Galaxy S22": the model alone if it already contains the make. */
     val camera: String?
         get() {
             val mk = make?.trim().orEmpty()
@@ -46,9 +46,9 @@ data class ExifInfo(
 }
 
 /**
- * Lecture EXIF hors du thread principal via androidx.exifinterface.
- * Les coordonnées GPS ne sont fournies par MediaStore que si ACCESS_MEDIA_LOCATION est accordée et que
- * l'URI est marquée [MediaStore.setRequireOriginal] ; sinon on relit silencieusement l'URI « expurgée ».
+ * Reads EXIF off the main thread via androidx.exifinterface.
+ * MediaStore only provides GPS coordinates if ACCESS_MEDIA_LOCATION is granted and the URI is
+ * marked with [MediaStore.setRequireOriginal]; otherwise we silently fall back to the "redacted" URI.
  */
 class ExifReader @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -66,7 +66,7 @@ class ExifReader @Inject constructor(
     private fun openOriginal(uri: Uri): InputStream? = try {
         context.contentResolver.openInputStream(MediaStore.setRequireOriginal(uri))
     } catch (_: Exception) {
-        // SecurityException sans ACCESS_MEDIA_LOCATION, UnsupportedOperationException hors MediaStore…
+        // SecurityException without ACCESS_MEDIA_LOCATION, UnsupportedOperationException outside MediaStore…
         null
     }
 
@@ -99,7 +99,7 @@ class ExifReader @Inject constructor(
     }
 
     companion object {
-        /** « 1/250 s » pour les poses courtes, « 2 s » / « 1.5 s » pour les poses longues. */
+        /** "1/250 s" for short exposures, "2 s" / "1.5 s" for long exposures. */
         fun formatExposure(seconds: Double): String {
             if (seconds <= 0.0) return ""
             return if (seconds >= 1.0) {
@@ -109,17 +109,17 @@ class ExifReader @Inject constructor(
             }
         }
 
-        /** « f/1.8 ». */
+        /** "f/1.8". */
         fun formatAperture(fNumber: Double): String = "f/" + String.format(Locale.ROOT, "%.1f", fNumber)
 
-        /** « 6 mm », « 5.4 mm ». */
+        /** "6 mm", "5.4 mm". */
         fun formatFocalLength(mm: Double): String = "${trimDecimal(mm)} mm"
 
-        /** « 48.85837, 2.29448 ». */
+        /** "48.85837, 2.29448". */
         fun formatCoordinates(latitude: Double, longitude: Double): String =
             String.format(Locale.ROOT, "%.5f, %.5f", latitude, longitude)
 
-        /** Une décimale au plus, sans « .0 » final. */
+        /** At most one decimal, without a trailing ".0". */
         internal fun trimDecimal(value: Double): String {
             val rounded = Math.round(value * 10.0) / 10.0
             return if (abs(rounded - Math.rint(rounded)) < 1e-9) {

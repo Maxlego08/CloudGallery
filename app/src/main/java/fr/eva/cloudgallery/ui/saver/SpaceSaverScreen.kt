@@ -78,9 +78,9 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 
 /**
- * Economiseur d'espace (page Stockage) : copies du téléphone déjà sur OneDrive, filtrées par
- * ancienneté et toutes cochées par défaut ; l'utilisateur décoche ce qu'il veut garder, puis
- * confirme deux fois (boîte de l'appli, puis boîte système Android). Corbeille uniquement.
+ * Space saver (Storage page): phone copies already on OneDrive, filtered by age and all
+ * checked by default; the user unchecks what they want to keep, then confirms twice (app
+ * dialog, then Android system dialog). Trash only.
  */
 @Composable
 fun SpaceSaverScreen(
@@ -102,7 +102,7 @@ fun SpaceSaverScreen(
     var showAgeDialog by rememberSaveable { mutableStateOf(false) }
     var showConfirmDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Instant de référence du filtre d'ancienneté, fixé à l'ouverture de l'écran.
+    // Reference instant for the age filter, fixed when the screen opens.
     val now = remember { System.currentTimeMillis() }
     val filtered = remember(state.list, state.age) { state.filtered(now) }
     val selected = remember(filtered, state.deselected) { selectedIn(filtered, state.deselected) }
@@ -332,7 +332,7 @@ private fun ageLabel(age: SaverAge): String = when (age) {
     SaverAge.YEAR -> stringResource(R.string.saver_age_year)
 }
 
-/** Choix du filtre d'ancienneté : un toucher sur une option l'applique et ferme la boîte. */
+/** Age filter choice: tapping an option applies it and closes the dialog. */
 @Composable
 private fun AgeDialog(
     selected: SaverAge,

@@ -10,7 +10,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Copies proposées lues en base ([MediaSourceDao.spaceSaverCandidates]), sur le dispatcher d'E/S. */
+/** Offered copies read from the database ([MediaSourceDao.spaceSaverCandidates]), on the I/O dispatcher. */
 @Singleton
 class SpaceSaverRepositoryImpl @Inject constructor(
     private val sources: MediaSourceDao,
@@ -29,7 +29,7 @@ class SpaceSaverRepositoryImpl @Inject constructor(
     }
 
     private companion object {
-        /** Limite de variables SQLite par requête. */
+        /** SQLite variable limit per query. */
         const val SQL_CHUNK = 500
     }
 }

@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Bouton en pilule One UI (écran d'autorisation, bandeaux, états vides).
- * [filled] = fond d'accent et texte blanc ; sinon fond teinté discret et texte d'accent.
+ * One UI pill button (permission screen, banners, empty states).
+ * [filled] = accent background and white text; otherwise a subtle tinted background and accent text.
  */
 @Composable
 fun OneUiPillButton(

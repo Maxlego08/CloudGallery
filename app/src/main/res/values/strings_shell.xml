@@ -1,79 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Coquille de l'appli : onglets, autorisations, Menu, Paramètres. -->
+<!-- App shell: tabs, permissions, Menu, Settings. -->
 <resources>
-    <!-- Onglets -->
-    <string name="shell_tab_photos">Photos</string>
+    <!-- Tabs -->
+    <string name="shell_tab_photos">Pictures</string>
     <string name="shell_tab_albums">Albums</string>
     <string name="shell_tab_menu">Menu</string>
-    <string name="shell_open_failed">Impossible d\'ouvrir ce fichier : il ne fait pas partie de la bibliothèque multimédia de l\'appareil.</string>
+    <string name="shell_open_failed">Can\'t open this file: it isn\'t part of the device media library.</string>
 
-    <!-- Autorisations -->
-    <string name="perm_title">Vos photos et vidéos</string>
-    <string name="perm_message">CloudGallery a besoin d\'accéder aux photos et vidéos de l\'appareil pour les afficher, les classer en albums et les lire.</string>
-    <string name="perm_reason_browse">Parcourir vos photos par date et par album</string>
-    <string name="perm_reason_videos">Lire vos vidéos</string>
-    <string name="perm_reason_private">Tout reste sur l\'appareil : rien n\'est envoyé en ligne</string>
-    <string name="perm_denied_message">L\'accès a été refusé. Autorisez « Photos et vidéos » dans les paramètres de l\'application.</string>
-    <string name="perm_open_settings">Ouvrir les paramètres</string>
-    <string name="perm_allow">Autoriser l\'accès</string>
-    <string name="perm_partial_banner">Accès limité à certaines photos</string>
-    <string name="perm_partial_manage">Gérer</string>
-    <!-- Usage « OneDrive seul » (aucun accès aux photos du téléphone) -->
-    <string name="perm_use_onedrive_only">Utiliser OneDrive seulement</string>
-    <string name="perm_no_local_banner">Photos du téléphone non autorisées</string>
-    <string name="perm_no_local_allow">Autoriser</string>
-    <string name="perm_onedrive_only_empty_title">Aucune photo à afficher</string>
-    <string name="perm_onedrive_only_empty_message">Connectez-vous à OneDrive pour parcourir vos photos et vidéos, ou autorisez l\'accès aux photos du téléphone.</string>
-    <string name="perm_onedrive_only_sign_in">Se connecter à OneDrive</string>
-    <string name="perm_onedrive_only_allow_photos">Autoriser les photos du téléphone</string>
-    <string name="perm_onedrive_only_synced_empty_title">Aucun élément OneDrive</string>
-    <string name="perm_onedrive_only_synced_empty_message">Les photos et vidéos de OneDrive apparaissent ici après la synchronisation.</string>
+    <!-- Permissions -->
+    <string name="perm_title">Your photos and videos</string>
+    <string name="perm_message">CloudGallery needs access to the photos and videos on this device to show them, organize them into albums and play them.</string>
+    <string name="perm_reason_browse">Browse your photos by date and album</string>
+    <string name="perm_reason_videos">Play your videos</string>
+    <string name="perm_reason_private">Everything stays on the device: nothing is uploaded</string>
+    <string name="perm_denied_message">Access was denied. Allow \"Photos and videos\" in the app settings.</string>
+    <string name="perm_open_settings">Open settings</string>
+    <string name="perm_allow">Allow access</string>
+    <string name="perm_partial_banner">Access limited to some photos</string>
+    <string name="perm_partial_manage">Manage</string>
+    <!-- "OneDrive only" use (no access to the phone's photos) -->
+    <string name="perm_use_onedrive_only">Use OneDrive only</string>
+    <string name="perm_no_local_banner">Phone photos not allowed</string>
+    <string name="perm_no_local_allow">Allow</string>
+    <string name="perm_onedrive_only_empty_title">No photos to show</string>
+    <string name="perm_onedrive_only_empty_message">Sign in to OneDrive to browse your photos and videos, or allow access to the phone\'s photos.</string>
+    <string name="perm_onedrive_only_sign_in">Sign in to OneDrive</string>
+    <string name="perm_onedrive_only_allow_photos">Allow phone photos</string>
+    <string name="perm_onedrive_only_synced_empty_title">No OneDrive items</string>
+    <string name="perm_onedrive_only_synced_empty_message">OneDrive photos and videos appear here after syncing.</string>
 
     <!-- Menu -->
     <string name="menu_title">Menu</string>
-    <string name="menu_favorites">Favoris</string>
-    <string name="menu_videos">Vidéos</string>
-    <string name="menu_library">Bibliothèque</string>
-    <string name="menu_sync_now">Synchroniser maintenant</string>
+    <string name="menu_favorites">Favorites</string>
+    <string name="menu_videos">Videos</string>
+    <string name="menu_library">Library</string>
+    <string name="menu_sync_now">Sync now</string>
 
-    <!-- Paramètres -->
-    <string name="settings_section_appearance">Apparence</string>
-    <string name="settings_theme">Thème</string>
-    <string name="settings_theme_system">Système</string>
-    <string name="settings_theme_light">Clair</string>
-    <string name="settings_theme_dark">Sombre</string>
-    <string name="settings_section_display">Affichage</string>
-    <string name="settings_show_video_duration">Afficher la durée des vidéos</string>
-    <string name="settings_autoplay_videos">Lecture automatique des vidéos</string>
-    <string name="settings_autoplay_videos_summary">Lancer la lecture à l\'ouverture d\'une vidéo</string>
-    <string name="settings_section_delete">Suppression</string>
-    <string name="settings_use_trash">Utiliser la corbeille</string>
-    <string name="settings_use_trash_summary">Les éléments supprimés restent récupérables pendant 30 jours dans la corbeille Android.</string>
-    <string name="settings_confirm_delete">Confirmer avant suppression</string>
-    <string name="settings_section_library">Bibliothèque</string>
-    <string name="settings_index_state">État de l\'indexation</string>
-    <string name="settings_index_running">Indexation en cours…</string>
-    <string name="settings_index_error">Erreur d\'indexation : %1$s</string>
-    <string name="settings_index_last">Dernière mise à jour : %1$s · %2$s</string>
-    <string name="settings_index_never">Bibliothèque pas encore indexée</string>
-    <string name="settings_reindex">Réindexer complètement</string>
-    <string name="settings_reindex_summary">Relit tous les fichiers de l\'appareil</string>
-    <string name="settings_reindex_title">Réindexer la bibliothèque ?</string>
-    <string name="settings_reindex_message">Tous les fichiers de l\'appareil seront relus. Cela peut prendre quelques minutes ; vos favoris et albums sont conservés.</string>
-    <string name="settings_reindex_confirm">Réindexer</string>
-    <string name="settings_section_account">Compte</string>
-    <string name="settings_cloud_sync_state">Synchronisation OneDrive</string>
-    <string name="settings_background_sync">Synchroniser en arrière-plan</string>
-    <string name="settings_background_sync_off">Désactivée : seulement à l\'ouverture de l\'appli</string>
-    <string name="settings_background_sync_hourly">Toutes les heures</string>
-    <string name="settings_background_sync_6h">Toutes les 6 heures</string>
-    <string name="settings_background_sync_daily">Une fois par jour</string>
-    <string name="settings_background_sync_wifi_title">Synchroniser en Wi-Fi uniquement</string>
-    <string name="settings_background_sync_wifi_summary">La synchronisation en arrière-plan attend un réseau Wi-Fi non facturé. À l\'ouverture de l\'appli, OneDrive est toujours synchronisé.</string>
-    <string name="settings_show_cloud_in_photos">Afficher les éléments OneDrive dans Photos</string>
-    <string name="settings_originals_mobile_title">Charger les originaux sur réseau mobile</string>
-    <string name="settings_originals_mobile_summary">Au zoom, télécharge l\'original OneDrive sans demander, même sur données mobiles ou avec l\'économiseur de données. Désactivé, il vous est proposé avec sa taille. En Wi-Fi, il est toujours chargé automatiquement.</string>
-    <string name="settings_show_cloud_in_photos_summary">Désactivé : les éléments présents uniquement sur OneDrive n\'apparaissent que dans leurs albums OneDrive, les Favoris et vos albums ; ceux conservés hors ligne apparaissent toujours dans Photos. Activé : une photo présente sur le téléphone et sur OneDrive n\'apparaît qu\'une fois, après le calcul de son empreinte (fait pendant la charge).</string>
-    <string name="settings_section_about">À propos</string>
+    <!-- Settings -->
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_show_video_duration">Show video duration</string>
+    <string name="settings_autoplay_videos">Autoplay videos</string>
+    <string name="settings_autoplay_videos_summary">Start playback when a video is opened</string>
+    <string name="settings_section_delete">Deletion</string>
+    <string name="settings_use_trash">Use trash</string>
+    <string name="settings_use_trash_summary">Deleted items can be restored for 30 days from the Android trash.</string>
+    <string name="settings_confirm_delete">Confirm before deleting</string>
+    <string name="settings_section_library">Library</string>
+    <string name="settings_index_state">Indexing status</string>
+    <string name="settings_index_running">Indexing…</string>
+    <string name="settings_index_error">Indexing error: %1$s</string>
+    <string name="settings_index_last">Last updated: %1$s · %2$s</string>
+    <string name="settings_index_never">Library not indexed yet</string>
+    <string name="settings_reindex">Full re-index</string>
+    <string name="settings_reindex_summary">Re-reads every file on the device</string>
+    <string name="settings_reindex_title">Re-index the library?</string>
+    <string name="settings_reindex_message">Every file on the device will be read again. This may take a few minutes; your favorites and albums are kept.</string>
+    <string name="settings_reindex_confirm">Re-index</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_cloud_sync_state">OneDrive sync</string>
+    <string name="settings_background_sync">Sync in the background</string>
+    <string name="settings_background_sync_off">Off: only when the app opens</string>
+    <string name="settings_background_sync_hourly">Every hour</string>
+    <string name="settings_background_sync_6h">Every 6 hours</string>
+    <string name="settings_background_sync_daily">Once a day</string>
+    <string name="settings_background_sync_wifi_title">Sync on Wi-Fi only</string>
+    <string name="settings_background_sync_wifi_summary">Background sync waits for an unmetered Wi-Fi network. OneDrive always syncs when the app opens.</string>
+    <string name="settings_show_cloud_in_photos">Show OneDrive items in Photos</string>
+    <string name="settings_originals_mobile_title">Load originals on mobile data</string>
+    <string name="settings_originals_mobile_summary">When you zoom in, downloads the OneDrive original without asking, even on mobile data or with Data Saver on. Off: it\'s offered to you with its size. On Wi-Fi, it always loads automatically.</string>
+    <string name="settings_show_cloud_in_photos_summary">Off: items only on OneDrive appear only in their OneDrive albums, Favorites and your albums; items kept offline always appear in Photos. On: a photo stored both on the phone and on OneDrive appears once, after its fingerprint is computed (done while charging).</string>
+    <string name="settings_section_about">About</string>
     <string name="settings_version">Version %1$s</string>
 </resources>

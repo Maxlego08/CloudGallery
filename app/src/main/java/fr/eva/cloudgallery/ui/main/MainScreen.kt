@@ -39,14 +39,14 @@ import fr.eva.cloudgallery.ui.photos.NoLocalAccessEmpty
 import fr.eva.cloudgallery.ui.photos.PhotosScreen
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Hauteur réservée au bandeau d'accès (partiel, ou « OneDrive seul ») au-dessus de la barre d'onglets. */
+/** Height reserved for the access banner (partial, or "OneDrive only") above the tab bar. */
 private val PartialBannerHeight = 56.dp
 
 /**
- * Ecran principal à onglets (Photos / Albums / Menu). Les onglets basculent instantanément ;
- * l'état sauvegardable de chacun (positions de défilement…) est conservé via un
- * SaveableStateHolder. Sans accès aux médias ([mode]) : écran d'autorisation, ou onglets sur
- * OneDrive seul (« Utiliser OneDrive seulement » choisi) avec un bandeau pour autoriser les photos.
+ * Main tabbed screen (Photos / Albums / Menu). Tabs switch instantly;
+ * the saveable state of each (scroll positions…) is kept via a
+ * SaveableStateHolder. Without media access ([mode]): permission screen, or tabs on
+ * OneDrive only ("Use OneDrive only" chosen) with a banner to allow photos.
  */
 @Composable
 fun MainScreen(
@@ -88,7 +88,7 @@ fun MainScreen(
     val bannerOnPhotos = tab == MainTab.PHOTOS && !selecting
     val showPartialBanner = (permissions.access == MediaAccess.PARTIAL || oneDriveOnly) && bannerOnPhotos
 
-    // Déclaré avant le contenu : les BackHandler des onglets (sortie du mode sélection) restent prioritaires.
+    // Declared before the content: the tabs' BackHandlers (leaving selection mode) keep priority.
     BackHandler(enabled = tab != MainTab.PHOTOS && !selecting) { tab = MainTab.PHOTOS }
 
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -160,7 +160,7 @@ fun MainScreen(
         }
     }
 
-    // Un onglet quitté ne signale pas forcément la fin de son mode sélection.
+    // A tab that is left does not necessarily report the end of its selection mode.
     LaunchedEffect(tab) {
         if (tab != MainTab.PHOTOS) photosSelecting = false
         if (tab != MainTab.ALBUMS) albumsSelecting = false

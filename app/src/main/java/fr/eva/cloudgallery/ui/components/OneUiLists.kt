@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Carte arrondie One UI posée sur `groupedBackground` (écrans de réglages, menu). */
+/** One UI rounded card laid on `groupedBackground` (settings screens, menu). */
 @Composable
 fun OneUiCard(
     modifier: Modifier = Modifier,
@@ -47,7 +47,7 @@ fun OneUiCard(
     )
 }
 
-/** Petit titre de catégorie au-dessus d'une carte. */
+/** Small category title above a card. */
 @Composable
 fun OneUiCategoryHeader(
     text: String,
@@ -70,8 +70,8 @@ fun OneUiCategoryHeader(
 }
 
 /**
- * Ligne de liste One UI (à l'intérieur d'une [OneUiCard]). Cliquable si [onClick] est fourni.
- * [destructive] colore le titre en rouge (action irréversible, ex. déconnexion).
+ * One UI list row (inside a [OneUiCard]). Clickable if [onClick] is provided.
+ * [destructive] colours the title red (irreversible action, e.g. sign-out).
  */
 @Composable
 fun OneUiListItem(
@@ -97,7 +97,7 @@ fun OneUiListItem(
     )
 }
 
-/** Ligne avec interrupteur ; toute la ligne bascule la valeur. */
+/** Row with a switch; the whole row toggles the value. */
 @Composable
 fun OneUiSwitchItem(
     title: String,
@@ -169,7 +169,7 @@ private fun ListRow(
     }
 }
 
-/** Séparateur fin One UI ; [startIndent] aligne le trait sur le texte des lignes. */
+/** Thin One UI divider; [startIndent] aligns the line with the rows' text. */
 @Composable
 fun OneUiDivider(
     modifier: Modifier = Modifier,

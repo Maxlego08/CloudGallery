@@ -22,8 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Grille d'une collection (album, Favoris, Vidéos). Le contexte est fourni par l'écran
- * via l'injection assistée Hilt.
+ * Grid of a collection (album, Favorites, Videos). The context is provided by the screen
+ * through Hilt assisted injection.
  */
 @HiltViewModel(assistedFactory = CollectionViewModel.Factory::class)
 class CollectionViewModel @AssistedInject constructor(
@@ -36,17 +36,17 @@ class CollectionViewModel @AssistedInject constructor(
         fun create(context: MediaContext): CollectionViewModel
     }
 
-    /** Album affiché (null pour Favoris / Vidéos, ou si l'album a disparu). */
+    /** Displayed album (null for Favorites / Videos, or if the album has disappeared). */
     val album: StateFlow<AlbumSummary?> =
         ((context as? MediaContext.Album)?.let { deps.albumRepository.observeAlbum(it.albumId) } ?: flowOf(null))
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val oneDriveLinkChannel = Channel<String>(Channel.BUFFERED)
 
-    /** Lien web du dossier OneDrive à ouvrir (« Ouvrir dans OneDrive »). */
+    /** Web link of the OneDrive folder to open ("Open in OneDrive"). */
     val oneDriveLinks: Flow<String> = oneDriveLinkChannel.receiveAsFlow()
 
-    /** Album OneDrive : demande le lien web de son dossier (requête Graph). */
+    /** OneDrive album: requests the web link of its folder (Graph request). */
     fun openInOneDrive() {
         val albumId = (mediaContext as? MediaContext.Album)?.albumId ?: return
         viewModelScope.launch {
@@ -61,7 +61,7 @@ class CollectionViewModel @AssistedInject constructor(
         deps.settingsRepository.setAlbumZoomLevel(level)
     }
 
-    /** Retire la sélection d'un album virtuel (références uniquement, aucun fichier supprimé). */
+    /** Removes the selection from a virtual album (references only, no file deleted). */
     fun removeFromAlbum() {
         val albumId = (mediaContext as? MediaContext.Album)?.albumId ?: return
         viewModelScope.launch {
@@ -79,7 +79,7 @@ class CollectionViewModel @AssistedInject constructor(
         }
     }
 
-    /** Retire la sélection des favoris (écran Favoris). */
+    /** Removes the selection from favorites (Favorites screen). */
     fun removeFromFavorites() {
         viewModelScope.launch {
             val ids = selection.value

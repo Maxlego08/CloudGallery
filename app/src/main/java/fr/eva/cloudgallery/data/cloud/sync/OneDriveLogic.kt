@@ -7,52 +7,52 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
 /*
- * Logique pure (sans dépendance Android) de la synchronisation OneDrive, testée en JVM.
- * Lecture seule : rien ici ne modifie OneDrive ni les fichiers de l'appareil.
+ * Pure logic (no Android dependency) of the OneDrive sync, tested on the JVM.
+ * Read-only: nothing here modifies OneDrive or the device's files.
  */
 
-/** Fournisseur OneDrive dans la table sync_cursor (deltaLink Microsoft Graph). */
+/** OneDrive provider in the sync_cursor table (Microsoft Graph deltaLink). */
 internal const val ONEDRIVE_PROVIDER = "onedrive"
 
 /**
- * Champs demandés à la requête delta. Le `$select` est recopié dans le deltaLink : toute
- * modification doit s'accompagner d'un nouveau [DELTA_SELECT_VERSION] (énumération complète).
+ * Fields requested by the delta query. The `$select` is copied into the deltaLink: any change
+ * must come with a new [DELTA_SELECT_VERSION] (full enumeration).
  */
 internal const val DELTA_SELECT =
     "id,name,size,eTag,cTag,createdDateTime,lastModifiedDateTime,fileSystemInfo,file,folder,package," +
         "image,photo,video,parentReference,deleted,root,remoteItem"
 
-/** Version de [DELTA_SELECT] enregistrée avec le curseur. */
+/** Version of [DELTA_SELECT] saved with the cursor. */
 internal const val DELTA_SELECT_VERSION = "s1"
 
-/** Intervalle minimal entre deux synchronisations déclenchées par le retour au premier plan. */
+/** Minimum interval between two syncs triggered by returning to the foreground. */
 internal const val FOREGROUND_SYNC_MIN_INTERVAL_MS = 5 * 60_000L
 
 /**
- * Accès au contenu OneDrive pour le compte connecté [currentAccountId] : jamais après la
- * détection d'un autre lecteur ([mismatch]) ; sinon seulement pour le compte vérifié par le
- * dernier passage ([verifiedAccountId]). Aucun compte vérifié (index vide, ou données d'avant
- * cette vérification) : accès permis, le prochain passage vérifie le lecteur.
+ * Access to OneDrive content for the signed-in account [currentAccountId]: never after another
+ * drive has been detected ([mismatch]); otherwise only for the account verified by the last
+ * pass ([verifiedAccountId]). No verified account (empty index, or data from before this check):
+ * access allowed, the next pass verifies the drive.
  */
 internal fun cloudAccountAllowed(currentAccountId: String?, verifiedAccountId: String?, mismatch: Boolean): Boolean =
     !mismatch && (verifiedAccountId == null || verifiedAccountId == currentAccountId)
 
 private const val CLOUD_BUCKET_PREFIX = "onedrive:"
 
-/** Profondeur maximale d'un chemin de dossiers (protection contre un cycle de parents). */
+/** Maximum depth of a folder path (protection against a parent cycle). */
 private const val MAX_FOLDER_DEPTH = 64
 
-/** Clé de dossier d'une source OneDrive : « onedrive:<id du dossier parent> ». */
+/** Folder key of a OneDrive source: "onedrive:<parent folder id>". */
 internal fun cloudBucketKey(parentId: String?): String? =
     parentId?.takeIf { it.isNotBlank() }?.let { CLOUD_BUCKET_PREFIX + it }
 
-/** Inverse de [cloudBucketKey]. */
+/** Inverse of [cloudBucketKey]. */
 internal fun folderIdOfCloudBucket(bucketKey: String): String? =
     bucketKey.takeIf { it.startsWith(CLOUD_BUCKET_PREFIX) }?.substring(CLOUD_BUCKET_PREFIX.length)?.takeIf { it.isNotEmpty() }
 
 /**
- * Date ISO 8601 de Graph en ms. Null si absente, illisible ou non positive (Graph renvoie
- * parfois la valeur sentinelle 0001-01-01).
+ * Graph ISO 8601 date in ms. Null if absent, unreadable or non-positive (Graph sometimes
+ * returns the sentinel value 0001-01-01).
  */
 internal fun parseGraphInstantMs(value: String?): Long? {
     if (value.isNullOrBlank()) return null
@@ -65,13 +65,13 @@ internal fun parseGraphInstantMs(value: String?): Long? {
     }
 }
 
-/** Date de prise de vue : photo.takenDateTime, puis création côté client, puis création côté service ; 0 sinon. */
+/** Date taken: photo.takenDateTime, then client-side creation, then service-side creation; 0 otherwise. */
 internal fun chooseDateTakenMs(photoTaken: String?, fileSystemCreated: String?, created: String?): Long =
     parseGraphInstantMs(photoTaken) ?: parseGraphInstantMs(fileSystemCreated) ?: parseGraphInstantMs(created) ?: 0L
 
 /**
- * Type de média d'un fichier OneDrive. Le type MIME décide (SVG exclu) ; s'il est absent ou
- * générique, les facettes vidéo / image / photo servent de repli. Null : pas un média.
+ * Media type of a OneDrive file. The MIME type decides (SVG excluded); if it is absent or
+ * generic, the video / image / photo facets serve as a fallback. Null: not a media.
  */
 internal fun resolveCloudMediaType(mimeType: String?, hasImage: Boolean, hasPhoto: Boolean, hasVideo: Boolean): MediaType? {
     val mime = mimeType?.trim()?.lowercase().orEmpty()
@@ -88,7 +88,7 @@ internal fun resolveCloudMediaType(mimeType: String?, hasImage: Boolean, hasPhot
     }
 }
 
-/** Champs d'un média OneDrive (un élément = un média, jamais fusionné avec un fichier local). */
+/** Fields of a OneDrive media (one item = one media, never merged with a local file). */
 internal data class CloudMediaFields(
     val itemId: String,
     val type: MediaType,
@@ -108,11 +108,11 @@ internal data class CloudMediaFields(
     val quickXorHash: String?,
     val sha1Hash: String?,
 ) {
-    /** Empreinte de contenu (dédoublonnage futur) : QuickXorHash, seul hachage garanti sur OneDrive. */
+    /** Content fingerprint (future deduplication): QuickXorHash, the only hash guaranteed on OneDrive. */
     val contentHash: String? get() = quickXorHash?.let { "qxh:$it" }
 }
 
-/** Dossier OneDrive. */
+/** OneDrive folder. */
 internal data class CloudFolderFields(
     val itemId: String,
     val parentId: String?,
@@ -120,20 +120,20 @@ internal data class CloudFolderFields(
     val isRoot: Boolean,
 )
 
-/** Effet d'un élément de la requête delta sur l'index local. */
+/** Effect of a delta query item on the local index. */
 internal sealed interface DeltaAction {
     data class UpsertMedia(val media: CloudMediaFields) : DeltaAction
     data class UpsertFolder(val folder: CloudFolderFields) : DeltaAction
 
     /**
-     * Elément supprimé, déplacé hors du lecteur, devenu non média, ou ignoré (paquet OneNote,
-     * élément partagé d'un autre lecteur). Dossier ou fichier : décidé par l'index local, la
-     * facette `folder` n'étant pas toujours présente sur un élément supprimé.
+     * Item deleted, moved out of the drive, no longer a media, or ignored (OneNote package,
+     * shared item from another drive). Folder or file: decided by the local index, since the
+     * `folder` facet is not always present on a deleted item.
      */
     data class Remove(val itemId: String) : DeltaAction
 }
 
-/** Classe un élément de la requête delta (règles appliquées dans cet ordre). */
+/** Classifies a delta query item (rules applied in this order). */
 internal fun classifyDeltaItem(item: DriveItemDto): DeltaAction = when {
     item.deleted != null -> DeltaAction.Remove(item.id)
     item.root != null -> DeltaAction.UpsertFolder(
@@ -147,7 +147,7 @@ internal fun classifyDeltaItem(item: DriveItemDto): DeltaAction = when {
     else -> toCloudMediaFields(item)?.let { DeltaAction.UpsertMedia(it) } ?: DeltaAction.Remove(item.id)
 }
 
-/** Champs d'un fichier média, ou null si le fichier n'est ni une image ni une vidéo. */
+/** Fields of a media file, or null if the file is neither an image nor a video. */
 internal fun toCloudMediaFields(item: DriveItemDto): CloudMediaFields? {
     val file = item.file ?: return null
     val type = resolveCloudMediaType(file.mimeType, item.image != null, item.photo != null, item.video != null) ?: return null
@@ -182,8 +182,8 @@ internal fun toCloudMediaFields(item: DriveItemDto): CloudMediaFields? {
 }
 
 /**
- * Le même élément peut apparaître plusieurs fois dans un flux delta : seule sa dernière
- * occurrence compte. Ordre conservé (celui des dernières occurrences).
+ * The same item may appear several times in a delta feed: only its last occurrence counts.
+ * Order preserved (that of the last occurrences).
  */
 internal fun lastOccurrenceById(items: List<DriveItemDto>): List<DriveItemDto> {
     val latest = LinkedHashMap<String, DriveItemDto>(items.size)
@@ -194,7 +194,7 @@ internal fun lastOccurrenceById(items: List<DriveItemDto>): List<DriveItemDto> {
     return latest.values.toList()
 }
 
-/** Nom d'album d'un dossier OneDrive : [rootLabel] pour la racine, [unnamedLabel] sans nom connu. */
+/** Album name of a OneDrive folder: [rootLabel] for the root, [unnamedLabel] without a known name. */
 internal fun cloudFolderAlbumName(folder: CloudFolderFields?, rootLabel: String, unnamedLabel: String): String = when {
     folder == null -> unnamedLabel
     folder.isRoot -> rootLabel
@@ -202,9 +202,9 @@ internal fun cloudFolderAlbumName(folder: CloudFolderFields?, rootLabel: String,
 }
 
 /**
- * Chemin lisible d'un dossier (« OneDrive/Photos/2024/ »), la racine étant [rootLabel]. Un parent
- * inconnu tronque le chemin (sans préfixe racine) ; un cycle est interrompu. Null si le dossier
- * est inconnu.
+ * Readable path of a folder ("OneDrive/Photos/2024/"), the root being [rootLabel]. An unknown
+ * parent truncates the path (without the root prefix); a cycle is broken. Null if the folder is
+ * unknown.
  */
 internal fun cloudFolderPath(folderId: String, folders: Map<String, CloudFolderFields>, rootLabel: String): String? {
     var current = folders[folderId] ?: return null
@@ -223,7 +223,7 @@ internal fun cloudFolderPath(folderId: String, folders: Map<String, CloudFolderF
     return parts.joinToString(separator = "/", postfix = "/")
 }
 
-/** Dossiers [roots] et tous leurs descendants connus. */
+/** Folders [roots] and all their known descendants. */
 internal fun descendantFolderIds(roots: Set<String>, folders: Collection<CloudFolderFields>): Set<String> {
     if (roots.isEmpty()) return emptySet()
     val children = HashMap<String, MutableList<String>>()
@@ -239,9 +239,9 @@ internal fun descendantFolderIds(roots: Set<String>, folders: Collection<CloudFo
 }
 
 /**
- * Vrai si le sous-arbre d'un des dossiers [roots] (eux compris, parcours par `parentId` sur
- * [folders], dossiers marqués compris) contient un dossier de [hiddenFolders] (dossiers qui ont
- * des sources OneDrive masquées).
+ * True if the subtree of one of the [roots] folders (themselves included, traversal by `parentId`
+ * over [folders], marked folders included) contains a folder of [hiddenFolders] (folders that
+ * have hidden OneDrive sources).
  */
 internal fun subtreeHasHiddenItems(
     roots: Set<String>,
@@ -249,20 +249,20 @@ internal fun subtreeHasHiddenItems(
     hiddenFolders: Set<String>,
 ): Boolean = roots.isNotEmpty() && roots.any { it in selfAndAncestorIds(hiddenFolders, folders) }
 
-/** Dossiers à marquer supprimés ([mark]) et lignes à retirer de l'index ([delete]) en fin de passage. */
+/** Folders to mark as deleted ([mark]) and rows to remove from the index ([delete]) at the end of a pass. */
 internal data class FolderTombstonePlan(val mark: Set<String>, val delete: Set<String>)
 
 /**
- * Marqueurs de suppression des dossiers OneDrive (fin de passage). Candidats : dossiers absents
- * à la fin de ce passage ([gone]) et marqueurs déjà présents ([markers]), sauf ceux qui gardent
- * des éléments visibles ([keepVisible], cas limite : ligne laissée telle quelle).
+ * Deletion markers (tombstones) of OneDrive folders (end of pass). Candidates: folders missing
+ * at the end of this pass ([gone]) and markers already present ([markers]), except those that
+ * still have visible items ([keepVisible], edge case: row left as is).
  *
- * Un candidat reste (ou devient) marqueur tant que son sous-arbre contient des sources masquées
- * ([hiddenFolders]) : s'il est restauré depuis la corbeille, ses éléments masqués peuvent ne pas
- * être renvoyés un par un par le delta, et c'est le marqueur qui le signale (énumération complète
- * seulement dans ce cas). Les dossiers intermédiaires sans élément sont gardés aussi : sans eux,
- * un sous-dossier masqué ne serait plus rattaché au dossier restauré. Sinon la ligne est retirée
- * (rien à restaurer : un dossier qui revient est alors traité comme un nouveau dossier).
+ * A candidate stays (or becomes) a marker as long as its subtree contains hidden sources
+ * ([hiddenFolders]): if it is restored from the recycle bin, its hidden items may not be
+ * returned one by one by the delta, and the marker is what signals it (full enumeration only in
+ * that case). Intermediate folders without items are kept too: without them, a hidden subfolder
+ * would no longer be attached to the restored folder. Otherwise the row is removed (nothing to
+ * restore: a folder that comes back is then treated as a new folder).
  */
 internal fun planFolderTombstones(
     folders: Collection<CloudFolderFields>,
@@ -278,7 +278,7 @@ internal fun planFolderTombstones(
     return FolderTombstonePlan(mark = kept - markers, delete = candidates - kept)
 }
 
-/** [ids] et tous leurs ancêtres connus (remontée par `parentId`, cycles ignorés). */
+/** [ids] and all their known ancestors (walking up by `parentId`, cycles ignored). */
 private fun selfAndAncestorIds(ids: Set<String>, folders: Collection<CloudFolderFields>): Set<String> {
     val parentOf = folders.associate { it.itemId to it.parentId }
     val result = HashSet<String>()
@@ -289,7 +289,7 @@ private fun selfAndAncestorIds(ids: Set<String>, folders: Collection<CloudFolder
     return result
 }
 
-/** Source OneDrive de l'index (pour le plan de retrait). */
+/** OneDrive source of the index (for the removal plan). */
 internal data class CloudStamp(
     val sourceId: Long,
     val mediaId: Long,
@@ -298,16 +298,16 @@ internal data class CloudStamp(
 )
 
 internal data class CloudRemovalPlan(
-    /** Sources à masquer (conservées avec favoris et albums). */
+    /** Sources to hide (kept with favorites and albums). */
     val hide: List<CloudStamp>,
-    /** Sources masquées depuis plus de [MISSING_GRACE_MS] : retirées de l'index. */
+    /** Sources hidden for more than [MISSING_GRACE_MS]: removed from the index. */
     val purge: List<CloudStamp>,
 )
 
 /**
- * Fin de synchronisation. [seen] (éléments médias reçus) n'est fourni qu'après une énumération
- * complète : une source visible absente est alors masquée. Une source n'est jamais retirée
- * immédiatement : seule une source masquée depuis plus de [MISSING_GRACE_MS] est purgée.
+ * End of sync. [seen] (media items received) is only provided after a full enumeration: a
+ * missing visible source is then hidden. A source is never removed immediately: only a source
+ * hidden for more than [MISSING_GRACE_MS] is purged.
  */
 internal fun planCloudRemovals(all: List<CloudStamp>, seen: Set<String>?, now: Long): CloudRemovalPlan {
     val hide = ArrayList<CloudStamp>()
@@ -323,8 +323,8 @@ internal fun planCloudRemovals(all: List<CloudStamp>, seen: Set<String>?, now: L
 }
 
 /**
- * Synchro au retour au premier plan : pas pendant une limitation Graph, ni moins de
- * [minIntervalMs] après la précédente (une horloge reculée n'empêche pas la synchro).
+ * Sync on return to the foreground: not during Graph throttling, nor less than [minIntervalMs]
+ * after the previous one (a clock moved back does not prevent the sync).
  */
 internal fun shouldRunForegroundSync(
     lastSyncAt: Long,
@@ -333,31 +333,31 @@ internal fun shouldRunForegroundSync(
     minIntervalMs: Long = FOREGROUND_SYNC_MIN_INTERVAL_MS,
 ): Boolean = now >= retryNotBefore && (lastSyncAt <= 0L || now < lastSyncAt || now - lastSyncAt >= minIntervalMs)
 
-/** Pause Graph enregistrée plus lointaine que cela : horloge déréglée, valeur ignorée. */
+/** Saved Graph pause further away than this: clock out of whack, value ignored. */
 internal const val MAX_STORED_THROTTLE_MS = 24 * 60 * 60_000L
 
 /**
- * Pause de synchronisation relue au démarrage (Retry-After enregistré) : conservée si elle n'est
- * pas encore écoulée, ignorée (0) si elle est passée ou anormalement lointaine (horloge reculée).
+ * Sync pause read back at startup (saved Retry-After): kept if it has not elapsed yet, ignored
+ * (0) if it is over or abnormally far away (clock moved back).
  */
 internal fun restoredRetryNotBefore(stored: Long, now: Long, maxMs: Long = MAX_STORED_THROTTLE_MS): Long =
     if (stored > now && stored - now <= maxMs) stored else 0L
 
-/** Suite d'un passage après l'application d'une page delta. */
+/** What a pass does next after applying a delta page. */
 internal sealed interface DeltaPageStep {
     /**
-     * Un dossier contenant des éléments masqués est réapparu (passage incrémental) : le deltaLink
-     * est effacé aussitôt (un passage interrompu reprendra par une énumération complète) et
-     * l'énumération complète démarre sans attendre la fin du flux delta.
+     * A folder containing hidden items has reappeared (incremental pass): the deltaLink is
+     * cleared right away (an interrupted pass will resume with a full enumeration) and the full
+     * enumeration starts without waiting for the end of the delta feed.
      */
     data object RestartFull : DeltaPageStep
 
     data class NextPage(val url: String) : DeltaPageStep
 
-    /** Dernière page : fin de passage puis enregistrement du deltaLink. */
+    /** Last page: end of pass, then the deltaLink is saved. */
     data class Finish(val deltaLink: String) : DeltaPageStep
 
-    /** Page sans lien de suite : réponse invalide, le curseur n'est pas modifié. */
+    /** Page without a continuation link: invalid response, the cursor is not modified. */
     data object MissingLink : DeltaPageStep
 }
 
@@ -373,12 +373,12 @@ internal fun deltaPageStep(
     else -> DeltaPageStep.MissingLink
 }
 
-/** Valeur de `sync_cursor.version` : lecteur lié et version du `$select`. */
+/** Value of `sync_cursor.version`: bound drive and `$select` version. */
 internal fun cloudCursorVersion(driveId: String, selectVersion: String): String = "$driveId|$selectVersion"
 
 internal data class CloudCursorBinding(val driveId: String, val selectVersion: String?)
 
-/** Inverse de [cloudCursorVersion] (une ancienne valeur sans version de `$select` est acceptée). */
+/** Inverse of [cloudCursorVersion] (an old value without a `$select` version is accepted). */
 internal fun parseCloudCursorVersion(version: String?): CloudCursorBinding? {
     if (version.isNullOrBlank()) return null
     val sep = version.lastIndexOf('|')
@@ -390,25 +390,25 @@ internal fun parseCloudCursorVersion(version: String?): CloudCursorBinding? {
     }
 }
 
-/** Point de départ d'une synchronisation. */
+/** Starting point of a sync. */
 internal sealed interface SyncStart {
-    /** Reprise depuis le deltaLink enregistré (changements seulement). */
+    /** Resume from the saved deltaLink (changes only). */
     data class Incremental(val deltaLink: String) : SyncStart
 
-    /** Enumération complète : premier passage, nouveau `$select`, deltaLink absent. */
+    /** Full enumeration: first pass, new `$select`, deltaLink absent. */
     data object Full : SyncStart
 
     /**
-     * Le lecteur connecté n'est pas celui des données de l'index : rien n'est synchronisé ni
-     * supprimé sans la confirmation explicite de l'utilisateur.
+     * The signed-in drive is not the one of the index data: nothing is synced or deleted
+     * without the user's explicit confirmation.
      */
     data object AccountMismatch : SyncStart
 }
 
 /**
- * Choisit le départ d'une synchronisation d'après le curseur enregistré. Un curseur sans lecteur
- * (premier passage interrompu avant la liaison, ancienne version) adopte le lecteur courant ;
- * aucune donnée n'est jamais purgée ici.
+ * Chooses the starting point of a sync from the saved cursor. A cursor without a drive (first
+ * pass interrupted before binding, old version) adopts the current drive; no data is ever
+ * purged here.
  */
 internal fun planSyncStart(
     storedLink: String?,

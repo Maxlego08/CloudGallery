@@ -16,7 +16,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DataStoreModule {
 
-    /** Une seule instance par fichier : DataStore interdit deux instances actives sur le même fichier. */
+    /** A single instance per file: DataStore forbids two active instances on the same file. */
     @Provides
     @Singleton
     fun providePreferencesDataStore(@ApplicationContext context: Context): DataStore<Preferences> =

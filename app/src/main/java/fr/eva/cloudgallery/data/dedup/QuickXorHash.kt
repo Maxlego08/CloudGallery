@@ -4,14 +4,14 @@ import java.io.InputStream
 import java.util.Base64
 
 /**
- * QuickXorHash de Microsoft (empreinte `file.hashes.quickXorHash` de OneDrive), transcription
- * de l'implémentation de référence (learn.microsoft.com/onedrive/developer/code-snippets/quickxorhash) :
- * registre circulaire de 160 bits dans lequel l'octet n est combiné par XOR au décalage
- * (11 × n) mod 160 ; la longueur totale (64 bits, petit-boutiste) est combinée aux 8 derniers
- * octets du résultat. Sortie : 20 octets en base64 standard, comme Graph.
+ * Microsoft's QuickXorHash (OneDrive's `file.hashes.quickXorHash`), a port of the reference
+ * implementation (learn.microsoft.com/onedrive/developer/code-snippets/quickxorhash):
+ * 160-bit circular register in which byte n is XORed in at offset (11 × n) mod 160; the total
+ * length (64 bits, little-endian) is XORed into the last 8 bytes of the result. Output: 20 bytes
+ * in standard base64, like Graph.
  *
- * Calcul incrémental ([update] par morceaux de taille quelconque, même résultat qu'en une fois),
- * sans allocation par octet. Non thread-safe.
+ * Incremental computation ([update] with chunks of any size, same result as all at once),
+ * without per-byte allocation. Not thread-safe.
  */
 class QuickXorHash {
     private val data = LongArray(CELLS)
@@ -56,7 +56,7 @@ class QuickXorHash {
         lengthSoFar += length
     }
 
-    /** Empreinte des octets reçus (20 octets). L'objet ne doit plus être utilisé ensuite. */
+    /** Hash of the bytes received (20 bytes). The object must not be used afterwards. */
     fun digest(): ByteArray {
         val out = ByteArray(WIDTH_IN_BITS / 8)
         for (cell in 0 until CELLS) {
@@ -70,7 +70,7 @@ class QuickXorHash {
         return out
     }
 
-    /** Empreinte en base64 standard (format de Graph). */
+    /** Hash in standard base64 (Graph format). */
     fun digestBase64(): String = Base64.getEncoder().encodeToString(digest())
 
     companion object {
@@ -79,9 +79,8 @@ class QuickXorHash {
         private const val CELLS = (WIDTH_IN_BITS - 1) / 64 + 1
 
         /**
-         * Empreinte de [input] lue jusqu'au bout par morceaux de [bufferBytes]. [onChunk] est
-         * appelé après chaque morceau (octets lus au total) : il peut lever une exception pour
-         * interrompre la lecture (travail arrêté).
+         * Hash of [input] read to the end in chunks of [bufferBytes]. [onChunk] is called after
+         * each chunk (total bytes read): it may throw to interrupt the read (work stopped).
          */
         fun of(input: InputStream, bufferBytes: Int = 256 * 1024, onChunk: (Long) -> Unit = {}): String {
             val hash = QuickXorHash()

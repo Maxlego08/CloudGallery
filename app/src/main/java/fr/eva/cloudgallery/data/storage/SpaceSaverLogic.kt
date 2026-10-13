@@ -7,21 +7,21 @@ import fr.eva.cloudgallery.domain.model.SpaceSaverCandidate
 import fr.eva.cloudgallery.domain.model.SpaceSaverList
 
 /*
- * Logique pure de l'économiseur d'espace (testée en JVM).
+ * Pure logic of the space saver (tested on the JVM).
  */
 
 /**
- * Signature d'un fichier local au calcul de son empreinte, telle que comparée en SQL par
- * `SPACE_SAVER_SELECT` : `"<sizeBytes>:<dateModified>:<generation>"`. C'est celle qu'écrit le
- * calcul des empreintes ([localHashSignature]) : une seule définition du format.
+ * Signature of a local file at the time its hash was computed, as compared in SQL by
+ * `SPACE_SAVER_SELECT`: `"<sizeBytes>:<dateModified>:<generation>"`. It is the one written by
+ * the hashing ([localHashSignature]): a single definition of the format.
  */
 internal fun spaceSaverSignature(sizeBytes: Long, dateModified: Long, generation: Long): String =
     localHashSignature(sizeBytes, dateModified, generation)
 
 /**
- * Copies proposées : une copie dont le média porte un favori ou un album de l'utilisateur n'est
- * proposée que si ce média contient aussi l'élément OneDrive (regroupés : favori et album
- * restent sur l'élément OneDrive) ; sinon elle est écartée et comptée.
+ * Offered copies: a copy whose media carries a favorite or a user album is only offered if
+ * that media also contains the OneDrive item (merged: favorite and album stay on the OneDrive
+ * item); otherwise it is excluded and counted.
  */
 internal fun spaceSaverListOf(rows: List<SpaceSaverRow>): SpaceSaverList {
     var excluded = 0
@@ -46,9 +46,10 @@ internal fun spaceSaverListOf(rows: List<SpaceSaverRow>): SpaceSaverList {
 }
 
 /**
- * Copies revues encore supprimables juste avant la demande : toujours proposées ([fresh], relu
- * en base) et inchangées depuis la revue (même URI, taille et date de modification). Une copie
- * modifiée, déplacée ou dont l'élément OneDrive a disparu entre-temps est écartée.
+ * Reviewed copies that can still be deleted right before the request: still offered ([fresh],
+ * re-read from the database) and unchanged since the review (same URI, size and modification
+ * date). A copy that was modified, moved or whose OneDrive item has disappeared in the meantime
+ * is excluded.
  */
 internal fun stillCandidates(reviewed: List<SpaceSaverCandidate>, fresh: List<SpaceSaverCandidate>): List<SpaceSaverCandidate> {
     val current = fresh.associateBy { it.sourceId }

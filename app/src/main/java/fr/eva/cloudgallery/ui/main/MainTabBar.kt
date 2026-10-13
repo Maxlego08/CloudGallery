@@ -42,8 +42,8 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 enum class MainTab { PHOTOS, ALBUMS, MENU }
 
 /**
- * Barre d'onglets inférieure Samsung Galerie : libellés texte, onglet sélectionné en gras
- * sur une pastille arrondie ; « Menu » avec l'icône ≡. Gère l'inset de la barre de navigation.
+ * Samsung Gallery bottom tab bar: text labels, selected tab in bold
+ * on a rounded pill; "Menu" with the ≡ icon. Handles the navigation bar inset.
  */
 @Composable
 fun MainTabBar(

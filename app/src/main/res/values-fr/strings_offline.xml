@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Offline copies of OneDrive items (prefix offline_). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Actions -->
+    <string name="offline_keep">Conserver hors ligne</string>
+    <string name="offline_release">Libérer l\'espace</string>
+    <string name="offline_cancel_download">Annuler le téléchargement</string>
+    <string name="offline_resume_download">Reprendre le téléchargement</string>
+
+    <!-- Item state (viewer, Details) -->
+    <string name="offline_status_queued">Téléchargement hors ligne en attente</string>
+    <string name="offline_status_waiting_wifi">Téléchargement hors ligne en attente du Wi-Fi</string>
+    <string name="offline_status_downloading">Téléchargement hors ligne : %1$s sur %2$s</string>
+    <string name="offline_status_downloading_unknown">Téléchargement hors ligne en cours…</string>
+    <string name="offline_status_paused">Téléchargement hors ligne en pause</string>
+    <string name="offline_status_failed">Échec du téléchargement hors ligne. %1$s</string>
+    <string name="offline_status_available">Disponible hors connexion (%1$s)</string>
+    <string name="offline_status_updating">Disponible hors connexion · nouvelle version en cours de téléchargement</string>
+    <string name="offline_status_update_paused">Disponible hors connexion · téléchargement de la nouvelle version en pause</string>
+    <string name="offline_status_update_failed">Disponible hors connexion · nouvelle version non téléchargée. %1$s</string>
+    <string name="offline_status_deleted_on_onedrive">Copie hors ligne : élément supprimé de OneDrive</string>
+    <string name="offline_caption">Copie hors ligne</string>
+    <string name="offline_caption_deleted">Copie hors ligne · supprimé de OneDrive</string>
+    <string name="offline_badge_a11y">disponible hors connexion</string>
+
+    <!-- Results -->
+    <plurals name="offline_enqueued">
+        <item quantity="one">%d élément sera téléchargé pour un accès hors connexion.</item>
+        <item quantity="many">%d éléments seront téléchargés pour un accès hors connexion.</item>
+        <item quantity="other">%d éléments seront téléchargés pour un accès hors connexion.</item>
+    </plurals>
+    <string name="offline_nothing_to_do">Ces éléments sont déjà disponibles hors connexion, ou ne sont pas sur OneDrive.</string>
+    <string name="offline_not_signed_in">Connectez-vous à OneDrive pour conserver des éléments hors ligne.</string>
+    <string name="offline_scheduling_refused">Téléchargement mis en file : il démarrera à la prochaine ouverture de CloudGallery.</string>
+    <plurals name="offline_released">
+        <item quantity="one">%d copie hors ligne supprimée de l\'appareil</item>
+        <item quantity="many">%d copies hors ligne supprimées de l\'appareil</item>
+        <item quantity="other">%d copies hors ligne supprimées de l\'appareil</item>
+    </plurals>
+    <string name="offline_cancelled">Téléchargement hors ligne annulé</string>
+    <string name="offline_release_check_failed">Impossible de vérifier ces copies hors ligne. Rien n\'a été supprimé : réessayez.</string>
+    <string name="offline_resumed">Téléchargements hors ligne repris</string>
+
+    <!-- Not enough space -->
+    <string name="offline_no_space_title">Espace insuffisant</string>
+    <string name="offline_no_space_message">Il manque %1$s sur l\'appareil pour ces copies hors ligne.</string>
+    <string name="offline_no_space_manage">Libérer de l\'espace</string>
+
+    <!-- Large batch -->
+    <plurals name="offline_large_title">
+        <item quantity="one">Conserver %d élément hors ligne ?</item>
+        <item quantity="many">Conserver %d éléments hors ligne ?</item>
+        <item quantity="other">Conserver %d éléments hors ligne ?</item>
+    </plurals>
+    <string name="offline_large_message">%1$s seront téléchargés sur l\'appareil. Espace disponible : %2$s.</string>
+    <string name="offline_large_confirm">Télécharger</string>
+
+    <!-- Waiting for Wi-Fi -->
+    <string name="offline_wifi_title">En attente du Wi-Fi</string>
+    <plurals name="offline_wifi_message">
+        <item quantity="one">%1$d élément (%2$s) sera téléchargé dès que l\'appareil sera connecté au Wi-Fi.</item>
+        <item quantity="many">%1$d éléments (%2$s) seront téléchargés dès que l\'appareil sera connecté au Wi-Fi.</item>
+        <item quantity="other">%1$d éléments (%2$s) seront téléchargés dès que l\'appareil sera connecté au Wi-Fi.</item>
+    </plurals>
+    <string name="offline_download_now">Télécharger maintenant</string>
+    <string name="offline_wait_wifi">Attendre le Wi-Fi</string>
+
+    <!-- Freeing a last copy -->
+    <plurals tools:ignore="ImpliedQuantity" name="offline_release_last_title">
+        <item quantity="one">Supprimer la dernière copie ?</item>
+        <item quantity="many">Supprimer les dernières copies ?</item>
+        <item quantity="other">Supprimer les dernières copies ?</item>
+    </plurals>
+    <plurals name="offline_release_last_message">
+        <item quantity="one">%d élément n\'existe plus sur OneDrive ni sur l\'appareil : sa copie hors ligne est la seule restante. Elle sera définitivement supprimée et l\'élément disparaîtra de CloudGallery.</item>
+        <item quantity="many">%d éléments n\'existent plus sur OneDrive ni sur l\'appareil : leurs copies hors ligne sont les seules restantes. Elles seront définitivement supprimées et ces éléments disparaîtront de CloudGallery.</item>
+        <item quantity="other">%d éléments n\'existent plus sur OneDrive ni sur l\'appareil : leurs copies hors ligne sont les seules restantes. Elles seront définitivement supprimées et ces éléments disparaîtront de CloudGallery.</item>
+    </plurals>
+
+    <!-- Queue (Account screen) -->
+    <string name="offline_section_title">Hors ligne</string>
+    <string name="offline_queue_title">Copies hors ligne</string>
+    <plurals name="offline_queue_running">
+        <item quantity="one">%d élément en cours de téléchargement</item>
+        <item quantity="many">%d éléments en cours de téléchargement</item>
+        <item quantity="other">%d éléments en cours de téléchargement</item>
+    </plurals>
+    <plurals name="offline_queue_waiting_wifi">
+        <item quantity="one">%d élément en attente du Wi-Fi</item>
+        <item quantity="many">%d éléments en attente du Wi-Fi</item>
+        <item quantity="other">%d éléments en attente du Wi-Fi</item>
+    </plurals>
+    <plurals name="offline_queue_queued">
+        <item quantity="one">%d élément en attente</item>
+        <item quantity="many">%d éléments en attente</item>
+        <item quantity="other">%d éléments en attente</item>
+    </plurals>
+    <plurals name="offline_queue_paused">
+        <item quantity="one">%d élément en pause</item>
+        <item quantity="many">%d éléments en pause</item>
+        <item quantity="other">%d éléments en pause</item>
+    </plurals>
+    <plurals name="offline_queue_failed">
+        <item quantity="one">%d échec</item>
+        <item quantity="many">%d échecs</item>
+        <item quantity="other">%d échecs</item>
+    </plurals>
+    <plurals name="offline_queue_available">
+        <item quantity="one">%1$d élément sur l\'appareil · %2$s</item>
+        <item quantity="many">%1$d éléments sur l\'appareil · %2$s</item>
+        <item quantity="other">%1$d éléments sur l\'appareil · %2$s</item>
+    </plurals>
+    <string name="offline_queue_empty">Aucune copie hors ligne. Utilisez « Conserver hors ligne » sur des éléments OneDrive.</string>
+    <string name="offline_resume_all">Reprendre les téléchargements</string>
+    <string name="offline_cancel_all">Annuler les téléchargements</string>
+    <string name="offline_cancel_all_title">Annuler les téléchargements hors ligne ?</string>
+    <string name="offline_cancel_all_message">Les éléments en attente ne seront pas téléchargés. Les copies déjà présentes sur l\'appareil sont conservées.</string>
+
+    <!-- Copies of items deleted from OneDrive (user decision) -->
+    <plurals name="offline_deleted_title">
+        <item quantity="one">%d copie hors ligne d\'un élément supprimé de OneDrive</item>
+        <item quantity="many">%d copies hors ligne d\'éléments supprimés de OneDrive</item>
+        <item quantity="other">%d copies hors ligne d\'éléments supprimés de OneDrive</item>
+    </plurals>
+    <string name="offline_deleted_message">Ces éléments ont été supprimés de OneDrive il y a plus de 30 jours. Leurs copies hors ligne sont peut-être les dernières : supprimez-les ou conservez-les sur l\'appareil.</string>
+    <string name="offline_deleted_delete">Supprimer les copies</string>
+    <string name="offline_deleted_keep">Les conserver</string>
+    <plurals name="offline_deleted_delete_title">
+        <item quantity="one">Supprimer %d copie ?</item>
+        <item quantity="many">Supprimer %d copies ?</item>
+        <item quantity="other">Supprimer %d copies ?</item>
+    </plurals>
+    <string name="offline_deleted_delete_message">Ces copies sont probablement les dernières : elles seront définitivement supprimées de l\'appareil et ces éléments disparaîtront de CloudGallery, avec leurs favoris et leurs ajouts aux albums.</string>
+    <plurals name="offline_deleted_kept">
+        <item quantity="one">%d élément conservé hors ligne</item>
+        <item quantity="many">%d éléments conservés hors ligne</item>
+        <item quantity="other">%d éléments conservés hors ligne</item>
+    </plurals>
+    <plurals name="offline_deleted_removed">
+        <item quantity="one">%d copie supprimée</item>
+        <item quantity="many">%d copies supprimées</item>
+        <item quantity="other">%d copies supprimées</item>
+    </plurals>
+    <plurals name="offline_deleted_menu">
+        <item quantity="one">%d copie hors ligne à vérifier</item>
+        <item quantity="many">%d copies hors ligne à vérifier</item>
+        <item quantity="other">%d copies hors ligne à vérifier</item>
+    </plurals>
+    <string name="offline_deleted_more">+%1$d</string>
+
+    <!-- Notifications -->
+    <string name="offline_notification_channel">Téléchargements hors ligne</string>
+    <string name="offline_notification_channel_description">Progression des copies hors ligne d\'éléments OneDrive</string>
+    <string name="offline_notification_preparing">Préparation des copies hors ligne…</string>
+    <plurals name="offline_notification_title">
+        <item quantity="one">Copie hors ligne : %d élément restant</item>
+        <item quantity="many">Copies hors ligne : %d éléments restants</item>
+        <item quantity="other">Copies hors ligne : %d éléments restants</item>
+    </plurals>
+    <string name="offline_notification_progress">%1$s · %2$s sur %3$s</string>
+    <string name="offline_notification_cancel">Annuler</string>
+    <plurals name="offline_notification_done">
+        <item quantity="one">%d élément disponible hors connexion</item>
+        <item quantity="many">%d éléments disponibles hors connexion</item>
+        <item quantity="other">%d éléments disponibles hors connexion</item>
+    </plurals>
+    <plurals name="offline_notification_failed">
+        <item quantity="one">%d copie hors ligne n\'a pas pu être téléchargée</item>
+        <item quantity="many">%d copies hors ligne n\'ont pas pu être téléchargées</item>
+        <item quantity="other">%d copies hors ligne n\'ont pas pu être téléchargées</item>
+    </plurals>
+
+    <!-- OneDrive data purge: offline copies removed (sign-out, other account) -->
+    <plurals name="account_offline_purge_notice">
+        <item quantity="one">%d copie hors ligne sera supprimée de l\'appareil.</item>
+        <item quantity="many">%d copies hors ligne seront supprimées de l\'appareil.</item>
+        <item quantity="other">%d copies hors ligne seront supprimées de l\'appareil.</item>
+    </plurals>
+    <plurals name="account_offline_last_copies_notice">
+        <item quantity="one">Attention : %d de ces copies concerne un élément supprimé de OneDrive. C\'est sa dernière copie, elle sera définitivement perdue.</item>
+        <item quantity="many">Attention : %d de ces copies concernent des éléments supprimés de OneDrive. Ce sont leurs dernières copies, elles seront définitivement perdues.</item>
+        <item quantity="other">Attention : %d de ces copies concernent des éléments supprimés de OneDrive. Ce sont leurs dernières copies, elles seront définitivement perdues.</item>
+    </plurals>
+
+    <string name="account_offline_purge_unknown">Les copies hors ligne seront supprimées de l\'appareil. Certaines sont peut-être les dernières copies d\'éléments supprimés de OneDrive : elles seraient définitivement perdues.</string>
+
+    <!-- Setting -->
+    <string name="settings_offline_wifi_only_title">Télécharger hors ligne en Wi-Fi uniquement</string>
+    <string name="settings_offline_wifi_only_summary">Les copies hors ligne attendent un réseau Wi-Fi non facturé. « Télécharger maintenant » utilise les données mobiles pour les téléchargements déjà en attente seulement.</string>
+</resources>

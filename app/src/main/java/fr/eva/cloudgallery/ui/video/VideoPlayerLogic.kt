@@ -5,62 +5,62 @@ import fr.eva.cloudgallery.domain.model.CloudStreamException
 import fr.eva.cloudgallery.domain.model.CloudStreamFailure
 import java.util.Locale
 
-/** Catégories d'erreurs de lecture présentées à l'utilisateur. */
+/** Playback error categories shown to the user. */
 enum class PlaybackErrorKind {
-    /** Conteneur ou codec non pris en charge par ExoPlayer / les décodeurs de l'appareil. */
+    /** Container or codec not supported by ExoPlayer / the device's decoders. */
     UNSUPPORTED_FORMAT,
 
-    /** Fichier tronqué ou endommagé (conteneur mal formé, échec de décodage). */
+    /** Truncated or damaged file (malformed container, decoding failure). */
     CORRUPTED_FILE,
 
-    /** Fichier supprimé, déplacé ou dont l'accès a été retiré. */
+    /** File deleted, moved, or whose access has been revoked. */
     FILE_NOT_ACCESSIBLE,
 
-    /** Autres erreurs d'entrée/sortie (lecture du fichier). */
+    /** Other input/output errors (reading the file). */
     IO,
 
-    /** Pas de connexion ou délai dépassé (streaming). */
+    /** No connection or timeout (streaming). */
     NETWORK,
 
-    /** Réponse HTTP en échec de l'hôte de téléchargement, même avec une nouvelle URL. */
+    /** Failed HTTP response from the download host, even with a fresh URL. */
     SERVER_OR_LINK,
 
-    /** Compte OneDrive à connecter (déconnecté, session expirée ou autre compte que l'index). */
+    /** OneDrive account must be signed in (signed out, expired session, or another account than the index). */
     AUTH_REQUIRED,
 
-    /** Microsoft Graph demande de patienter. */
+    /** Microsoft Graph asks us to wait (throttling). */
     CLOUD_THROTTLED,
 
-    /** Elément introuvable sur OneDrive (supprimé ou déplacé). */
+    /** Item not found on OneDrive (deleted or moved). */
     CLOUD_NOT_FOUND,
 
-    /** Le média n'existe plus dans la bibliothèque. */
+    /** The media item no longer exists in the library. */
     MEDIA_NOT_FOUND,
 
-    /** Média présent uniquement sur OneDrive, et OneDrive indisponible dans ce build. */
+    /** Media item only on OneDrive, and OneDrive is unavailable in this build. */
     CLOUD_ONLY,
 
     OTHER,
 }
 
-/** Fonctions pures du lecteur (testées unitairement). */
+/** Pure player functions (unit tested). */
 object VideoPlayerLogic {
 
-    /** Vitesses proposées, comme le lecteur de Samsung Galerie. */
+    /** Offered speeds, like the Samsung Gallery player. */
     val PLAYBACK_SPEEDS: List<Float> = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
     const val SEEK_INCREMENT_MS: Long = 10_000L
     const val SAVE_INTERVAL_MS: Long = 5_000L
 
-    /** En dessous de ce seuil, inutile de reprendre la lecture en cours de route. */
+    /** Below this threshold, there is no point resuming playback mid-way. */
     const val MIN_RESUME_POSITION_MS: Long = 2_000L
 
-    /** Au-delà de (durée - seuil), la vidéo est considérée comme terminée. */
+    /** Beyond (duration - threshold), the video is considered finished. */
     const val END_THRESHOLD_MS: Long = 2_000L
 
     /**
-     * Associe une erreur de lecture à une catégorie affichable : l'échec OneDrive trouvé dans la
-     * chaîne des causes ([cloudFailure], cf. [cloudFailureOf]) d'abord, puis le
+     * Maps a playback error to a displayable category: the OneDrive failure found in the cause
+     * chain ([cloudFailure], see [cloudFailureOf]) first, then the
      * [PlaybackException.errorCode].
      */
     fun classifyError(errorCode: Int, cloudFailure: CloudStreamFailure? = null): PlaybackErrorKind = when (cloudFailure) {
@@ -95,37 +95,37 @@ object VideoPlayerLogic {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
         -> PlaybackErrorKind.NETWORK
 
-        // Après les nouvelles tentatives avec une URL renouvelée (statut HTTP en échec).
+        // After the retries with a renewed URL (failed HTTP status).
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> PlaybackErrorKind.SERVER_OR_LINK
 
         in IO_RANGE -> PlaybackErrorKind.IO
         else -> PlaybackErrorKind.OTHER
     }
 
-    /** Premier échec OneDrive ([CloudStreamException]) de la chaîne des causes d'une erreur. */
+    /** First OneDrive failure ([CloudStreamException]) in an error's cause chain. */
     fun cloudFailureOf(causes: Sequence<Throwable>): CloudStreamFailure? =
         causes.take(MAX_CAUSES).firstNotNullOfOrNull { (it as? CloudStreamException)?.failure }
 
-    /** Catégorie affichée quand aucune source n'est lisible. */
+    /** Category shown when no source is playable. */
     fun unavailableError(reason: UnavailableReason, cloudConfigured: Boolean): PlaybackErrorKind = when (reason) {
         UnavailableReason.SIGNED_OUT -> if (cloudConfigured) PlaybackErrorKind.AUTH_REQUIRED else PlaybackErrorKind.CLOUD_ONLY
         UnavailableReason.NO_SOURCE -> PlaybackErrorKind.FILE_NOT_ACCESSIBLE
     }
 
-    /** Les erreurs de format peuvent être contournées en ouvrant la vidéo dans une autre appli. */
+    /** Format errors can be worked around by opening the video in another app. */
     fun canOpenExternally(kind: PlaybackErrorKind): Boolean =
         kind == PlaybackErrorKind.UNSUPPORTED_FORMAT || kind == PlaybackErrorKind.CORRUPTED_FILE ||
             kind == PlaybackErrorKind.OTHER
 
-    /** « Réessayer » inutile : aucune nouvelle tentative ne changerait le résultat. */
+    /** "Retry" is pointless: no new attempt would change the outcome. */
     fun canRetry(kind: PlaybackErrorKind): Boolean =
         kind != PlaybackErrorKind.CLOUD_ONLY && kind != PlaybackErrorKind.AUTH_REQUIRED &&
             kind != PlaybackErrorKind.CLOUD_NOT_FOUND
 
-    /** L'utilisateur doit (re)connecter son compte OneDrive : action « Se connecter ». */
+    /** The user must (re)connect their OneDrive account: "Sign in" action. */
     fun needsSignIn(kind: PlaybackErrorKind): Boolean = kind == PlaybackErrorKind.AUTH_REQUIRED
 
-    /** Erreur liée à OneDrive ou au réseau (icône « cloud » plutôt qu'erreur de fichier). */
+    /** Error related to OneDrive or the network ("cloud" icon rather than a file error). */
     fun isCloudError(kind: PlaybackErrorKind): Boolean = when (kind) {
         PlaybackErrorKind.CLOUD_ONLY,
         PlaybackErrorKind.AUTH_REQUIRED,
@@ -137,8 +137,8 @@ object VideoPlayerLogic {
     }
 
     /**
-     * Position de reprise : 0 si la position mémorisée est trop proche du début ou de la fin
-     * (dans ce dernier cas la vidéo avait été vue jusqu'au bout).
+     * Resume position: 0 if the saved position is too close to the start or the end
+     * (in the latter case the video had been watched to the end).
      */
     fun resumePosition(savedMs: Long, durationMs: Long): Long = when {
         savedMs < MIN_RESUME_POSITION_MS -> 0L
@@ -146,13 +146,13 @@ object VideoPlayerLogic {
         else -> savedMs
     }
 
-    /** Position cible d'un saut relatif, bornée à [0, durée]. */
+    /** Target position of a relative seek, clamped to [0, duration]. */
     fun seekTarget(currentMs: Long, deltaMs: Long, durationMs: Long): Long {
         val target = (currentMs + deltaMs).coerceAtLeast(0L)
         return if (durationMs > 0) target.coerceAtMost(durationMs) else target
     }
 
-    /** Zone d'un double appui : -1 tiers gauche, +1 tiers droit, 0 centre. */
+    /** Zone of a double tap: -1 left third, +1 right third, 0 center. */
     fun doubleTapZone(x: Float, width: Float): Int = when {
         width <= 0f -> 0
         x < width / 3f -> -1
@@ -160,7 +160,7 @@ object VideoPlayerLogic {
         else -> 0
     }
 
-    /** Libellé de vitesse : « 1x », « 0.25x », « 1.5x ». */
+    /** Speed label: "1x", "0.25x", "1.5x". */
     fun speedLabel(speed: Float): String {
         val text = if (speed == speed.toLong().toFloat()) {
             speed.toLong().toString()
@@ -170,7 +170,7 @@ object VideoPlayerLogic {
         return "${text}x"
     }
 
-    /** Ratio d'affichage d'une vidéo (largeur / hauteur), ou null si inconnu. */
+    /** Display aspect ratio of a video (width / height), or null if unknown. */
     fun aspectRatio(width: Int, height: Int, pixelRatio: Float = 1f): Float? =
         if (width <= 0 || height <= 0) null else width * pixelRatio / height
 

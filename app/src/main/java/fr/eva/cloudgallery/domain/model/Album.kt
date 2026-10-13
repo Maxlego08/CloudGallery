@@ -3,26 +3,26 @@ package fr.eva.cloudgallery.domain.model
 import android.net.Uri
 
 enum class AlbumType {
-    /** Dossier MediaStore (bucket) du téléphone. */
+    /** MediaStore folder (bucket) on the phone. */
     LOCAL_FOLDER,
 
-    /** Dossier OneDrive contenant des médias. */
+    /** OneDrive folder containing media. */
     CLOUD_FOLDER,
 
-    /** Album personnalisé : références vers des médias, sans copie de fichier. */
+    /** Custom album: references to media, without copying any file. */
     VIRTUAL,
 }
 
 enum class AlbumSort { CUSTOM, NAME, RECENT, COUNT }
 
-/** Affichage d'un album choisi par l'utilisateur (« Masquer des albums »). */
+/** How an album is displayed, as chosen by the user ("Hide albums"). */
 enum class AlbumVisibility {
     SHOWN,
 
-    /** Absent de l'onglet Albums ; ses médias restent dans Photos, Vidéos, la recherche. */
+    /** Missing from the Albums tab; its media remain in Photos, Videos and search. */
     HIDDEN_IN_ALBUMS,
 
-    /** Absent de l'onglet Albums, et ses médias absents de Photos et Vidéos. */
+    /** Missing from the Albums tab, and its media missing from Photos and Videos. */
     HIDDEN_EVERYWHERE,
 }
 
@@ -39,7 +39,7 @@ data class AlbumSummary(
     val coverDateModified: Long,
     val latestDate: Long,
     val isPinned: Boolean,
-    /** Miniature OneDrive de la couverture, utilisée quand la couverture n'a pas de fichier local. */
+    /** OneDrive thumbnail of the cover, used when the cover has no local file. */
     val coverCloud: CloudThumbRef? = null,
     val visibility: AlbumVisibility = AlbumVisibility.SHOWN,
 )

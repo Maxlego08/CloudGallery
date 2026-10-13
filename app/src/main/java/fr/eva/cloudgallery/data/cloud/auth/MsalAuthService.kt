@@ -40,15 +40,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Authentification Microsoft (MSAL, compte unique) : état du compte, connexion interactive,
- * jetons silencieux et déconnexion MSAL. Ne dépend ni de la synchronisation ni de Graph
- * (l'orchestration « connexion -> synchro », « déconnexion -> purge » vit dans
- * [fr.eva.cloudgallery.data.cloud.CloudSessionCoordinator]) : le graphe Hilt reste acyclique,
- * le client Graph pouvant dépendre de ce fournisseur de jetons.
+ * Microsoft authentication (MSAL, single account): account state, interactive sign-in, silent
+ * tokens and MSAL sign-out. Depends neither on synchronization nor on Graph (the "sign-in ->
+ * sync" and "sign-out -> purge" orchestration lives in
+ * [fr.eva.cloudgallery.data.cloud.CloudSessionCoordinator]): the Hilt graph stays acyclic,
+ * since the Graph client can depend on this token provider.
  *
- * Toutes les API bloquantes de MSAL sont appelées sur le dispatcher d'E/S ; les rappels MSAL
- * arrivent sur le thread principal et ne font que publier un état. Les journaux ne contiennent
- * jamais de jeton ni de nom d'utilisateur.
+ * All blocking MSAL APIs are called on the I/O dispatcher; MSAL callbacks arrive on the main
+ * thread and only publish a state. Logs never contain a token or a user name.
  */
 @Singleton
 class MsalAuthService @Inject constructor(
@@ -70,16 +69,16 @@ class MsalAuthService @Inject constructor(
     private val _signInOutcomes = MutableSharedFlow<SignInOutcome>(extraBufferCapacity = 8)
     val signInOutcomes: SharedFlow<SignInOutcome> = _signInOutcomes.asSharedFlow()
 
-    /** Sérialise les transitions d'état (relecture du compte, déconnexion). */
+    /** Serializes state transitions (account re-read, sign-out). */
     private val stateMutex = Mutex()
 
-    /** Une seule acquisition de jeton à la fois (MSAL rejette les commandes identiques simultanées). */
+    /** Only one token acquisition at a time (MSAL rejects identical concurrent commands). */
     private val tokenMutex = Mutex()
 
     @Volatile
     private var cachedToken: CachedToken? = null
 
-    /** Compte (id MSAL) pour lequel une reconnexion est requise, tant qu'aucun jeton n'a été obtenu. */
+    /** Account (MSAL id) for which re-authentication is required, until a token is obtained. */
     @Volatile
     private var reauthAccountId: String? = null
 
@@ -87,19 +86,19 @@ class MsalAuthService @Inject constructor(
     private var signingOut = false
 
     /**
-     * Numéro de session : incrémenté au début d'une déconnexion et à chaque connexion interactive
-     * réussie. Un jeton silencieux demandé sous une session précédente (requête lente terminée
-     * après la déconnexion) est ignoré : ni mis en cache, ni changement d'état.
+     * Session number: incremented at the start of a sign-out and on every successful interactive
+     * sign-in. A silent token requested under a previous session (slow request finishing after
+     * the sign-out) is ignored: neither cached nor causing a state change.
      */
     private val sessionEpoch = AtomicLong(0)
 
-    /** Dernière relecture automatique après une erreur de lecture du compte. */
+    /** Last automatic re-read after an account read error. */
     @Volatile
     private var lastErrorRetryAt = 0L
 
     private class CachedToken(val accountId: String, val value: String, val expiresAtMs: Long)
 
-    /** Relit le compte persisté par MSAL. Sans effet pendant une déconnexion. */
+    /** Re-reads the account persisted by MSAL. No effect during a sign-out. */
     suspend fun refresh() {
         if (!feature.enabled) {
             _state.value = CloudAccountState.NotConfigured
@@ -111,10 +110,10 @@ class MsalAuthService @Inject constructor(
     }
 
     /**
-     * Relit le compte si son état n'est pas encore connu ([CloudAccountState.Loading]) ou si la
-     * dernière lecture a échoué ([CloudAccountState.Error], souvent passager : Keystore, client
-     * MSAL), au plus une fois toutes les [ERROR_RETRY_INTERVAL_MS] dans ce second cas. Appelé
-     * avant une synchronisation ou un téléchargement de miniature.
+     * Re-reads the account if its state is not known yet ([CloudAccountState.Loading]) or if the
+     * last read failed ([CloudAccountState.Error], often transient: Keystore, MSAL client), at
+     * most once every [ERROR_RETRY_INTERVAL_MS] in the latter case. Called before a sync or a
+     * thumbnail download.
      */
     suspend fun refreshIfNeeded() {
         when (_state.value) {
@@ -148,28 +147,29 @@ class MsalAuthService @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Lecture du compte Microsoft impossible : ${describe(e)}")
+            Log.w(TAG, "Unable to read the Microsoft account: ${describe(e)}")
             CloudAccountState.Error(errorCodeOf(e))
         }
     }
 
-    /** Ouvre la page de connexion Microsoft. L'issue est publiée dans [signInOutcomes]. */
+    /** Opens the Microsoft sign-in page. The outcome is published in [signInOutcomes]. */
     fun signIn(activity: Activity) = startInteractive(activity, again = false)
 
-    /** Reconnexion du compte courant (session expirée). */
+    /** Re-authentication of the current account (expired session). */
     fun reauthenticate(activity: Activity) = startInteractive(activity, again = true)
 
     private fun startInteractive(activity: Activity, again: Boolean) {
         if (!feature.enabled || signingOut) return
         if (!_signInRunning.compareAndSet(expect = false, update = true)) return
-        // E/S : création du client et lecture du compte persisté. MSAL lance ensuite sa propre
-        // activité ; l'issue arrive par le rappel, même si l'écran a été recréé entre-temps.
+        // I/O: client creation and read of the persisted account. MSAL then launches its own
+        // activity; the outcome arrives through the callback, even if the screen was recreated
+        // in the meantime.
         scope.launch(io) {
             try {
                 val app = clients.get()
                 val current = app.currentAccount.currentAccount
                 if (!again && current != null) {
-                    // MSAL refuserait la connexion (« un compte est déjà connecté ») : on relit l'état.
+                    // MSAL would refuse the sign-in ("an account is already signed in"): re-read the state.
                     finishInteractive(SignInOutcome.Success)
                     refresh()
                     return@launch
@@ -197,12 +197,12 @@ class MsalAuthService @Inject constructor(
     private val interactiveCallback = object : AuthenticationCallback {
         override fun onSuccess(result: IAuthenticationResult) {
             val account = result.account
-            // Nouvelle session : un jeton silencieux encore en cours pour l'ancienne est ignoré.
+            // New session: a silent token still in flight for the old one is ignored.
             sessionEpoch.incrementAndGet()
             cacheToken(account.id, result)
             reauthAccountId = null
-            // Sous le verrou d'état : une relecture lancée avant l'enregistrement du compte par
-            // MSAL (retour au premier plan) ne peut pas écraser ce succès après coup.
+            // Under the state lock: a re-read started before MSAL saved the account (return to
+            // the foreground) cannot overwrite this success afterwards.
             scope.launch {
                 stateMutex.withLock {
                     if (!signingOut) _state.value = CloudAccountState.SignedIn(account.toCloudAccount())
@@ -218,10 +218,10 @@ class MsalAuthService @Inject constructor(
 
     private fun onInteractiveError(error: Throwable) {
         val failure = classifyMsalError(error)
-        Log.w(TAG, "Connexion Microsoft échouée : ${describe(error)}")
+        Log.w(TAG, "Microsoft sign-in failed: ${describe(error)}")
         val code = failure.toErrorCode()
         finishInteractive(if (code == null) SignInOutcome.Cancelled else SignInOutcome.Failed(code))
-        // L'état a pu changer (compte retiré, configuration invalide…) : relecture.
+        // The state may have changed (account removed, invalid configuration...): re-read.
         if (failure != MsalFailure.CANCELLED) scope.launch { refresh() }
     }
 
@@ -242,7 +242,7 @@ class MsalAuthService @Inject constructor(
         }
     }
 
-    /** Jeton silencieux (API bloquante de MSAL, sans rappel : thread d'E/S uniquement). */
+    /** Silent token (blocking MSAL API, no callback: I/O thread only). */
     private suspend fun acquireSilently(forceRefresh: Boolean): String {
         val epoch = sessionEpoch.get()
         val app = clientOrThrow()
@@ -258,7 +258,7 @@ class MsalAuthService @Inject constructor(
                 .build()
             val result = app.acquireTokenSilent(params)
             if (!onTokenAcquired(account, result, epoch)) {
-                // Déconnexion (ou autre connexion) pendant la requête : le jeton est abandonné.
+                // Sign-out (or another sign-in) during the request: the token is discarded.
                 throw CloudAuthRequiredException()
             }
             return result.accessToken
@@ -268,7 +268,7 @@ class MsalAuthService @Inject constructor(
             throw e
         } catch (e: Exception) {
             val failure = classifyMsalError(e)
-            Log.w(TAG, "Jeton silencieux indisponible : ${describe(e)}")
+            Log.w(TAG, "Silent token unavailable: ${describe(e)}")
             when (failure) {
                 MsalFailure.UI_REQUIRED -> {
                     account?.let { markNeedsReauth(it, epoch) }
@@ -279,7 +279,7 @@ class MsalAuthService @Inject constructor(
                     refresh()
                     throw CloudAuthRequiredException(e)
                 }
-                // Hors ligne, délai, commande en double… : la session reste valide.
+                // Offline, timeout, duplicate command...: the session stays valid.
                 else -> throw CloudException(failure.toErrorCode() ?: CloudErrorCode.UNKNOWN, e)
             }
         }
@@ -293,12 +293,12 @@ class MsalAuthService @Inject constructor(
         throw CloudException(errorCodeOf(e), e)
     }
 
-    /** Session toujours d'actualité : même numéro qu'au début de la requête, pas de déconnexion. */
+    /** Session still current: same number as at the start of the request, no sign-out. */
     private fun isCurrentSession(epoch: Long) = !signingOut && sessionEpoch.get() == epoch
 
     /**
-     * Reconnexion requise pour [account], seulement si la session n'a pas changé depuis la
-     * demande de jeton et que le compte n'est pas déconnecté (jamais après une déconnexion).
+     * Re-authentication required for [account], only if the session has not changed since the
+     * token request and the account is not signed out (never after a sign-out).
      */
     private suspend fun markNeedsReauth(account: IAccount, epoch: Long) {
         stateMutex.withLock {
@@ -319,9 +319,9 @@ class MsalAuthService @Inject constructor(
     }
 
     /**
-     * Jeton silencieux obtenu : mis en cache seulement si la session n'a pas changé pendant la
-     * requête (faux sinon : le jeton doit être abandonné). L'état ne peut passer que de
-     * Loading / Error / NeedsReauth à SignedIn : un compte déconnecté ne redevient jamais connecté.
+     * Silent token obtained: cached only if the session did not change during the request
+     * (false otherwise: the token must be discarded). The state can only go from
+     * Loading / Error / NeedsReauth to SignedIn: a signed-out account never becomes signed in again.
      */
     private suspend fun onTokenAcquired(account: IAccount, result: IAuthenticationResult, epoch: Long): Boolean =
         stateMutex.withLock {
@@ -341,12 +341,12 @@ class MsalAuthService @Inject constructor(
     override suspend fun onTokenRejected(token: String) {
         stateMutex.withLock {
             val cached = cachedToken
-            // Jeton déjà remplacé ou effacé (déconnexion, autre compte) : rien à faire.
+            // Token already replaced or cleared (sign-out, other account): nothing to do.
             if (signingOut || cached == null || cached.value != token) return@withLock
             cachedToken = null
             val current = _state.value
             if (current is CloudAccountState.SignedIn) {
-                Log.w(TAG, "Jeton renouvelé refusé par Microsoft Graph : reconnexion requise")
+                Log.w(TAG, "Renewed token rejected by Microsoft Graph: re-authentication required")
                 reauthAccountId = cached.accountId
                 _state.value = CloudAccountState.NeedsReauth(current.account)
             }
@@ -358,8 +358,8 @@ class MsalAuthService @Inject constructor(
     }
 
     /**
-     * Début de déconnexion : l'état passe à [CloudAccountState.SigningOut] (aucune synchro ne
-     * démarre, [refresh] est ignoré) jusqu'à [endSignOut].
+     * Start of sign-out: the state switches to [CloudAccountState.SigningOut] (no sync starts,
+     * [refresh] is ignored) until [endSignOut].
      */
     suspend fun beginSignOut() {
         stateMutex.withLock {
@@ -369,7 +369,7 @@ class MsalAuthService @Inject constructor(
         }
     }
 
-    /** Déconnexion MSAL (efface le compte et ses jetons du cache MSAL). */
+    /** MSAL sign-out (clears the account and its tokens from the MSAL cache). */
     suspend fun signOut(): Result<Unit> = withContext(io) {
         try {
             clients.get().signOut()
@@ -380,7 +380,7 @@ class MsalAuthService @Inject constructor(
             if (e is MsalClientException && e.errorCode == MsalClientException.NO_CURRENT_ACCOUNT) {
                 Result.success(Unit)
             } else {
-                Log.w(TAG, "Déconnexion Microsoft échouée : ${describe(e)}")
+                Log.w(TAG, "Microsoft sign-out failed: ${describe(e)}")
                 Result.failure(CloudException(errorCodeOf(e), e))
             }
         } finally {
@@ -388,7 +388,7 @@ class MsalAuthService @Inject constructor(
         }
     }
 
-    /** Fin de déconnexion (réussie ou non) : l'état réel est relu (données restantes comprises). */
+    /** End of sign-out (successful or not): the actual state is re-read (leftover data included). */
     suspend fun endSignOut() {
         stateMutex.withLock {
             signingOut = false
@@ -406,12 +406,12 @@ class MsalAuthService @Inject constructor(
     private companion object {
         const val TAG = "MsalAuth"
 
-        /** Intervalle minimal entre deux relectures automatiques du compte après une erreur. */
+        /** Minimum interval between two automatic account re-reads after an error. */
         const val ERROR_RETRY_INTERVAL_MS = 30_000L
 
         fun IAccount.toCloudAccount() = CloudAccount(username = username?.takeIf { it.isNotBlank() }, id = id?.takeIf { it.isNotBlank() })
 
-        /** Type et code d'erreur seulement : les messages MSAL peuvent contenir des données de compte. */
+        /** Type and error code only: MSAL messages may contain account data. */
         fun describe(error: Throwable): String =
             error.javaClass.simpleName + ((error as? MsalException)?.let { " (${it.errorCode})" } ?: "")
     }

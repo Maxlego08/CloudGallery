@@ -44,10 +44,10 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Actions destructives des copies hors ligne (décision D1) sur une base en mémoire et un dossier
- * propre au test : « Supprimer les copies » / « Les conserver » limités à la liste confirmée et
- * revérifiés dans la transaction, « Libérer » d'une copie conservée seule ou d'une copie
- * ordinaire, comptage des dernières copies (copies masquées comprises).
+ * Destructive actions on offline copies (decision D1) against an in-memory database and a
+ * test-specific folder: "Delete copies" / "Keep them" limited to the confirmed list and
+ * re-checked inside the transaction, "Free up" of a kept-only copy or of an ordinary
+ * copy, counting of last copies (hidden copies included).
  */
 @RunWith(AndroidJUnit4::class)
 class OfflineRepositoryTest {
@@ -57,7 +57,7 @@ class OfflineRepositoryTest {
     private lateinit var repository: OfflineRepositoryImpl
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Réglages fixes : non lus par les actions testées. */
+    /** Fixed settings: not read by the tested actions. */
     private object FixedSettings : SettingsRepository {
         override val settings: Flow<AppSettings> = flowOf(AppSettings())
         override suspend fun setThemeMode(mode: ThemeMode) = Unit
@@ -105,11 +105,11 @@ class OfflineRepositoryTest {
             scheduler = OfflineJobScheduler(context),
             jobs = OfflineJobTracker(),
             store = store,
-            // Jamais consultés par les actions testées.
+            // Never consulted by the tested actions.
             guard = CloudAccessGuard(
                 feature = CloudFeature(),
-                auth = { error("Aucun compte dans ce test") },
-                syncer = { error("Aucune synchro dans ce test") },
+                auth = { error("No account in this test") },
+                syncer = { error("No sync in this test") },
                 io = Dispatchers.IO,
             ),
             network = NetworkStatus(context, scope, Dispatchers.IO),
@@ -130,8 +130,8 @@ class OfflineRepositoryTest {
     private val inGrace = now - 60_000L
 
     /**
-     * Elément avec copie hors ligne (fichier compris). [cloudMissingSince] : élément OneDrive
-     * masqué depuis cette date (null : visible) ; [withCloud] faux : copie conservée seule.
+     * Item with an offline copy (file included). [cloudMissingSince]: OneDrive item
+     * hidden since that date (null: visible); [withCloud] false: kept copy only.
      */
     private suspend fun seedCopy(itemId: String, cloudMissingSince: Long?, withCloud: Boolean = true): Long {
         val id = db.mediaDao().insert(
@@ -177,7 +177,7 @@ class OfflineRepositoryTest {
         val stillInGrace = seedCopy("C", inGrace)
         val restored = seedCopy("D", expired)
         db.favoriteDao().insertAll(listOf(FavoriteEntity(a, 1)))
-        // D revient sur OneDrive (corbeille) entre l'affichage de la liste et la confirmation.
+        // D comes back on OneDrive (recycle bin) between showing the list and the confirmation.
         restoreOnOneDrive("D")
 
         val deleted = repository.deleteCopiesOfDeletedItems(listOf(a, stillInGrace, restored))
@@ -186,13 +186,13 @@ class OfflineRepositoryTest {
         assertNull(db.mediaDao().getById(a))
         assertFalse(File(dir, "A.jpg").exists())
         assertFalse(db.favoriteDao().isFavorite(a))
-        // Non confirmé (apparu après l'affichage) : intact.
+        // Not confirmed (appeared after the list was shown): untouched.
         assertNotNull(db.cachedFileDao().get(notConfirmed, CacheKind.OFFLINE))
         assertTrue(File(dir, "B.jpg").exists())
-        // Délai de grâce pas écoulé : intact.
+        // Grace period not elapsed: untouched.
         assertNotNull(db.mediaSourceDao().find(SourceKind.OFFLINE_COPY, "C"))
         assertTrue(File(dir, "C.jpg").exists())
-        // Revenu sur OneDrive : élément OneDrive visible et copie gardés.
+        // Back on OneDrive: visible OneDrive item and copy kept.
         assertNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "D")!!.missingSince)
         assertTrue(db.mediaDao().getById(restored)!!.hasCloud)
         assertTrue(db.mediaDao().getById(restored)!!.hasOffline)
@@ -214,7 +214,7 @@ class OfflineRepositoryTest {
         assertNull(db.mediaSourceDao().find(SourceKind.OFFLINE_COPY, "A")!!.missingSince)
         assertTrue(db.mediaSourceDao().awaitingDecisionMediaIds(now).isEmpty())
         assertTrue(File(dir, "A.jpg").exists())
-        // D reste un élément OneDrive vivant (jamais « hors ligne uniquement »).
+        // D stays a live OneDrive item (never "offline only").
         assertTrue(db.mediaDao().getById(restored)!!.hasCloud)
         assertNotNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "D"))
     }
@@ -252,7 +252,7 @@ class OfflineRepositoryTest {
 
     @Test
     fun lastCopies_countHiddenCopiesThatReleaseWouldDelete() = runTest {
-        // Masqué par une synchro (supprimé de OneDrive depuis un autre appareil), délai de grâce en cours.
+        // Hidden by a sync (deleted from OneDrive on another device), grace period running.
         val hidden = seedCopy("B", inGrace)
         val visible = seedCopy("A", cloudMissingSince = null)
         assertFalse(db.mediaDao().getById(hidden)!!.hasOffline)

@@ -105,13 +105,13 @@ import kotlin.math.abs
 private const val CONTENT_TYPE_HEADER = "grid_header"
 private const val CONTENT_TYPE_MEDIA = "grid_media"
 
-/** Seuils de pincement (zoom cumulé) déclenchant un changement de nombre de colonnes. */
+/** Pinch thresholds (accumulated zoom) that trigger a change in the number of columns. */
 private const val PINCH_OUT_THRESHOLD = 1.25f
 private const val PINCH_IN_THRESHOLD = 0.8f
 
 /**
- * Ancrage mémorisé avant un changement de colonnes : l'élément [key] doit rester à [pointerY],
- * exprimé en coordonnées de contenu (même repère que LazyGridItemInfo.offset).
+ * Anchor saved before a column change: item [key] must stay at [pointerY], expressed in content
+ * coordinates (same frame as LazyGridItemInfo.offset).
  */
 private class ZoomAnchor(val key: Any?, val pointerY: Float, val delta: Int, val timeMs: Long)
 
@@ -120,24 +120,24 @@ private class AnchorHolder {
     var anchor: ZoomAnchor? = null
 }
 
-/** Résultat d'un test de position sur la grille (index dans [LazyPagingItems]). */
+/** Result of a hit test on the grid (index in [LazyPagingItems]). */
 private class GridHit(val pagingIndex: Int, val item: GridItem?, val info: LazyGridItemInfo)
 
 /**
- * Grille paginée haute performance façon Samsung Galerie : cellules carrées espacées de 2 dp,
- * en-têtes de jour / mois pleine largeur, pincement pour changer de colonnes, appui long puis
- * glisser pour sélectionner une plage, défilement automatique près des bords.
+ * High-performance paged grid in the style of Samsung Gallery: square cells spaced 2 dp apart,
+ * full-width day / month headers, pinch to change columns, long press then drag to select a
+ * range, automatic scrolling near the edges.
  *
- * Les gestes (tap, appui long, glisser, pincer) sont gérés au niveau de la grille et non
- * par cellule, afin qu'un appui long ne déclenche jamais aussi un clic.
+ * Gestures (tap, long press, drag, pinch) are handled at the grid level rather than per cell,
+ * so that a long press never also triggers a click.
  *
- * @param onDragSelect ajoute (select = true) ou retire des identifiants de la sélection (éléments chargés).
- * @param onDragSelectFinished fin du glisser : la plage complète entre l'ancre et le dernier
- *   élément est à résoudre en base (éléments non chargés compris).
- * @param onHeaderToggle sélectionne / désélectionne tous les médias d'un jour (résolus en base).
- * @param dayIds identifiants complets des jours déjà résolus en base (clé : epochDay de l'en-tête).
- * @param onZoomChange -1 = moins de colonnes (écarter les doigts), +1 = plus de colonnes.
- * @param header éléments ajoutés en tête de grille (grand titre), avec des clés String.
+ * @param onDragSelect adds (select = true) or removes IDs from the selection (loaded items).
+ * @param onDragSelectFinished end of the drag: the full range between the anchor and the last
+ *   item must be resolved in the database (including items not loaded).
+ * @param onHeaderToggle selects / deselects all media of a day (resolved in the database).
+ * @param dayIds complete IDs of the days already resolved in the database (key: header epochDay).
+ * @param onZoomChange -1 = fewer columns (spreading the fingers), +1 = more columns.
+ * @param header items added at the top of the grid (large title), with String keys.
  */
 @Composable
 fun MediaGrid(
@@ -180,7 +180,7 @@ fun MediaGrid(
     val currentTopEdge by rememberUpdatedState(topEdgePx)
     val currentBottomEdge by rememberUpdatedState(bottomEdgePx)
 
-    // Retour visuel du pincement : échelle suivant les doigts + fondu lors du changement de colonnes.
+    // Pinch visual feedback: scale following the fingers + fade when the columns change.
     val pinchScale = remember { Animatable(1f) }
     val stepScale = remember { Animatable(1f) }
     val stepAlpha = remember { Animatable(1f) }
@@ -189,8 +189,8 @@ fun MediaGrid(
 
     fun hitTest(position: Offset): GridHit? {
         val layout = state.layoutInfo
-        // LazyGridItemInfo.offset est relatif au début du contenu (marge intérieure exclue), alors que
-        // les positions du pointeur sont relatives au conteneur : on retire la marge intérieure.
+        // LazyGridItemInfo.offset is relative to the start of the content (padding excluded), whereas
+        // pointer positions are relative to the container: subtract the content padding.
         val p = toContentCoordinates(position, layout.beforeContentPadding)
         val info = layout.visibleItemsInfo.firstOrNull {
             p.x >= it.offset.x && p.x < it.offset.x + it.size.width &&
@@ -214,12 +214,12 @@ fun MediaGrid(
         return result
     }
 
-    // Après un changement de colonnes, replace l'élément ancré sous les doigts.
+    // After a column change, put the anchored item back under the fingers.
     LaunchedEffect(columns) {
         val anchor = anchorHolder.anchor ?: return@LaunchedEffect
         anchorHolder.anchor = null
         if (System.currentTimeMillis() - anchor.timeMs > 1_500) return@LaunchedEffect
-        // Transition : léger zoom + fondu vers la nouvelle disposition.
+        // Transition: slight zoom + fade to the new layout.
         launch {
             stepScale.snapTo(if (anchor.delta < 0) 0.92f else 1.08f)
             stepScale.animateTo(1f, tween(260))
@@ -260,7 +260,7 @@ fun MediaGrid(
                     accumulated *= event.calculateZoom()
                     val centroid = event.calculateCentroid(useCurrent = true)
                     if (centroid != Offset.Unspecified) pivot = centroid
-                    // On ne consomme qu'avec deux doigts : le défilement à un doigt reste libre.
+                    // Only consume with two fingers: one-finger scrolling stays free.
                     event.changes.forEach { it.consume() }
                     val visual = accumulated.coerceIn(0.88f, 1.12f)
                     scope.launch { pinchScale.snapTo(visual) }
@@ -276,7 +276,7 @@ fun MediaGrid(
                         val now = System.currentTimeMillis()
                         val hitItem = hit?.item
                         anchorHolder.anchor = if (hitItem is GridItem.Media) {
-                            // Ancrage en coordonnées de contenu, comme LazyGridItemInfo.offset.
+                            // Anchor in content coordinates, like LazyGridItemInfo.offset.
                             val contentY = toContentCoordinates(focus, state.layoutInfo.beforeContentPadding).y
                             ZoomAnchor(hitItem.key, contentY, delta, now)
                         } else {
@@ -329,7 +329,7 @@ fun MediaGrid(
                     val hit = hitTest(down.position) ?: return@awaitEachGesture
                     when (val item = hit.item) {
                         is GridItem.Media -> currentOnItemClick(item)
-                        // Les identifiants du jour sont lus en base (y compris les éléments non chargés).
+                        // The day's IDs are read from the database (including items not loaded).
                         is GridItem.Header -> if (currentSelectionMode && item.grouping == GridGrouping.DAY) {
                             currentOnHeaderToggle(item)
                         }
@@ -339,7 +339,7 @@ fun MediaGrid(
                 return@awaitEachGesture
             }
 
-            // Appui long : sélection puis glisser pour étendre la plage.
+            // Long press: selection, then drag to extend the range.
             val hit = hitTest(down.position) ?: return@awaitEachGesture
             val anchorItem = hit.item as? GridItem.Media ?: return@awaitEachGesture
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -347,8 +347,8 @@ fun MediaGrid(
             val selectMode = anchorItem.media.id !in baseline
             currentOnItemLongClick(anchorItem)
 
-            // L'ancre est mémorisée par clé : une invalidation de la pagination pendant le geste
-            // (indexation, synchro MediaStore) décale les index, pas les clés.
+            // The anchor is stored by key: a paging invalidation during the gesture (indexing,
+            // MediaStore sync) shifts the indices, not the keys.
             val anchorKey = anchorItem.key
             var anchorIndex = hit.pagingIndex
             var currentIndex = anchorIndex
@@ -358,7 +358,7 @@ fun MediaGrid(
             var autoScrollSpeed = 0f
             var autoScrollJob: Job? = null
 
-            /** Index courant de l'ancre, ou -1 si elle n'est plus chargée. */
+            /** Current index of the anchor, or -1 if it is no longer loaded. */
             fun resolveAnchorIndex(): Int {
                 val paging = currentItems
                 if (anchorIndex in 0 until paging.itemCount && paging.peek(anchorIndex)?.key == anchorKey) return anchorIndex
@@ -371,7 +371,7 @@ fun MediaGrid(
             fun updateRange(position: Offset) {
                 val target = hitTest(position) ?: return
                 val resolvedAnchor = resolveAnchorIndex()
-                // Ancre introuvable (supprimée, déchargée) : on garde la plage telle quelle.
+                // Anchor not found (deleted, unloaded): keep the range as is.
                 if (resolvedAnchor < 0) return
                 if (target.pagingIndex == currentIndex && resolvedAnchor == anchorIndex) return
                 anchorIndex = resolvedAnchor
@@ -382,7 +382,7 @@ fun MediaGrid(
                 val removed = range - newRange
                 if (added.isNotEmpty()) currentOnDragSelect(added, selectMode)
                 if (removed.isNotEmpty()) {
-                    // Les éléments sortis de la plage retrouvent leur état d'avant le glisser.
+                    // Items that left the range go back to their state before the drag.
                     val restoreSelected = removed.filterTo(HashSet()) { it in baseline }
                     val restoreUnselected = removed - restoreSelected
                     if (restoreSelected.isNotEmpty()) currentOnDragSelect(restoreSelected, true)
@@ -427,7 +427,7 @@ fun MediaGrid(
             } finally {
                 autoScrollSpeed = 0f
                 autoScrollJob?.cancel()
-                // Résolution finale en base : inclut les éléments non chargés pendant un défilement rapide.
+                // Final resolution in the database: includes items not loaded during a fast scroll.
                 if (endMedia.id != anchorItem.media.id) currentOnDragSelectFinished(anchorItem.media, endMedia, selectMode)
             }
         }
@@ -435,8 +435,8 @@ fun MediaGrid(
 
     val configuration = LocalConfiguration.current
     val locale = remember(configuration) { configuration.locales[0] }
-    // « Aujourd'hui » / « Hier » : la date est relue au retour au premier plan et à chaque
-    // changement de date, d'heure ou de fuseau (l'appli peut rester ouverte au passage de minuit).
+    // "Today" / "Yesterday": the date is re-read when returning to the foreground and on every
+    // date, time or time zone change (the app may stay open past midnight).
     var today by remember { mutableStateOf(LocalDate.now()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now() }
     val context = LocalContext.current
@@ -461,7 +461,7 @@ fun MediaGrid(
     val cloudOnlyLabel = stringResource(R.string.grid_cloud_only_a11y)
     val offlineLabel = stringResource(R.string.offline_badge_a11y)
 
-    // Lambdas stables pour l'accessibilité (les gestes réels passent par pointerInput).
+    // Stable lambdas for accessibility (the actual gestures go through pointerInput).
     val a11yClick = remember { { item: GridItem.Media -> currentOnItemClick(item) } }
     val a11yLongClick = remember { { item: GridItem.Media -> currentOnItemLongClick(item) } }
 
@@ -546,10 +546,10 @@ fun MediaGrid(
     }
 }
 
-/** Médias chargés d'une période ; [complete] = faux si la suite de la période n'est pas encore chargée. */
+/** Loaded media of a period; [complete] = false if the rest of the period is not loaded yet. */
 internal class LoadedDay(val ids: List<Long>, val complete: Boolean)
 
-/** Identifiants des médias chargés appartenant à la période de l'en-tête [headerIndex]. */
+/** IDs of the loaded media belonging to the period of the header at [headerIndex]. */
 internal fun loadedDayMediaIds(items: LazyPagingItems<GridItem>, headerIndex: Int): LoadedDay {
     val result = ArrayList<Long>()
     var i = headerIndex + 1
@@ -561,21 +561,21 @@ internal fun loadedDayMediaIds(items: LazyPagingItems<GridItem>, headerIndex: In
         }
         i++
     }
-    // Fin des éléments chargés : la période n'est complète que si toute la liste l'est.
+    // End of the loaded items: the period is only complete if the whole list is.
     return LoadedDay(result, complete = items.loadState.append.endOfPaginationReached)
 }
 
 /**
- * Case d'un en-tête de jour : cochée seulement si TOUS les médias du jour sont sélectionnés.
- * Liste résolue en base si disponible, sinon les éléments chargés à condition qu'ils couvrent
- * tout le jour (jamais « cochée » sur une liste tronquée).
+ * Checkbox of a day header: checked only if ALL media of the day are selected.
+ * Uses the list resolved in the database if available, otherwise the loaded items provided they
+ * cover the whole day (never "checked" on a truncated list).
  */
 internal fun isDayFullySelected(resolvedIds: List<Long>?, loaded: LoadedDay, selection: Set<Long>): Boolean {
     if (resolvedIds != null) return resolvedIds.isNotEmpty() && resolvedIds.all { it in selection }
     return loaded.complete && loaded.ids.isNotEmpty() && loaded.ids.all { it in selection }
 }
 
-/** Position du pointeur (repère du conteneur) dans le repère du contenu de la grille. */
+/** Pointer position (container frame) in the frame of the grid content. */
 internal fun toContentCoordinates(position: Offset, beforeContentPadding: Int): Offset =
     Offset(position.x, position.y - beforeContentPadding)
 
@@ -601,7 +601,7 @@ private fun GridHeaderCell(label: String, showCheck: Boolean, checked: Boolean) 
     }
 }
 
-/** Case ronde d'en-tête : contour gris (la case des miniatures a un contour blanc, invisible ici). */
+/** Round header checkbox: grey outline (the thumbnail checkbox has a white outline, invisible here). */
 @Composable
 private fun HeaderCheck(checked: Boolean) {
     val colors = OneUiTheme.colors
@@ -639,8 +639,8 @@ private fun MediaCell(
     val corner by animateDpAsState(if (selected) 10.dp else 0.dp, label = "cellCorner")
     val isVideo = media.type == MediaType.VIDEO
     val duration = remember(media.durationMs) { Formatters.duration(media.durationMs) }
-    // Elément uniquement sur OneDrive (ni fichier local ni copie hors ligne) : badge nuage ;
-    // conservé hors ligne : badge « hors ligne ». Mention lue par TalkBack dans les deux cas.
+    // Item only on OneDrive (neither local file nor offline copy): cloud badge; kept offline:
+    // "offline" badge. TalkBack reads the mention in both cases.
     val cloudOnly = media.hasCloud && !media.hasLocal && !media.hasOffline
     val offlineOnly = media.hasOffline && !media.hasLocal
     val description = buildString {
@@ -650,7 +650,7 @@ private fun MediaCell(
         if (offlineOnly) append(", ").append(offlineLabel)
     }
 
-    // Position à l'écran pour la transition vers la visionneuse (et le retour sur cette vignette).
+    // On-screen position for the transition to the viewer (and the return to this thumbnail).
     val bounds = LocalMediaBounds.current
     DisposableEffect(bounds, media.id) { onDispose { bounds?.remove(media.id) } }
 

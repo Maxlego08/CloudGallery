@@ -5,9 +5,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Rectangle de recadrage normalisé (0..1) dans le repère de l'image TELLE QU'AFFICHÉE dans l'éditeur,
- * c'est-à-dire après orientation EXIF et après la rotation choisie dans l'éditeur.
- * C'est ce repère qui est transmis à LocalMediaWriter.saveCroppedCopy (décoder, pivoter, puis rogner).
+ * Normalized (0..1) crop rectangle in the coordinate space of the image AS DISPLAYED in the editor,
+ * i.e. after EXIF orientation and after the rotation chosen in the editor.
+ * This is the space passed to LocalMediaWriter.saveCroppedCopy (decode, rotate, then crop).
  */
 data class CropRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     val width: Float get() = right - left
@@ -22,7 +22,7 @@ data class CropRect(val left: Float, val top: Float, val right: Float, val botto
 
 enum class CropHandle { TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left, Move }
 
-/** Préréglages de proportions (largeur / hauteur en pixels), null = libre. */
+/** Aspect ratio presets (width / height in pixels), null = free. */
 enum class CropAspect(val ratio: Float?) {
     Free(null),
     Square(1f),
@@ -30,20 +30,20 @@ enum class CropAspect(val ratio: Float?) {
     SixteenNine(16f / 9f),
 }
 
-/** Calculs purs du recadrage (aucune dépendance Android). */
+/** Pure crop calculations (no Android dependency). */
 object CropMath {
-    /** Taille minimale d'un côté, en fraction de l'image. */
+    /** Minimum size of a side, as a fraction of the image. */
     const val MIN_SIZE = 0.05f
 
     /**
-     * Proportion à respecter dans le repère normalisé : w_n / h_n = ratio * imageH / imageW.
-     * [imageAspect] = largeur / hauteur de l'image affichée.
+     * Ratio to keep in the normalized space: w_n / h_n = ratio * imageH / imageW.
+     * [imageAspect] = width / height of the displayed image.
      */
     fun normalizedRatio(pixelRatio: Float, imageAspect: Float): Float = pixelRatio / imageAspect
 
     /**
-     * Plus grand rectangle de proportion [pixelRatio] centré dans l'image. Si l'image est en portrait et
-     * le ratio en paysage (ou inversement), on garde l'orientation du préréglage telle quelle.
+     * Largest rectangle of ratio [pixelRatio] centered in the image. If the image is portrait and the
+     * ratio landscape (or vice versa), the preset's orientation is kept as is.
      */
     fun fitAspect(pixelRatio: Float?, imageAspect: Float): CropRect {
         if (pixelRatio == null || imageAspect <= 0f) return CropRect.Full
@@ -59,7 +59,7 @@ object CropMath {
         return CropRect(l, t, l + w, t + h)
     }
 
-    /** Déplace le rectangle sans le redimensionner, borné à l'image. */
+    /** Moves the rectangle without resizing it, bounded to the image. */
     fun move(rect: CropRect, dx: Float, dy: Float): CropRect {
         val ndx = dx.coerceIn(-rect.left, 1f - rect.right)
         val ndy = dy.coerceIn(-rect.top, 1f - rect.bottom)
@@ -67,8 +67,8 @@ object CropMath {
     }
 
     /**
-     * Applique un glissement ([dx], [dy] normalisés) sur une poignée. Avec [pixelRatio] non nul, la
-     * proportion est conservée (coin opposé fixe pour un coin, centre de l'autre axe fixe pour un bord).
+     * Applies a drag ([dx], [dy] normalized) to a handle. With a non-null [pixelRatio], the ratio is
+     * preserved (opposite corner fixed for a corner, center of the other axis fixed for an edge).
      */
     fun drag(rect: CropRect, handle: CropHandle, dx: Float, dy: Float, pixelRatio: Float?, imageAspect: Float): CropRect {
         if (handle == CropHandle.Move) return move(rect, dx, dy)
@@ -95,14 +95,14 @@ object CropMath {
         val minW = max(MIN_SIZE, MIN_SIZE * ratio)
         return when (handle) {
             CropHandle.TopLeft, CropHandle.TopRight, CropHandle.BottomLeft, CropHandle.BottomRight -> {
-                // Coin opposé fixe.
+                // Opposite corner fixed.
                 val anchorX = if (handle.movesLeft) rect.right else rect.left
                 val anchorY = if (handle.movesTop) rect.bottom else rect.top
                 val movingX = (if (handle.movesLeft) rect.left else rect.right) + dx
                 val movingY = (if (handle.movesTop) rect.top else rect.bottom) + dy
                 var w = abs(anchorX - movingX)
                 var h = abs(anchorY - movingY)
-                // Axe dominant.
+                // Dominant axis.
                 if (w / ratio >= h) h = w / ratio else w = h * ratio
                 val maxW = if (handle.movesLeft) anchorX else 1f - anchorX
                 val maxH = if (handle.movesTop) anchorY else 1f - anchorY
@@ -141,7 +141,7 @@ object CropMath {
         }
     }
 
-    /** Garantit 0 <= left < right <= 1 (idem verticalement) en conservant la taille si possible. */
+    /** Ensures 0 <= left < right <= 1 (same vertically) while keeping the size if possible. */
     fun clampInside(rect: CropRect): CropRect {
         val w = rect.width.coerceIn(0f, 1f)
         val h = rect.height.coerceIn(0f, 1f)
@@ -150,11 +150,11 @@ object CropMath {
         return CropRect(l, t, l + w, t + h)
     }
 
-    /** Rotation de 90° dans le sens horaire du rectangle normalisé (l'image pivote avec lui). */
+    /** 90° clockwise rotation of the normalized rectangle (the image rotates with it). */
     fun rotateClockwise(rect: CropRect): CropRect =
         CropRect(left = 1f - rect.bottom, top = rect.left, right = 1f - rect.top, bottom = rect.right)
 
-    /** Normalise un rectangle en pixels (repère de l'image affichée de taille [imageW] x [imageH]). */
+    /** Normalizes a pixel rectangle (space of the displayed image of size [imageW] x [imageH]). */
     fun normalize(left: Float, top: Float, right: Float, bottom: Float, imageW: Float, imageH: Float): CropRect {
         if (imageW <= 0f || imageH <= 0f) return CropRect.Full
         return clampInside(
@@ -168,8 +168,8 @@ object CropMath {
     }
 
     /**
-     * Poignée touchée au point ([x], [y]) pour un rectangle en pixels ; [radius] = tolérance tactile.
-     * Priorité : coins, puis bords, puis intérieur (déplacement). Null si hors de toute zone.
+     * Handle touched at point ([x], [y]) for a pixel rectangle; [radius] = touch tolerance.
+     * Priority: corners, then edges, then interior (move). Null if outside every zone.
      */
     fun hitTest(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float, radius: Float): CropHandle? {
         fun near(a: Float, b: Float) = abs(a - b) <= radius
@@ -190,7 +190,7 @@ object CropMath {
         }
     }
 
-    /** Vrai si le rectangle couvre toute l'image (à 0,5 % près) et qu'il n'y a pas de rotation. */
+    /** True if the rectangle covers the whole image (within 0.5%) and there is no rotation. */
     fun isIdentity(rect: CropRect, rotationDegrees: Int): Boolean {
         val eps = 0.005f
         return rotationDegrees % 360 == 0 &&

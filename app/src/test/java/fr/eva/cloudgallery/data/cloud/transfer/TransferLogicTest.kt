@@ -15,14 +15,14 @@ class TransferLogicTest {
         assertTrue(isUrlFresh(fetchedAtMs = 1_000, nowMs = 1_000 + DOWNLOAD_URL_TTL_MS - 1))
         assertFalse(isUrlFresh(fetchedAtMs = 1_000, nowMs = 1_000 + DOWNLOAD_URL_TTL_MS))
         assertFalse(isUrlFresh(fetchedAtMs = 1_000, nowMs = 1_000 + 3_600_000))
-        // Horloge revenue en arrière : URL considérée comme périmée.
+        // Clock went backwards: URL considered stale.
         assertFalse(isUrlFresh(fetchedAtMs = 5_000, nowMs = 4_000))
         assertTrue(isUrlFresh(fetchedAtMs = 0, nowMs = 10, ttlMs = 11))
     }
 
     @Test
     fun ttl_isShorterThanDocumentedMinutes() {
-        // « might expire within minutes » : jamais plus de quelques minutes.
+        // "might expire within minutes": never more than a few minutes.
         assertEquals(120_000L, DOWNLOAD_URL_TTL_MS)
     }
 
@@ -52,7 +52,7 @@ class TransferLogicTest {
     fun rangeResponse_classification() {
         assertEquals(RangeOutcome.RestartFromZero, classifyRangeResponse(200, null, offset = 4, expectedSize = 10))
         assertEquals(RangeOutcome.Append, classifyRangeResponse(206, ContentRange(4, 9, 10), offset = 4, expectedSize = 10))
-        // Taille totale inconnue (« * ») : acceptée.
+        // Unknown total size ("*"): accepted.
         assertEquals(RangeOutcome.Append, classifyRangeResponse(206, ContentRange(4, 9, null), offset = 4, expectedSize = 10))
         assertTrue(classifyRangeResponse(206, null, offset = 4, expectedSize = 10) is RangeOutcome.Invalid)
         assertTrue(classifyRangeResponse(206, ContentRange(0, 9, 10), offset = 4, expectedSize = 10) is RangeOutcome.Invalid)
@@ -69,10 +69,10 @@ class TransferLogicTest {
         assertEquals(ResumePlan.From(4), resumePlan(partLength = 4, expectedSize = 10, partCTag = "c1", currentCTag = "c1"))
         assertEquals(ResumePlan.Complete, resumePlan(partLength = 10, expectedSize = 10, partCTag = "c1", currentCTag = "c1"))
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 0, expectedSize = 10, partCTag = "c1", currentCTag = "c1"))
-        // Contenu changé, ou fichier partiel plus long que l'élément.
+        // Content changed, or partial file longer than the item.
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 4, expectedSize = 10, partCTag = "c1", currentCTag = "c2"))
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 12, expectedSize = 10, partCTag = "c1", currentCTag = "c1"))
-        // Version inconnue d'un côté ou de l'autre : jamais considérée identique (null == null compris).
+        // Unknown version on either side: never considered identical (null == null included).
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 4, expectedSize = 10, partCTag = null, currentCTag = null))
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 4, expectedSize = 10, partCTag = "c1", currentCTag = null))
         assertEquals(ResumePlan.FromZero, resumePlan(partLength = 4, expectedSize = 0, partCTag = "c1", currentCTag = "c1"))
@@ -85,7 +85,7 @@ class TransferLogicTest {
         assertEquals(name, cacheFileName("ITEM!123", "ctag-1", "autre nom.jpg", null))
         assertNotEquals(name, cacheFileName("ITEM!123", "ctag-2", "IMG_0001.JPG", "image/jpeg"))
         assertNotEquals(name, cacheFileName("ITEM!124", "ctag-1", "IMG_0001.JPG", "image/jpeg"))
-        // Aucun morceau du nom d'origine ni de séparateur de chemin.
+        // No piece of the original name and no path separator.
         val evil = cacheFileName("X", null, "../../etc/passwd", null)
         assertFalse(evil.contains('/'))
         assertFalse(evil.contains(".."))
@@ -111,13 +111,13 @@ class TransferLogicTest {
         assertFalse(safeDisplayName("../x").contains('/'))
         assertEquals("tab_nl_.jpg", safeDisplayName("tab\tnl\n.jpg"))
         assertEquals("Été à Noël 🎄.jpg", safeDisplayName("Été à Noël 🎄.jpg"))
-        assertEquals("fichier", safeDisplayName(""))
-        assertEquals("fichier", safeDisplayName("..."))
-        assertEquals("fichier", safeDisplayName("   "))
+        assertEquals("file", safeDisplayName(""))
+        assertEquals("file", safeDisplayName("..."))
+        assertEquals("file", safeDisplayName("   "))
         val long = safeDisplayName("a".repeat(300) + ".jpeg")
         assertEquals(120, long.length)
         assertTrue(long.endsWith(".jpeg"))
-        // Jamais de paire de substitution coupée.
+        // Never a split surrogate pair.
         val emoji = safeDisplayName("🎄".repeat(100))
         assertFalse(Character.isHighSurrogate(emoji.last()))
     }
@@ -139,7 +139,7 @@ class TransferLogicTest {
         assertTrue(sameDrive("", "abc"))
     }
 
-    // --- Nettoyage des dossiers de copies -----------------------------------------------------
+    // --- Sweeping the copy folders ------------------------------------------------------------
 
     private val hour = 60L * 60 * 1000
 
@@ -157,10 +157,10 @@ class TransferLogicTest {
     @Test
     fun sweep_ageRules_partsAfter24h_orphansAfter1h() {
         val entries = listOf(
-            // Copie renommée mais pas encore enregistrée : récente, gardée.
+            // Copy renamed but not yet recorded: recent, kept.
             SweepEntry("fresh.jpg", isFile = true, ageMs = 30 * 60_000L),
             SweepEntry("orphan.jpg", isFile = true, ageMs = 2 * hour),
-            // Fichier partiel d'une reprise possible : gardé moins de 24 h.
+            // Partial file of a possible resume: kept for less than 24 h.
             SweepEntry("recent.jpg.part", isFile = true, ageMs = 2 * hour),
             SweepEntry("stale.jpg.part", isFile = true, ageMs = 25 * hour),
         )
@@ -169,7 +169,7 @@ class TransferLogicTest {
 
     @Test
     fun sweep_partOfAKnownCopyFollowsThePartRule() {
-        // Fichier partiel d'une nouvelle version alors que la copie enregistrée a le même nom de base.
+        // Partial file of a new version while the recorded copy has the same base name.
         val entries = listOf(SweepEntry("a.jpg.part", isFile = true, ageMs = 2 * hour))
         assertTrue(filesToSweep(entries, known = setOf("a.jpg"), busy = emptySet()).isEmpty())
     }

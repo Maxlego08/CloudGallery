@@ -25,9 +25,9 @@ import fr.eva.cloudgallery.domain.model.MediaAccess
 
 object MediaPermissions {
     /**
-     * Demandées ensemble : Android affiche alors « Autoriser tout / Sélectionner des photos / Refuser ».
-     * ACCESS_MEDIA_LOCATION (GPS des EXIF) est accordée sans dialogue supplémentaire quand
-     * l'accès aux images l'est ; un refus n'empêche pas l'appli de fonctionner.
+     * Requested together: Android then shows "Allow all / Select photos / Don't allow".
+     * ACCESS_MEDIA_LOCATION (EXIF GPS) is granted without an extra dialog when access to
+     * images is; a denial does not prevent the app from working.
      */
     val REQUEST = arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
@@ -43,7 +43,7 @@ object MediaPermissions {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
 
-/** Etat observable des autorisations médias, revérifié à chaque ON_RESUME. */
+/** Observable media permission state, re-checked on every ON_RESUME. */
 @Stable
 class MediaPermissionController internal constructor(
     private val context: Context,
@@ -52,34 +52,34 @@ class MediaPermissionController internal constructor(
         private set
 
     /**
-     * Vrai quand le système ne montre plus la demande (refus définitif) : il faut alors
-     * passer par les paramètres de l'appli.
+     * True when the system no longer shows the request (permanent denial): the app settings
+     * must then be used.
      */
     var permanentlyDenied: Boolean by mutableStateOf(false)
         private set
 
     /**
-     * Incrémenté à chaque retour de la demande système avec un accès non nul : permet de
-     * réindexer même si l'état reste PARTIAL (nouvelle sélection de photos).
+     * Incremented each time the system request returns with non-empty access: allows
+     * reindexing even if the state stays PARTIAL (new photo selection).
      */
     var grantedResults: Int by mutableIntStateOf(0)
         private set
 
     internal var launch: (() -> Unit)? = null
 
-    /** Refus définitif constaté au retour de la demande : ouvrir alors les paramètres de l'appli. */
+    /** Permanent denial detected when the request returns: open the app settings then. */
     private var openSettingsIfDenied = false
 
-    /** Lance la demande système (ou le sélecteur de photos en mode partiel). */
+    /** Launches the system request (or the photo picker in partial mode). */
     fun request() {
         openSettingsIfDenied = false
         launch?.invoke()
     }
 
     /**
-     * Demande système, ou paramètres de l'appli si le système ne la montre plus (refus
-     * définitif, déjà connu ou constaté au retour de la demande) : « Autoriser » du bandeau
-     * « OneDrive seul » n'est ainsi jamais sans effet.
+     * System request, or the app settings if the system no longer shows it (permanent
+     * denial, already known or detected when the request returns): "Allow" in the
+     * "OneDrive only" banner thus never does nothing.
      */
     fun requestOrOpenSettings() {
         if (permanentlyDenied) {
@@ -104,7 +104,7 @@ class MediaPermissionController internal constructor(
         if (access != MediaAccess.NONE) grantedResults++
         if (access == MediaAccess.NONE) {
             val activity = context.findActivity()
-            // Après un refus, l'absence de « rationale » signifie que le système ne redemandera plus.
+            // After a denial, the absence of a "rationale" means the system will not ask again.
             permanentlyDenied = activity != null &&
                 !activity.shouldShowRequestPermissionRationale(Manifest.permission.READ_MEDIA_IMAGES)
             if (permanentlyDenied && openSettingsIfDenied) openAppSettings()

@@ -7,23 +7,22 @@ import fr.eva.cloudgallery.data.dedup.MergeCandidateRow
 import fr.eva.cloudgallery.data.dedup.MergedRow
 
 /*
- * Signature courante d'une source locale : `sizeBytes || ':' || dateModified || ':' || generation`,
- * identique à `localHashSignature` (data/dedup/DedupLogic.kt). Une empreinte locale n'est à jour
- * que si `hashSignature` vaut cette expression.
+ * Current signature of a local source: `sizeBytes || ':' || dateModified || ':' || generation`,
+ * identical to `localHashSignature` (data/dedup/DedupLogic.kt). A local hash is only up to date
+ * when `hashSignature` equals this expression.
  */
 
 /**
- * Empreintes des fichiers locaux et fusion local / OneDrive (index uniquement). Les opérations
- * de déplacement couvrent toutes les tables qui référencent `media.id` : sources, favoris,
- * appartenances aux albums, couverture d'album, fichiers en cache, téléchargements, position de
- * lecture et index de recherche.
+ * Local file hashes and local / OneDrive merging (index only). The move operations cover every
+ * table that references `media.id`: sources, favorites, album memberships, album cover, cached
+ * files, downloads, playback position and search index.
  */
 @Dao
 interface DedupDao {
 
-    // --- Empreintes locales -------------------------------------------------------------------
+    // --- Local hashes ---------------------------------------------------------------------------
 
-    /** Fichiers locaux visibles dont l'empreinte manque ou est périmée. */
+    /** Visible local files whose hash is missing or stale. */
     @Query(
         """
         SELECT id AS sourceId, mediaId, uri, sizeBytes, dateModified, generation FROM media_source
@@ -42,13 +41,13 @@ interface DedupDao {
     )
     suspend fun hasStaleLocalHashes(): Boolean
 
-    /** Tailles des éléments OneDrive visibles (priorité du calcul des empreintes). */
+    /** Sizes of visible OneDrive items (prioritizes hash computation). */
     @Query("SELECT DISTINCT sizeBytes FROM media_source WHERE kind = 'ONEDRIVE' AND missingSince IS NULL")
     suspend fun visibleCloudSizes(): List<Long>
 
     /**
-     * Enregistre l'empreinte d'un fichier local, seulement si la source est toujours dans l'état
-     * lu avant le calcul ([signature]) : un fichier modifié entre-temps sera recalculé.
+     * Stores the hash of a local file, only if the source is still in the state read before the
+     * computation ([signature]): a file modified in the meantime will be recomputed.
      */
     @Query(
         """
@@ -61,16 +60,16 @@ interface DedupDao {
     @Query("UPDATE media SET contentHash = :contentHash WHERE id = :mediaId")
     suspend fun setContentHash(mediaId: Long, contentHash: String?)
 
-    // --- Fusion -------------------------------------------------------------------------------
+    // --- Merge --------------------------------------------------------------------------------
 
-    /** Parmi [mediaIds], médias qui ont un fichier local (même masqué) : métadonnées locales. */
+    /** Among [mediaIds], media that have a local file (even hidden): local metadata. */
     @Query("SELECT DISTINCT mediaId FROM media_source WHERE kind = 'LOCAL' AND mediaId IN (:mediaIds)")
     suspend fun withLocalSource(mediaIds: List<Long>): List<Long>
 
     /**
-     * Couples fichier local / élément OneDrive visibles, de même empreinte et même taille :
-     * empreinte locale à jour, média local sans source OneDrive (même masquée), média OneDrive
-     * sans fichier local, sans téléchargement en cours (copie hors ligne en train de s'écrire).
+     * Visible local file / OneDrive item pairs with the same hash and the same size: local hash
+     * up to date, local media without a OneDrive source (even hidden), OneDrive media without a
+     * local file and without a running download (offline copy being written).
      */
     @Query(
         """
@@ -89,7 +88,7 @@ interface DedupDao {
     )
     suspend fun mergeCandidates(): List<MergeCandidateRow>
 
-    /** Médias fusionnés (une source locale et une source OneDrive), pour vérifier leurs empreintes. */
+    /** Merged media (one local source and one OneDrive source), to verify their hashes. */
     @Query(
         """
         SELECT l.mediaId AS mediaId, l.sizeBytes AS localSizeBytes, l.quickXorHash AS localQuickXorHash,
@@ -101,7 +100,7 @@ interface DedupDao {
     )
     suspend fun mergedMedia(): List<MergedRow>
 
-    /** Revérifié dans la transaction de fusion : le couple est toujours valable. */
+    /** Rechecked inside the merge transaction: the pair is still valid. */
     @Query(
         """
         SELECT EXISTS(
@@ -118,7 +117,7 @@ interface DedupDao {
     )
     suspend fun mergeStillValid(localMediaId: Long, cloudMediaId: Long, cloudSourceId: Long): Boolean
 
-    /** Sources OneDrive et copies hors ligne d'un média, rattachées à un autre. */
+    /** OneDrive sources and offline copies of a media item, reattached to another one. */
     @Query("UPDATE media_source SET mediaId = :to WHERE mediaId = :from AND kind IN ('ONEDRIVE', 'OFFLINE_COPY')")
     suspend fun moveCloudSources(from: Long, to: Long)
 
@@ -131,7 +130,7 @@ interface DedupDao {
     @Query("UPDATE album SET coverMediaId = :to WHERE coverMediaId = :from")
     suspend fun moveAlbumCovers(from: Long, to: Long)
 
-    /** Fichiers en cache (original, copie hors ligne) ; une ligne du même type déjà présente l'emporte. */
+    /** Cached files (original, offline copy); an existing row of the same kind wins. */
     @Query("UPDATE OR IGNORE cached_file SET mediaId = :to WHERE mediaId = :from")
     suspend fun moveCachedFiles(from: Long, to: Long)
 
@@ -146,16 +145,16 @@ interface DedupDao {
     )
     suspend fun copyPlaybackPosition(from: Long, to: Long)
 
-    /** Entrée de recherche d'un média supprimé (table virtuelle : pas de cascade). */
+    /** Search entry of a deleted media item (virtual table: no cascade). */
     @Query("DELETE FROM media_fts WHERE rowid = :mediaId")
     suspend fun deleteSearchEntry(mediaId: Long)
 
     @Query("DELETE FROM media WHERE id = :mediaId")
     suspend fun deleteMedia(mediaId: Long)
 
-    // --- Défusion -----------------------------------------------------------------------------
+    // --- Unmerge ------------------------------------------------------------------------------
 
-    /** Source OneDrive [cloudSourceId] et copie hors ligne du même élément, vers le média [to]. */
+    /** OneDrive source [cloudSourceId] and offline copy of the same item, moved to media [to]. */
     @Query(
         """
         UPDATE media_source SET mediaId = :to
@@ -164,7 +163,7 @@ interface DedupDao {
     )
     suspend fun detachCloudSource(from: Long, to: Long, cloudSourceId: Long, cloudItemId: String)
 
-    /** Fichiers tirés de OneDrive (original temporaire, copie hors ligne), vers le média [to]. */
+    /** Files pulled from OneDrive (temporary original, offline copy), moved to media [to]. */
     @Query("UPDATE cached_file SET mediaId = :to WHERE mediaId = :from AND kind IN ('ORIGINAL', 'OFFLINE')")
     suspend fun detachCloudFiles(from: Long, to: Long)
 

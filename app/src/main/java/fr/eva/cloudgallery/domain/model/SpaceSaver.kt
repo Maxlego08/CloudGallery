@@ -1,9 +1,9 @@
 package fr.eva.cloudgallery.domain.model
 
 /**
- * Copie locale qu'on peut supprimer sans perte : le même contenu (empreinte QuickXorHash et
- * taille identiques) est sur OneDrive. [sourceId] : source LOCAL concernée ; [uri] : URI
- * MediaStore envoyée à la corbeille Android.
+ * Local copy that can be deleted without loss: the same content (identical QuickXorHash and
+ * size) is on OneDrive. [sourceId]: LOCAL source concerned; [uri]: MediaStore URI sent to the
+ * Android trash.
  */
 data class SpaceSaverCandidate(
     val sourceId: Long,
@@ -17,16 +17,16 @@ data class SpaceSaverCandidate(
 )
 
 /**
- * Copies proposées par l'économiseur d'espace. [excludedUserData] : copies vérifiées mais
- * écartées parce que leur média (favori ou membre d'un album) n'est pas encore regroupé avec
- * l'élément OneDrive : les supprimer ferait perdre ce favori ou cet album.
+ * Copies offered by the space saver. [excludedUserData]: copies verified but left out because
+ * their media item (favorite or album member) is not yet grouped with the OneDrive item:
+ * deleting them would lose that favorite or that album.
  */
 data class SpaceSaverList(
     val candidates: List<SpaceSaverCandidate>,
     val excludedUserData: Int,
 )
 
-/** Filtre d'ancienneté de l'économiseur d'espace (date de prise de vue). */
+/** Age filter of the space saver (date taken). */
 enum class SaverAge(val minAgeDays: Int?) {
     ALL(null),
     DAYS_30(30),

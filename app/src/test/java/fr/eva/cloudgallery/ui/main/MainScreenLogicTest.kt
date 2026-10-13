@@ -4,7 +4,7 @@ import fr.eva.cloudgallery.domain.model.MediaAccess
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Contenu de l'écran principal : bibliothèque, autorisation ou « OneDrive seul ». */
+/** Main screen content: library, permission or "OneDrive only". */
 class MainScreenLogicTest {
 
     @Test

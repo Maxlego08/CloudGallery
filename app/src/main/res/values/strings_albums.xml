@@ -1,42 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Onglet Albums et sélecteur d'album (préfixe albums_). -->
+<!-- Albums tab and album picker (prefix albums_). -->
 <resources>
     <string name="albums_title">Albums</string>
-    <string name="albums_create">Créer un album</string>
-    <string name="albums_name_placeholder">Nom de l\'album</string>
-    <string name="albums_sort">Trier</string>
-    <string name="albums_sort_title">Trier par</string>
-    <string name="albums_sort_custom">Personnalisé</string>
-    <string name="albums_sort_name">Nom</string>
-    <string name="albums_sort_recent">Récent</string>
-    <string name="albums_sort_count">Nombre d\'éléments</string>
-    <string name="albums_select">Sélectionner</string>
-    <string name="albums_favorites">Favoris</string>
-    <string name="albums_videos">Vidéos</string>
-    <string name="albums_pin">Épingler</string>
-    <string name="albums_unpin">Désépingler</string>
-    <string name="albums_rename_title">Renommer l\'album</string>
-    <string name="albums_rename_folder_info">Seul le nom affiché dans CloudGallery change. Le dossier n\'est pas renommé sur l\'appareil.</string>
+    <string name="albums_create">Create album</string>
+    <string name="albums_name_placeholder">Album name</string>
+    <string name="albums_sort">Sort</string>
+    <string name="albums_sort_title">Sort by</string>
+    <string name="albums_sort_custom">Custom</string>
+    <string name="albums_sort_name">Name</string>
+    <string name="albums_sort_recent">Recent</string>
+    <string name="albums_sort_count">Number of items</string>
+    <string name="albums_select">Select</string>
+    <string name="albums_favorites">Favourites</string>
+    <string name="albums_videos">Videos</string>
+    <string name="albums_pin">Pin</string>
+    <string name="albums_unpin">Unpin</string>
+    <string name="albums_rename_title">Rename album</string>
+    <string name="albums_rename_folder_info">Only the name shown in CloudGallery changes. The folder is not renamed on the device.</string>
     <plurals name="albums_delete_title">
-        <item quantity="one">Supprimer l\'album ?</item>
-        <item quantity="many">Supprimer %d albums ?</item>
-        <item quantity="other">Supprimer %d albums ?</item>
+        <item quantity="one">Delete album?</item>
+        <item quantity="other">Delete %d albums?</item>
     </plurals>
-    <string name="albums_delete_message">Seul l\'album est supprimé. Les photos et vidéos qu\'il contient ne sont pas supprimées et restent sur l\'appareil.</string>
-    <string name="albums_empty_title">Aucun album</string>
-    <string name="albums_empty_message">Les dossiers contenant des photos ou des vidéos apparaîtront ici. Vous pouvez aussi créer vos propres albums.</string>
-    <string name="albums_badge_cloud">Album OneDrive</string>
-    <string name="albums_badge_virtual">Album personnalisé</string>
-    <string name="albums_badge_pinned">Épinglé</string>
-    <string name="albums_picker_new">Nouvel album</string>
-    <string name="albums_picker_caption">Les éléments sont ajoutés à l\'album sous forme de références : les fichiers ne sont ni copiés ni déplacés.</string>
-    <string name="albums_picker_empty">Aucun album personnalisé pour le moment.</string>
-    <string name="albums_visibility_menu">Masquer des albums</string>
-    <string name="albums_visibility_intro">Choisissez où chaque album apparaît. « Masqué dans Albums et Photos » retire aussi ses photos et vidéos des onglets Photos et Vidéos. Rien n\'est supprimé.</string>
-    <string name="albums_visibility_shown">Affiché</string>
-    <string name="albums_visibility_hidden_albums">Masqué dans Albums</string>
-    <string name="albums_visibility_hidden_everywhere">Masqué dans Albums et Photos</string>
-    <string name="albums_visibility_empty">Aucun album.</string>
-    <string name="albums_open_onedrive">Ouvrir dans OneDrive</string>
-    <string name="albums_open_onedrive_failed">Impossible d\'ouvrir le dossier OneDrive. Vérifiez la connexion.</string>
+    <string name="albums_delete_message">Only the album is deleted. The photos and videos in it are not deleted and stay on the device.</string>
+    <string name="albums_empty_title">No albums</string>
+    <string name="albums_empty_message">Folders containing photos or videos will appear here. You can also create your own albums.</string>
+    <string name="albums_badge_cloud">OneDrive album</string>
+    <string name="albums_badge_virtual">Custom album</string>
+    <string name="albums_badge_pinned">Pinned</string>
+    <string name="albums_picker_new">New album</string>
+    <string name="albums_picker_caption">Items are added to the album as references: files are not copied or moved.</string>
+    <string name="albums_picker_empty">No custom albums yet.</string>
+    <string name="albums_visibility_menu">Hide albums</string>
+    <string name="albums_visibility_intro">Choose where each album appears. “Hidden in Albums and Photos” also removes its photos and videos from the Photos and Videos tabs. Nothing is deleted.</string>
+    <string name="albums_visibility_shown">Shown</string>
+    <string name="albums_visibility_hidden_albums">Hidden in Albums</string>
+    <string name="albums_visibility_hidden_everywhere">Hidden in Albums and Photos</string>
+    <string name="albums_visibility_empty">No albums.</string>
+    <string name="albums_open_onedrive">Open in OneDrive</string>
+    <string name="albums_open_onedrive_failed">Couldn\'t open the OneDrive folder. Check your connection.</string>
 </resources>

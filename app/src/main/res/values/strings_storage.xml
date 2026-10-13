@@ -1,33 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Page Stockage : espace occupé, plafonds et vidage du cache (préfixe storage_). -->
+<!-- Storage page: space used, limits and cache clearing (prefix storage_). -->
 <resources>
-    <string name="storage_title">Stockage</string>
-    <string name="storage_settings_summary">Cache, originaux et copies hors ligne</string>
+    <string name="storage_title">Storage</string>
+    <string name="storage_settings_summary">Cache, originals and offline copies</string>
 
-    <!-- Résumé -->
-    <string name="storage_used_by_app">Utilisé par CloudGallery</string>
-    <string name="storage_free_on_device">%1$s libres sur l\'appareil</string>
+    <!-- Summary -->
+    <string name="storage_used_by_app">Used by CloudGallery</string>
+    <string name="storage_free_on_device">%1$s free on this device</string>
 
     <!-- Cache -->
     <string name="storage_section_cache">Cache</string>
-    <string name="storage_thumbnails">Miniatures et aperçus OneDrive</string>
-    <string name="storage_size_of_cap">%1$s sur %2$s</string>
-    <string name="storage_originals">Originaux OneDrive</string>
+    <string name="storage_thumbnails">OneDrive thumbnails and previews</string>
+    <string name="storage_size_of_cap">%1$s of %2$s</string>
+    <string name="storage_originals">OneDrive originals</string>
     <string name="storage_size_and_count">%1$s · %2$s</string>
-    <string name="storage_thumbnail_cap">Plafond des miniatures</string>
-    <string name="storage_thumbnail_cap_pending">%1$s, appliqué au prochain démarrage</string>
-    <string name="storage_originals_cap">Plafond des originaux</string>
-    <string name="storage_originals_cap_summary">%1$s ; au-delà, les moins récemment utilisés sont supprimés</string>
-    <string name="storage_clear_cache">Vider le cache</string>
-    <string name="storage_clear_cache_summary">Miniatures, aperçus et originaux (%1$s). Les copies hors ligne sont conservées.</string>
-    <string name="storage_clear_title">Vider le cache ?</string>
-    <string name="storage_clear_message">Les miniatures, aperçus et originaux OneDrive enregistrés sur l\'appareil (%1$s) seront supprimés, puis rechargés au besoin, y compris la mise en cache de tout OneDrive (arrêtée, et « Garder à jour » désactivé). Les copies hors ligne sont conservées et aucun fichier n\'est supprimé de OneDrive ni du téléphone.</string>
-    <string name="storage_clear_confirm">Vider</string>
-    <string name="storage_cleared">Cache vidé</string>
-    <string name="storage_clear_failed">Le cache n\'a pas pu être vidé entièrement</string>
+    <string name="storage_thumbnail_cap">Thumbnail limit</string>
+    <string name="storage_thumbnail_cap_pending">%1$s, applied at next start</string>
+    <string name="storage_originals_cap">Originals limit</string>
+    <string name="storage_originals_cap_summary">%1$s; beyond that, the least recently used are removed</string>
+    <string name="storage_clear_cache">Clear cache</string>
+    <string name="storage_clear_cache_summary">Thumbnails, previews and originals (%1$s). Offline copies are kept.</string>
+    <string name="storage_clear_title">Clear cache?</string>
+    <string name="storage_clear_message">OneDrive thumbnails, previews and originals stored on this device (%1$s) will be removed and downloaded again when needed, including the full OneDrive caching (stopped, and “Keep up to date” turned off). Offline copies are kept and no file is deleted from OneDrive or from the phone.</string>
+    <string name="storage_clear_confirm">Clear</string>
+    <string name="storage_cleared">Cache cleared</string>
+    <string name="storage_clear_failed">The cache could not be fully cleared</string>
 
-    <!-- Hors ligne -->
-    <string name="storage_section_offline">Hors ligne</string>
-    <string name="storage_offline_copies">Copies hors ligne</string>
-    <string name="storage_offline_summary">Conservées jusqu\'à « Libérer l\'espace » ; jamais vidées avec le cache</string>
+    <!-- Offline -->
+    <string name="storage_section_offline">Offline</string>
+    <string name="storage_offline_copies">Offline copies</string>
+    <string name="storage_offline_summary">Kept until “Free up space”; never cleared with the cache</string>
 </resources>

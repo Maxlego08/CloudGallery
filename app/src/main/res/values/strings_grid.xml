@@ -1,49 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Grille Photos, grilles de collection (albums, favoris, vidéos). -->
+<!-- Photos grid, collection grids (albums, favourites, videos). -->
 <resources>
-    <string name="photos_title">Photos</string>
-    <string name="photos_empty_title">Aucune photo ni vidéo</string>
-    <string name="photos_empty_message">Les photos et vidéos de votre téléphone apparaîtront ici.</string>
+    <string name="photos_title">Pictures</string>
+    <string name="photos_empty_title">No pictures or videos</string>
+    <string name="photos_empty_message">Pictures and videos on your phone will appear here.</string>
 
-    <string name="grid_select">Sélectionner</string>
-    <string name="grid_action_more">Plus</string>
-    <string name="grid_action_favorite">Favori</string>
-    <string name="grid_favorites_added">Ajouté aux favoris</string>
-    <string name="grid_favorites_removed">Retiré des favoris</string>
-    <string name="grid_added_to_album">Ajouté à l\'album</string>
-    <string name="grid_delete_permanent_message">Les éléments seront définitivement supprimés de l\'appareil.</string>
-    <string name="grid_copy_confirm">Copier</string>
-    <string name="grid_copy_folder_hint">Nom du dossier</string>
-    <string name="grid_copy_invalid_name">Nom de dossier non valide.</string>
-    <string name="grid_copy_failed">Impossible de copier les fichiers.</string>
+    <string name="grid_select">Select</string>
+    <string name="grid_action_more">More</string>
+    <string name="grid_action_favorite">Favorite</string>
+    <string name="grid_favorites_added">Added to favorites</string>
+    <string name="grid_favorites_removed">Removed from favorites</string>
+    <string name="grid_added_to_album">Added to album</string>
+    <string name="grid_delete_permanent_message">The items will be permanently deleted from the device.</string>
+    <string name="grid_copy_confirm">Copy</string>
+    <string name="grid_copy_folder_hint">Folder name</string>
+    <string name="grid_copy_invalid_name">Invalid folder name.</string>
+    <string name="grid_copy_failed">Couldn\'t copy the files.</string>
     <plurals name="grid_copy_done">
-        <item quantity="one">%1$d élément copié dans %2$s</item>
-        <item quantity="many">%1$d éléments copiés dans %2$s</item>
-        <item quantity="other">%1$d éléments copiés dans %2$s</item>
+        <item quantity="one">%1$d item copied to %2$s</item>
+        <item quantity="other">%1$d items copied to %2$s</item>
     </plurals>
     <plurals name="grid_delete_batches">
-        <item quantity="one">Suppression en %d étape : confirmez chaque demande du système.</item>
-        <item quantity="many">Suppression en %d étapes : confirmez chaque demande du système.</item>
-        <item quantity="other">Suppression en %d étapes : confirmez chaque demande du système.</item>
+        <item quantity="one">Deleting in %d step: confirm each system request.</item>
+        <item quantity="other">Deleting in %d steps: confirm each system request.</item>
     </plurals>
-    <string name="grid_cloud_only_a11y">uniquement sur OneDrive</string>
+    <string name="grid_cloud_only_a11y">only on OneDrive</string>
     <plurals name="grid_cloud_items_skipped">
-        <item quantity="one">%d élément présent uniquement sur OneDrive n\'est pas concerné.</item>
-        <item quantity="many">%d éléments présents uniquement sur OneDrive ne sont pas concernés.</item>
-        <item quantity="other">%d éléments présents uniquement sur OneDrive ne sont pas concernés.</item>
+        <item quantity="one">%d item stored only on OneDrive isn\'t affected.</item>
+        <item quantity="other">%d items stored only on OneDrive aren\'t affected.</item>
     </plurals>
     <plurals name="grid_share_limit">
-        <item quantity="one">Vous pouvez partager %d élément au maximum à la fois.</item>
-        <item quantity="many">Vous pouvez partager %d éléments au maximum à la fois.</item>
-        <item quantity="other">Vous pouvez partager %d éléments au maximum à la fois.</item>
+        <item quantity="one">You can share up to %d item at a time.</item>
+        <item quantity="other">You can share up to %d items at a time.</item>
     </plurals>
 
-    <string name="collection_favorites">Favoris</string>
-    <string name="collection_videos">Vidéos</string>
-    <string name="collection_empty_album">Aucun élément dans cet album</string>
-    <string name="collection_empty_favorites">Aucun favori</string>
-    <string name="collection_empty_favorites_message">Touchez le cœur dans la visionneuse pour ajouter un élément aux favoris.</string>
-    <string name="collection_empty_videos">Aucune vidéo</string>
-    <string name="collection_remove_from_album">Retirer</string>
-    <string name="collection_removed_from_album">Retiré de l\'album</string>
+    <string name="collection_favorites">Favorites</string>
+    <string name="collection_videos">Videos</string>
+    <string name="collection_empty_album">No items in this album</string>
+    <string name="collection_empty_favorites">No favorites</string>
+    <string name="collection_empty_favorites_message">Tap the heart in the viewer to add an item to your favorites.</string>
+    <string name="collection_empty_videos">No videos</string>
+    <string name="collection_remove_from_album">Remove</string>
+    <string name="collection_removed_from_album">Removed from album</string>
 </resources>

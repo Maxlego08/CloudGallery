@@ -25,14 +25,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // Après une recréation, l'intent a déjà été traité (la visionneuse est dans la pile).
+        // After a recreation, the intent has already been handled (the viewer is in the back stack).
         if (savedInstanceState == null) handleIntent(intent, coldStart = true)
 
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val darkTheme = isAppInDarkTheme(settings.themeMode)
-            // Barres système transparentes ; icônes claires/sombres selon le thème de l'appli
-            // (et non celui du système quand l'utilisateur a forcé Clair ou Sombre).
+            // Transparent system bars; light/dark icons according to the app's theme
+            // (and not the system's when the user forced Light or Dark).
             DisposableEffect(darkTheme) {
                 val style = if (darkTheme) {
                     SystemBarStyle.dark(Color.TRANSPARENT)
@@ -56,9 +56,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Intent VIEW (ouverture d'une photo/vidéo depuis une autre appli) -> visionneuse. Le retour
-     * rend la main à l'appelant quand l'activité a été lancée pour cet intent, ou quand elle vit
-     * dans la tâche d'une autre appli (elle n'en est pas la racine).
+     * VIEW intent (opening a photo/video from another app) -> viewer. Back hands control
+     * back to the caller when the activity was launched for this intent, or when it lives
+     * in another app's task (it is not its root).
      */
     private fun handleIntent(intent: Intent?, coldStart: Boolean) {
         if (intent?.action != Intent.ACTION_VIEW) return

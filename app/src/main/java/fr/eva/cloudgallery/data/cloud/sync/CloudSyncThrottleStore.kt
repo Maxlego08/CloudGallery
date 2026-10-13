@@ -14,46 +14,45 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Etat de synchronisation conservé hors de la mémoire (un redémarrage du processus ne l'oublie
- * pas) :
- * - fin de la pause demandée par Microsoft Graph (Retry-After) : pas de requête pendant la pause ;
- * - compte MSAL vérifié ([verifiedAccountId]) : celui dont le lecteur correspond à l'index lors
- *   du dernier passage ; un autre compte connecté n'accède à rien avant d'être vérifié ;
- * - autre compte détecté ([accountMismatch]) : accès bloqué dès le démarrage, jusqu'à la purge ;
- * - reprise d'une énumération complète interrompue ([resumeMeta], journal des éléments vus dans
- *   `noBackupFilesDir`, voir EnumerationResumeLogic). Le nextLink porte un jeton Graph : il
- *   n'est jamais journalisé.
+ * Sync state kept outside memory (a process restart doesn't forget it):
+ * - end of the pause requested by Microsoft Graph (Retry-After): no request during the pause;
+ * - verified MSAL account ([verifiedAccountId]): the one whose drive matched the index during
+ *   the last pass; another signed-in account accesses nothing until it is verified;
+ * - other account detected ([accountMismatch]): access blocked from startup, until the purge;
+ * - resumption of an interrupted full enumeration ([resumeMeta], journal of seen items in
+ *   `noBackupFilesDir`, see EnumerationResumeLogic). The nextLink carries a Graph token: it is
+ *   never logged.
  *
- * Préférences dédiées (`cloud_sync.xml`, exclues de la sauvegarde), lues et écrites uniquement
- * sur le dispatcher d'E/S (lues ensuite en mémoire). Tout est effacé avec les données OneDrive
- * (déconnexion, purge) : ces valeurs concernent le compte dont les données sont dans l'index.
+ * Dedicated preferences (`cloud_sync.xml`, excluded from backup), read and written only on the
+ * I/O dispatcher (then read in memory). Everything is cleared with the OneDrive data (sign-out,
+ * purge): these values concern the account whose data is in the index.
  */
 @Singleton
 class CloudSyncThrottleStore @Inject constructor(
     @param:ApplicationContext private val context: Context,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) {
-    /** Ouvert au premier usage, sur le dispatcher d'E/S (lecture du fichier). */
+    /** Opened on first use, on the I/O dispatcher (reads the file). */
     private val prefs: SharedPreferences by lazy { context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE) }
 
-    /** Instant (ms) avant lequel aucune synchronisation ne doit interroger Graph, 0 sinon. */
+    /** Instant (ms) before which no sync may query Graph, 0 otherwise. */
     suspend fun retryNotBefore(): Long = withContext(io) { prefs.getLong(KEY_RETRY_NOT_BEFORE, 0L) }
 
     suspend fun setRetryNotBefore(until: Long) = withContext(io) {
         prefs.edit { putLong(KEY_RETRY_NOT_BEFORE, until) }
     }
 
-    /** Fin de pause effacée (passage réussi) ; le compte vérifié est gardé. */
+    /** Pause end cleared (successful pass); the verified account is kept. */
     suspend fun clearRetry() = withContext(io) {
         if (prefs.contains(KEY_RETRY_NOT_BEFORE)) prefs.edit { remove(KEY_RETRY_NOT_BEFORE) }
     }
 
-    /** Identifiant MSAL du compte vérifié, null si aucun (index vide, ou données d'avant la phase 5). */
+    /** MSAL identifier of the verified account, null if none (empty index, or data from before phase 5). */
     suspend fun verifiedAccountId(): String? = withContext(io) { prefs.getString(KEY_VERIFIED_ACCOUNT, null) }
 
     suspend fun accountMismatch(): Boolean = withContext(io) { prefs.getBoolean(KEY_ACCOUNT_MISMATCH, false) }
 
-    /** Lecteur du compte [accountId] conforme à l'index : compte vérifié, plus de blocage. */
+    /** Drive of account [accountId] matches the index: account verified, no more blocking. */
     suspend fun setVerified(accountId: String) = withContext(io) {
         prefs.edit {
             putString(KEY_VERIFIED_ACCOUNT, accountId)
@@ -61,12 +60,12 @@ class CloudSyncThrottleStore @Inject constructor(
         }
     }
 
-    /** Lecteur différent de celui de l'index : accès bloqué jusqu'à la purge. */
+    /** Drive different from the index's: access blocked until the purge. */
     suspend fun setAccountMismatch() = withContext(io) {
         prefs.edit { putBoolean(KEY_ACCOUNT_MISMATCH, true) }
     }
 
-    /** Etat de reprise de l'énumération complète en cours ou interrompue. */
+    /** Resume state of the full enumeration in progress or interrupted. */
     internal suspend fun resumeMeta(): EnumerationResumeMeta = withContext(io) {
         EnumerationResumeMeta(
             version = prefs.getString(KEY_RESUME_VERSION, null),
@@ -77,8 +76,8 @@ class CloudSyncThrottleStore @Inject constructor(
     }
 
     /**
-     * Nouvelle énumération complète liée à [version] : l'ancien état de reprise et son journal
-     * sont effacés (écriture synchrone : jamais un ancien journal avec le nouvel état).
+     * New full enumeration bound to [version]: the old resume state and its journal are cleared
+     * (synchronous write: never an old journal with the new state).
      */
     suspend fun beginEnumeration(version: String, startedAt: Long) = withContext(io) {
         journal.delete()
@@ -89,7 +88,7 @@ class CloudSyncThrottleStore @Inject constructor(
         }
     }
 
-    /** Ajoute le bloc d'une page au journal, synchronisé sur disque avant tout enregistrement du lien. */
+    /** Appends a page's block to the journal, synced to disk before the link is saved. */
     suspend fun appendSeenBlock(block: String) = withContext(io) {
         FileOutputStream(journal, true).use { out ->
             out.write(block.toByteArray(Charsets.UTF_8))
@@ -97,7 +96,7 @@ class CloudSyncThrottleStore @Inject constructor(
         }
     }
 
-    /** Lien de la page suivante, après [pages] pages appliquées et journalisées. */
+    /** Link to the next page, after [pages] pages applied and journaled. */
     suspend fun saveNextLink(nextLink: String, pages: Int) = withContext(io) {
         prefs.edit {
             putString(KEY_RESUME_NEXT_LINK, nextLink)
@@ -105,7 +104,7 @@ class CloudSyncThrottleStore @Inject constructor(
         }
     }
 
-    /** Contenu du journal, null s'il manque, est trop gros ou illisible. */
+    /** Journal content, null if missing, too large or unreadable. */
     suspend fun readSeenJournal(): String? = withContext(io) {
         try {
             if (!journal.isFile || journal.length() > SEEN_JOURNAL_MAX_BYTES) null else journal.readText(Charsets.UTF_8)
@@ -114,13 +113,13 @@ class CloudSyncThrottleStore @Inject constructor(
         }
     }
 
-    /** Plus de reprise possible (énumération terminée, ou reprise abandonnée). */
+    /** No resume possible any more (enumeration finished, or resume abandoned). */
     suspend fun clearResume() = withContext(io) {
         prefs.edit(commit = true) { removeResume() }
         journal.delete()
     }
 
-    /** Tout est effacé (données OneDrive purgées), journal de reprise compris. */
+    /** Everything is cleared (OneDrive data purged), resume journal included. */
     suspend fun clear() = withContext(io) {
         prefs.edit(commit = true) { clear() }
         journal.delete()
@@ -145,7 +144,7 @@ class CloudSyncThrottleStore @Inject constructor(
         const val KEY_RESUME_NEXT_LINK = "resume_next_link"
         const val KEY_RESUME_PAGES = "resume_pages"
 
-        /** Journal des éléments vus de l'énumération complète en cours (hors sauvegarde). */
+        /** Journal of items seen by the current full enumeration (excluded from backup). */
         const val JOURNAL_FILE = "onedrive_enumeration_seen.log"
     }
 }

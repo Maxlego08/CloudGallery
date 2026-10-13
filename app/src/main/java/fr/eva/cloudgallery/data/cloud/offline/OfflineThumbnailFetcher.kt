@@ -20,16 +20,16 @@ import java.io.FileNotFoundException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Clé de cache mémoire : média + version de la copie (aucun chemin de fichier). */
+/** Memory cache key: media + copy version (no file path). */
 private class OfflineThumbnailKeyer : Keyer<OfflineThumbnail> {
     override fun key(data: OfflineThumbnail, options: Options): String = "offline:${data.mediaId}:${data.version}"
 }
 
 /**
- * Miniature tirée de la copie hors ligne d'un média (élément conservé hors ligne dont la
- * miniature OneDrive n'est pas en cache, ou qui n'existe plus sur OneDrive). Le fichier est
- * retrouvé en base puis lu sur le dispatcher d'E/S ; Coil le décode à la taille demandée (image,
- * ou image d'une vidéo par VideoFrameDecoder). Rien n'est écrit dans le cache disque.
+ * Thumbnail taken from a media item's offline copy (item kept offline whose OneDrive thumbnail is
+ * not cached, or which no longer exists on OneDrive). The file is looked up in the database and
+ * then read on the I/O dispatcher; Coil decodes it at the requested size (image, or a video frame
+ * via VideoFrameDecoder). Nothing is written to the disk cache.
  */
 class OfflineThumbnailFetcher private constructor(
     private val data: OfflineThumbnail,
@@ -38,8 +38,8 @@ class OfflineThumbnailFetcher private constructor(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult = withContext(factory.io) {
-        val row = factory.cachedFiles.get(data.mediaId, CacheKind.OFFLINE) ?: throw FileNotFoundException("Copie hors ligne absente")
-        val file = factory.store.fileOf(row.path)?.takeIf { it.isFile } ?: throw FileNotFoundException("Copie hors ligne absente")
+        val row = factory.cachedFiles.get(data.mediaId, CacheKind.OFFLINE) ?: throw FileNotFoundException("Offline copy missing")
+        val file = factory.store.fileOf(row.path)?.takeIf { it.isFile } ?: throw FileNotFoundException("Offline copy missing")
         SourceFetchResult(
             source = ImageSource(file.toOkioPath(), options.fileSystem),
             mimeType = data.mimeType,
@@ -57,7 +57,7 @@ class OfflineThumbnailFetcher private constructor(
         override fun create(data: OfflineThumbnail, options: Options, imageLoader: ImageLoader): Fetcher =
             OfflineThumbnailFetcher(data, options, this)
 
-        /** Enregistre le Keyer et cette fabrique dans les composants de l'ImageLoader. */
+        /** Registers the Keyer and this factory in the ImageLoader components. */
         fun register(components: ComponentRegistry.Builder) {
             components.add(OfflineThumbnailKeyer(), OfflineThumbnail::class)
             components.add(this, OfflineThumbnail::class)

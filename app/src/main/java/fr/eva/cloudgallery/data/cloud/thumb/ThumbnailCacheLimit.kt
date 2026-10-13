@@ -18,10 +18,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Plafond du cache disque Coil (miniatures et aperçus OneDrive) lu dans les réglages. Coil ouvre
- * son cache disque une seule fois, au premier chargement qui en a besoin (sur son dispatcher
- * d'E/S) : le réglage est lu dès le démarrage de l'appli ([preload]) et un changement ne
- * s'applique qu'au démarrage suivant. [effectiveBytes] : plafond retenu à l'ouverture du cache.
+ * Cap of the Coil disk cache (OneDrive thumbnails and previews) read from the settings. Coil
+ * opens its disk cache only once, on the first load that needs it (on its I/O dispatcher):
+ * the setting is read right at app startup ([preload]) and a change only applies on the next
+ * startup. [effectiveBytes]: cap retained when the cache was opened.
  */
 @Singleton
 class ThumbnailCacheLimit @Inject constructor(
@@ -36,7 +36,7 @@ class ThumbnailCacheLimit @Inject constructor(
     var effectiveBytes: Long? = null
         private set
 
-    /** Lecture du réglage en arrière-plan (Application.onCreate). */
+    /** Reads the setting in the background (Application.onCreate). */
     fun preload() {
         if (!started.compareAndSet(false, true)) return
         scope.launch(io) {
@@ -45,7 +45,7 @@ class ThumbnailCacheLimit @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Plafond du cache des miniatures illisible, valeur par défaut", e)
+                Log.w(TAG, "Unreadable thumbnail cache cap, using default value", e)
                 DEFAULT_THUMBNAIL_CACHE_BYTES
             }
             loaded.complete(bytes)
@@ -53,12 +53,12 @@ class ThumbnailCacheLimit @Inject constructor(
     }
 
     /**
-     * Plafond à l'ouverture du cache : le réglage s'il est déjà lu (cas normal), sinon une courte
-     * attente, puis la valeur par défaut.
+     * Cap when the cache is opened: the setting if already read (normal case), otherwise a
+     * short wait, then the default value.
      */
     fun forDiskCacheOpening(): Long {
         preload()
-        // Réglage déjà lu : await() rend la valeur aussitôt.
+        // Setting already read: await() returns the value immediately.
         val bytes = runBlocking { withTimeoutOrNull(OPEN_WAIT_MS) { loaded.await() } } ?: DEFAULT_THUMBNAIL_CACHE_BYTES
         effectiveBytes = bytes
         return bytes

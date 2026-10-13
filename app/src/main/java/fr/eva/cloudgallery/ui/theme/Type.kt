@@ -8,19 +8,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /*
- * FontFamily.Default = police système : sur un Galaxy, c'est la police One UI choisie par
- * l'utilisateur. Aucune police Samsung n'est embarquée dans l'APK.
+ * FontFamily.Default = system font: on a Galaxy, this is the One UI font chosen by
+ * the user. No Samsung font is bundled in the APK.
  */
 private val Base = TextStyle(fontFamily = FontFamily.Default)
 
 @Immutable
 data class OneUiTypography(
-    /** Grand titre étendu des écrans principaux (« Photos », « Albums »). */
+    /** Large expanded title of the main screens ("Photos", "Albums"). */
     val largeTitle: TextStyle = Base.copy(fontSize = 32.sp, fontWeight = FontWeight.Normal, lineHeight = 38.sp),
     val largeSubtitle: TextStyle = Base.copy(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 18.sp),
-    /** Titre de barre d'application réduite. */
+    /** Title of a collapsed app bar. */
     val appBarTitle: TextStyle = Base.copy(fontSize = 19.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp),
-    /** En-têtes de jour / mois dans la grille. */
+    /** Day / month headers in the grid. */
     val sectionHeader: TextStyle = Base.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp),
     val listTitle: TextStyle = Base.copy(fontSize = 17.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
     val listSubtitle: TextStyle = Base.copy(fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 17.sp),

@@ -14,15 +14,15 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Propriétaire unique de l'apparence des barres système, placé au niveau de la navigation.
+ * Single owner of the system bars' appearance, placed at the navigation level.
  *
- * Navigation Compose compose la destination entrante avant de retirer la sortante : un
- * enregistrement / restauration par écran capturerait l'état de l'autre écran. Ici l'apparence
- * découle uniquement de la destination courante et du thème de l'appli :
- * - médias plein écran (visionneuse, lecteur) : icônes claires sur fond noir, barres masquables ;
- * - ailleurs : barres visibles, icônes selon le thème.
+ * Navigation Compose composes the incoming destination before removing the outgoing one: a
+ * per-screen save / restore would capture the other screen's state. Here the appearance
+ * derives solely from the current destination and the app theme:
+ * - full-screen media (viewer, player): light icons on a black background, hideable bars;
+ * - elsewhere: visible bars, icons following the theme.
  *
- * Les écrans plein écran ne gèrent que la visibilité ([ImmersiveSystemBars]).
+ * Full-screen screens only manage visibility ([ImmersiveSystemBars]).
  */
 @Composable
 fun SystemBarsAppearance(fullscreenMedia: Boolean, darkTheme: Boolean) {
@@ -45,8 +45,8 @@ fun SystemBarsAppearance(fullscreenMedia: Boolean, darkTheme: Boolean) {
 }
 
 /**
- * Visibilité des barres système d'un écran plein écran. Réappliquée à chaque reprise : un écran
- * qui redevient le premier de la pile (retour depuis le lecteur) rétablit son propre état.
+ * System bar visibility for a full-screen screen. Reapplied on every resume: a screen
+ * that becomes the top of the stack again (back from the player) restores its own state.
  */
 @Composable
 fun ImmersiveSystemBars(visible: Boolean) {
@@ -64,9 +64,9 @@ fun ImmersiveSystemBars(visible: Boolean) {
 }
 
 /**
- * Propriétés d'un panneau ouvert au-dessus d'un média plein écran : la fenêtre du panneau
- * pilote les barres système, la barre d'état surplombe le fond noir (icônes claires) tandis que
- * la barre de navigation surplombe le panneau (icônes selon le thème).
+ * Properties of a panel opened over full-screen media: the panel's window
+ * drives the system bars, the status bar sits over the black background (light icons) while
+ * the navigation bar sits over the panel (icons following the theme).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -16,14 +16,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Miniatures et aperçus OneDrive mis en cache par « Mettre en cache tout OneDrive » : fichiers
- * privés de l'appli (`noBackupFilesDir/onedrive_precache`), hors du cache disque Coil et de son
- * plafond LRU, jamais évincés automatiquement. Retirés quand l'élément change (cTag) ou
- * disparaît (nettoyage après chaque passage), par « Vider le cache » et avec les données
- * OneDrive (déconnexion, purge).
+ * OneDrive thumbnails and previews cached by "Cache all of OneDrive": app-private files
+ * (`noBackupFilesDir/onedrive_precache`), outside Coil's disk cache and its LRU cap, never evicted
+ * automatically. Removed when the item changes (cTag) or disappears (cleanup after each pass), by
+ * "Clear cache" and together with the OneDrive data (sign-out, purge).
  *
- * Toutes les méthodes font des E/S disque : à appeler sur le dispatcher d'E/S. Construction
- * légère (aucun accès disque).
+ * All methods do disk I/O: call them on the I/O dispatcher. Lightweight construction (no disk
+ * access).
  */
 @Singleton
 class CloudPrecacheStore @Inject constructor(
@@ -33,12 +32,12 @@ class CloudPrecacheStore @Inject constructor(
     private val root: File by lazy { File(context.noBackupFilesDir, PRECACHE_DIR) }
     private val tmpDir: File get() = File(root, TMP_DIR)
 
-    /** Nombre de vidages de la mise en cache (voir [writeToken]). */
+    /** Number of times the cache has been cleared (see [writeToken]). */
     private val clears = AtomicLong(0)
 
     /**
-     * Fichier enregistré pour [ref] à la taille la plus adaptée à [requested] px (voir
-     * [precacheLookupSides]), null s'il n'y en a pas.
+     * File saved for [ref] at the size best suited to [requested] px (see [precacheLookupSides]),
+     * null if there is none.
      */
     fun find(ref: CloudThumbRef, kind: PrecacheKind, requested: Int, allowLower: Boolean): File? {
         if (!root.isDirectory) return null
@@ -50,20 +49,20 @@ class CloudPrecacheStore @Inject constructor(
         return null
     }
 
-    /** Vrai si le fichier exact ([side]) est déjà enregistré. */
+    /** True if the exact file ([side]) is already saved. */
     fun contains(ref: CloudThumbRef, kind: PrecacheKind, side: Int): Boolean =
         File(root, precacheRelativePath(precacheHash(ref), kind, side)).let { it.isFile && it.length() > 0 }
 
     /**
-     * Jeton à relever avant un téléchargement et à passer à [write] : change quand les données
-     * OneDrive sont vidées (déconnexion, purge) ou quand la mise en cache est vidée.
+     * Token to take before a download and pass to [write]: changes when the OneDrive data is
+     * cleared (sign-out, purge) or when the cache is cleared.
      */
     fun writeToken(): WriteToken = WriteToken(generation.value, clears.get())
 
     /**
-     * Enregistre [body] pour [ref] ; rend la taille écrite. Fichier temporaire puis renommage :
-     * jamais de fichier partiel visible. Rien n'est gardé si les données OneDrive ou la mise en
-     * cache ont été vidées depuis [token] (déconnexion ou « Vider le cache » pendant le téléchargement).
+     * Saves [body] for [ref]; returns the written size. Temporary file then rename: never a
+     * visible partial file. Nothing is kept if the OneDrive data or the cache has been cleared
+     * since [token] (sign-out or "Clear cache" during the download).
      */
     fun write(ref: CloudThumbRef, kind: PrecacheKind, side: Int, body: BufferedSource, token: WriteToken): Long {
         val target = File(root, precacheRelativePath(precacheHash(ref), kind, side))
@@ -73,7 +72,7 @@ class CloudPrecacheStore @Inject constructor(
             if (generation.value != token.generation) throw CloudAuthRequiredException()
             if (clears.get() != token.clears) throw PrecacheClearedException()
             target.parentFile?.mkdirs()
-            if (!tmp.renameTo(target)) throw IOException("Enregistrement de la mise en cache impossible")
+            if (!tmp.renameTo(target)) throw IOException("Could not save the cached file")
             return target.length()
         } finally {
             if (tmp.exists()) tmp.delete()
@@ -81,9 +80,9 @@ class CloudPrecacheStore @Inject constructor(
     }
 
     /**
-     * Supprime les fichiers des éléments absents de [keep] (empreintes [precacheHash] des
-     * éléments encore concernés, dans leur version courante) et les fichiers temporaires
-     * abandonnés. Rend le nombre de fichiers supprimés.
+     * Deletes the files of items missing from [keep] ([precacheHash] fingerprints of the items
+     * still concerned, in their current version) and abandoned temporary files. Returns the
+     * number of deleted files.
      */
     fun retainOnly(keep: Set<String>): Int {
         if (!root.isDirectory) return 0
@@ -100,13 +99,13 @@ class CloudPrecacheStore @Inject constructor(
                     if (file.delete()) removed++
                 }
             }
-            // Dossier vide : retiré (il sera recréé au besoin).
+            // Empty directory: removed (it will be recreated if needed).
             if (dir.list()?.isEmpty() == true) dir.delete()
         }
         return removed
     }
 
-    /** Taille totale (octets) et nombre de fichiers enregistrés. */
+    /** Total size (bytes) and number of saved files. */
     fun usage(): PrecacheUsage {
         if (!root.isDirectory) return PrecacheUsage(0L, 0)
         var bytes = 0L
@@ -118,22 +117,22 @@ class CloudPrecacheStore @Inject constructor(
         return PrecacheUsage(bytes, count)
     }
 
-    /** Vrai s'il reste au moins un fichier enregistré. */
+    /** True if no saved file remains. */
     fun isEmpty(): Boolean = root.list()?.none { it != TMP_DIR } ?: true
 
-    /** Espace libre et taille du volume de la mise en cache (octets). */
+    /** Free space and size of the cache's volume (bytes). */
     fun volumeSpace(): Pair<Long, Long> {
         val dir = context.noBackupFilesDir
         return dir.usableSpace to dir.totalSpace
     }
 
-    /** Supprime tout (« Vider le cache », données OneDrive retirées). */
+    /** Deletes everything ("Clear cache", OneDrive data removed). */
     fun clear() {
         clears.incrementAndGet()
         if (root.exists()) root.deleteRecursively()
     }
 
-    /** Relevé de [writeToken]. */
+    /** Snapshot taken by [writeToken]. */
     data class WriteToken(val generation: Long, val clears: Long)
 
     internal companion object {
@@ -142,8 +141,8 @@ class CloudPrecacheStore @Inject constructor(
     }
 }
 
-/** Mise en cache vidée pendant un téléchargement : le fichier n'est pas gardé, le passage s'arrête. */
-class PrecacheClearedException : IOException("Mise en cache vidée")
+/** Cache cleared during a download: the file is not kept, the pass stops. */
+class PrecacheClearedException : IOException("Cache cleared")
 
-/** Espace occupé par la mise en cache : octets et nombre de fichiers (vignettes et aperçus). */
+/** Space used by the cache: bytes and number of files (thumbnails and previews). */
 data class PrecacheUsage(val bytes: Long, val files: Int)

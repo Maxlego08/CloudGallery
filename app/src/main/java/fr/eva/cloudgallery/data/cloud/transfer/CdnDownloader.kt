@@ -33,28 +33,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Réponse de l'hôte de téléchargement OneDrive et moyen d'interrompre l'échange, y compris
- * pendant la lecture du corps (annulation de l'appel OkHttp).
+ * Response from the OneDrive download host and a way to interrupt the exchange, including
+ * while the body is being read (cancellation of the OkHttp call).
  */
 internal class CdnExchange(val response: Response, val cancel: () -> Unit)
 
-/** Téléchargement terminé : taille et version (cTag/eTag) du contenu écrit. */
+/** Download finished: size and version (cTag/eTag) of the written content. */
 class CdnResult(val sizeBytes: Long, val cTag: String?, val eTag: String?)
 
 /**
- * Téléchargement d'un fichier OneDrive depuis son URL pré-authentifiée vers un fichier partiel,
- * indépendant d'OkHttpClient (transport injecté : testable en JVM avec des réponses préparées).
+ * Downloads a OneDrive file from its pre-authenticated URL into a partial file, independent of
+ * OkHttpClient (injected transport: testable on the JVM with canned responses).
  *
- * - URL HTTPS uniquement, hors Microsoft Graph ; aucun en-tête Authorization ; l'URL n'apparaît
- *   dans aucun message ni journal.
- * - Reprise du fichier partiel (`Range: bytes=N-`) seulement pour la même version connue
- *   ([resumePlan]), vérifiée auprès de Graph juste avant (jamais d'après une URL en cache) ;
- *   200 en réponse à un Range : le fichier repart de zéro.
- * - URL refusée (401/403/404/410) : une seule nouvelle URL demandée à Graph.
- * - 429/503 : Retry-After respecté jusqu'à [MAX_THROTTLE_WAIT_MS], deux fois au plus.
- * - Corps écrit au fil de l'eau (tampon de 256 Kio, jamais tout en mémoire), annulable à tout
- *   moment, synchronisé sur disque, puis taille vérifiée.
- * Toute erreur devient [CloudDownloadException] ; l'annulation est propagée telle quelle.
+ * - HTTPS URLs only, never Microsoft Graph; no Authorization header; the URL never appears in
+ *   any message or log.
+ * - Resumes the partial file (`Range: bytes=N-`) only for the same known version
+ *   ([resumePlan]), checked with Graph just before (never based on a cached URL);
+ *   200 in response to a Range: the file restarts from zero.
+ * - URL rejected (401/403/404/410): a single new URL requested from Graph.
+ * - 429/503: Retry-After honored up to [MAX_THROTTLE_WAIT_MS], at most twice.
+ * - Body written as it streams (256 KiB buffer, never all in memory), cancellable at any
+ *   time, synced to disk, then size checked.
+ * Every error becomes [CloudDownloadException]; cancellation is propagated as is.
  */
 internal class CdnDownloader(
     private val userAgent: String,
@@ -62,25 +62,25 @@ internal class CdnDownloader(
     private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) {
 
-    /** Etape suivante d'une tentative. */
+    /** Next step of an attempt. */
     private sealed interface Step {
         class Done(val result: CdnResult) : Step
 
-        /** URL refusée par l'hôte : en demander une nouvelle. */
+        /** URL rejected by the host: request a new one. */
         data object RefreshUrl : Step
 
-        /** Attente demandée par l'hôte déjà respectée : nouvel essai. */
+        /** Wait requested by the host already honored: try again. */
         data object Throttled : Step
 
-        /** Reprise refusée de façon incohérente : repartir de zéro. */
+        /** Resume rejected inconsistently: restart from zero. */
         data object Restart : Step
     }
 
     /**
-     * Télécharge l'élément décrit par [info] (appelé avec `true` pour forcer une nouvelle URL)
-     * dans [part]. [expectedCTag] : version attendue (celle de l'index, et celle d'un fichier
-     * partiel existant) ; un contenu d'une autre version est refusé ([DownloadError.CONTENT_CHANGED]).
-     * [onProgress] reçoit les octets écrits et la taille totale.
+     * Downloads the item described by [info] (called with `true` to force a new URL) into
+     * [part]. [expectedCTag]: expected version (the index's, and that of an existing partial
+     * file); content of another version is rejected ([DownloadError.CONTENT_CHANGED]).
+     * [onProgress] receives the bytes written and the total size.
      */
     suspend fun download(
         info: suspend (forceRefresh: Boolean) -> CloudDownloadInfo,
@@ -88,9 +88,9 @@ internal class CdnDownloader(
         expectedCTag: String?,
         onProgress: suspend (done: Long, total: Long) -> Unit = { _, _ -> },
     ): CdnResult {
-        // Reprise d'un fichier partiel : version et URL redemandées à Graph (jamais celles du
-        // cache, qui peuvent dater de deux minutes) avant d'ajouter des octets au fichier. Graph
-        // ne documente pas If-Range : la version fraîche est le seul contrôle fiable.
+        // Resuming a partial file: version and URL requested again from Graph (never the cached
+        // ones, which may be two minutes old) before appending bytes to the file. Graph does not
+        // document If-Range: the fresh version is the only reliable check.
         var refreshUrl = part.isFile && part.length() > 0
         var urlRefreshed = false
         var throttleWaits = 0
@@ -113,7 +113,7 @@ internal class CdnDownloader(
             when (val step = attempt(current, part, offset, onProgress)) {
                 is Step.Done -> return step.result
                 Step.RefreshUrl -> {
-                    // Toujours refusée avec une URL neuve : lien inutilisable.
+                    // Still rejected with a fresh URL: unusable link.
                     if (urlRefreshed) throw CloudDownloadException(DownloadError.SERVER)
                     urlRefreshed = true
                     refreshUrl = true
@@ -123,7 +123,7 @@ internal class CdnDownloader(
                     if (throttleWaits > MAX_THROTTLE_WAITS) throw CloudDownloadException(DownloadError.THROTTLED)
                 }
                 Step.Restart -> {
-                    // Une seule reprise complète.
+                    // A single full restart.
                     if (restarts > 0) throw CloudDownloadException(DownloadError.SERVER)
                     restarts++
                     part.delete()
@@ -142,7 +142,7 @@ internal class CdnDownloader(
         val request = Request.Builder()
             .url(info.url)
             .header("User-Agent", userAgent)
-            // Octets bruts : la progression et la reprise comptent les octets du fichier.
+            // Raw bytes: progress and resume count the file's bytes.
             .header("Accept-Encoding", "identity")
             .apply { if (offset > 0) header("Range", "bytes=$offset-") }
             .get()
@@ -157,8 +157,8 @@ internal class CdnDownloader(
         exchange.response.use { response ->
             val code = response.code
             if (isExpiredUrlStatus(code)) {
-                // URL expirée ou révoquée : une nouvelle est demandée à Graph (qui répondra 404 si
-                // l'élément a disparu).
+                // URL expired or revoked: a new one is requested from Graph (which will answer 404
+                // if the item is gone).
                 return Step.RefreshUrl
             }
             if (code == 429 || code == 503) {
@@ -188,8 +188,8 @@ internal class CdnDownloader(
     }
 
     /**
-     * Ecrit le corps dans [part]. La lecture (bloquante) tourne dans une coroutine enfant : si
-     * l'appelant est annulé, l'appel OkHttp est annulé aussitôt, ce qui débloque la lecture.
+     * Writes the body into [part]. The (blocking) read runs in a child coroutine: if the caller
+     * is cancelled, the OkHttp call is cancelled immediately, which unblocks the read.
      */
     private suspend fun writeBody(
         exchange: CdnExchange,
@@ -214,8 +214,8 @@ internal class CdnDownloader(
                     val n = try {
                         source.read(buffer)
                     } catch (e: IOException) {
-                        // Lecture interrompue par l'annulation (appel OkHttp annulé) : c'est une
-                        // annulation, pas une erreur réseau (sinon l'erreur primerait sur l'annulation).
+                        // Read interrupted by cancellation (OkHttp call cancelled): this is a
+                        // cancellation, not a network error (otherwise the error would win over it).
                         ensureActive()
                         throw CloudDownloadException(DownloadError.NETWORK, e)
                     }
@@ -266,13 +266,13 @@ internal class CdnDownloader(
     companion object {
         private const val BUFFER_BYTES = 256 * 1024
 
-        /** Attente maximale demandée par l'hôte (Retry-After) acceptée dans un téléchargement. */
+        /** Maximum host-requested wait (Retry-After) accepted during a download. */
         const val MAX_THROTTLE_WAIT_MS = 60_000L
         private const val MAX_THROTTLE_WAITS = 2
     }
 }
 
-/** Code d'échec de téléchargement correspondant à un échec Graph ou d'accès au compte. */
+/** Download failure code matching a Graph or account-access failure. */
 internal fun downloadErrorFor(code: CloudErrorCode): DownloadError = when (code) {
     CloudErrorCode.NETWORK -> DownloadError.NETWORK
     CloudErrorCode.AUTH_REQUIRED, CloudErrorCode.CONFIG, CloudErrorCode.DECLINED -> DownloadError.AUTH_REQUIRED
@@ -281,9 +281,9 @@ internal fun downloadErrorFor(code: CloudErrorCode): DownloadError = when (code)
 }
 
 /**
- * Téléchargeur de fichiers OneDrive de l'appli : URL obtenue par [CloudDownloadUrlProvider]
- * (contrôle d'accès au compte à chaque demande), client OkHttp partagé (sans intercepteur : le
- * jeton Graph n'est ajouté que par requête Graph), travail sur le dispatcher d'E/S.
+ * The app's OneDrive file downloader: URL obtained from [CloudDownloadUrlProvider] (account
+ * access check on every request), shared OkHttp client (no interceptor: the Graph token is only
+ * added per Graph request), work on the I/O dispatcher.
  */
 @Singleton
 class CloudFileDownloader @Inject constructor(
@@ -299,17 +299,17 @@ class CloudFileDownloader @Inject constructor(
         },
     )
 
-    /** Client lié à un réseau précis (et sa fabrique), réutilisé tant que le réseau ne change pas. */
+    /** Client bound to a specific network (and its factory), reused as long as the network doesn't change. */
     @Volatile
     private var bound: Pair<Network, CdnDownloader>? = null
 
     /**
-     * Télécharge [itemId] dans [part] (voir [CdnDownloader.download]).
+     * Downloads [itemId] into [part] (see [CdnDownloader.download]).
      *
-     * [network] : réseau imposé (celui que JobScheduler a choisi pour un travail « Wi-Fi
-     * uniquement » : sinon le réseau par défaut, éventuellement facturé, serait utilisé). Null :
-     * réseau par défaut. [expectedDriveId] : lecteur OneDrive des données de l'index ; un élément
-     * d'un autre lecteur (autre compte) est refusé ([DownloadError.AUTH_REQUIRED]).
+     * [network]: enforced network (the one JobScheduler picked for a "Wi-Fi only" job: otherwise
+     * the default network, possibly metered, would be used). Null: default network.
+     * [expectedDriveId]: OneDrive drive of the index data; an item from another drive (another
+     * account) is rejected ([DownloadError.AUTH_REQUIRED]).
      */
     suspend fun download(
         itemId: String,
@@ -355,9 +355,9 @@ class CloudFileDownloader @Inject constructor(
 }
 
 /**
- * Même lecteur OneDrive : identifiants comparés sans tenir compte de la casse (OneDrive
- * personnel les renvoie parfois en minuscules ou en majuscules). Inconnu d'un côté : accepté
- * (le contrôle de compte de l'index s'applique déjà).
+ * Same OneDrive drive: identifiers compared case-insensitively (personal OneDrive sometimes
+ * returns them in lower case, sometimes in upper case). Unknown on one side: accepted (the
+ * index's account check already applies).
  */
 internal fun sameDrive(expected: String?, actual: String?): Boolean =
     expected.isNullOrBlank() || actual.isNullOrBlank() || expected.equals(actual, ignoreCase = true)

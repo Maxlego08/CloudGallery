@@ -1,35 +1,35 @@
 package fr.eva.cloudgallery.data.cloud.transfer
 
 /*
- * Logique pure des transferts OneDrive (testée en JVM).
+ * Pure logic of OneDrive transfers (tested on the JVM).
  */
 
 /**
- * Durée de réutilisation d'une URL `@microsoft.graph.downloadUrl`. La documentation Graph
- * annonce une validité courte (« might expire within minutes ») : l'URL est redemandée au-delà
- * de deux minutes, et aussitôt après un refus de l'hôte de téléchargement ([isExpiredUrlStatus]).
+ * How long a `@microsoft.graph.downloadUrl` URL is reused. The Graph documentation states a
+ * short validity ("might expire within minutes"): the URL is requested again after two
+ * minutes, and immediately after a rejection by the download host ([isExpiredUrlStatus]).
  */
 internal const val DOWNLOAD_URL_TTL_MS = 2 * 60_000L
 
-/** Une URL obtenue à [fetchedAtMs] peut encore servir à [nowMs] (horloge monotone). */
+/** A URL obtained at [fetchedAtMs] can still be used at [nowMs] (monotonic clock). */
 internal fun isUrlFresh(fetchedAtMs: Long, nowMs: Long, ttlMs: Long = DOWNLOAD_URL_TTL_MS): Boolean {
     val age = nowMs - fetchedAtMs
-    // Horloge revenue en arrière (ne devrait pas arriver avec une horloge monotone) : non fiable.
+    // Clock went backwards (should not happen with a monotonic clock): not reliable.
     return age in 0 until ttlMs
 }
 
 /**
- * Statuts de l'hôte de téléchargement qui signalent probablement une URL expirée ou révoquée (le
- * statut exact n'est pas documenté) : une nouvelle URL est demandée à Graph avant de réessayer.
+ * Download host statuses that probably signal an expired or revoked URL (the exact status is
+ * not documented): a new URL is requested from Graph before retrying.
  */
 internal fun isExpiredUrlStatus(code: Int): Boolean = code == 401 || code == 403 || code == 404 || code == 410
 
-/** En-tête `Content-Range` d'une réponse 206/416 : `bytes start-end/total` (ou total seul pour un 416). */
+/** `Content-Range` header of a 206/416 response: `bytes start-end/total` (or total alone for a 416). */
 internal data class ContentRange(val start: Long, val end: Long, val total: Long?)
 
 /**
- * Lecture de `Content-Range` (RFC 9110). Forme non satisfaisable (astérisque puis `/2048`) :
- * start = end = -1. Null si absent ou illisible.
+ * Parses `Content-Range` (RFC 9110). Unsatisfiable form (asterisk then `/2048`):
+ * start = end = -1. Null if absent or unreadable.
  */
 internal fun parseContentRange(header: String?): ContentRange? {
     val value = header?.trim() ?: return null
@@ -50,33 +50,33 @@ internal fun parseContentRange(header: String?): ContentRange? {
     return ContentRange(start, end, total)
 }
 
-/** Que faire de la réponse de l'hôte de téléchargement à une requête commençant à [offset]. */
+/** What to do with the download host's response to a request starting at [offset]. */
 internal sealed interface RangeOutcome {
-    /** 206 cohérent : les octets reçus s'ajoutent au fichier partiel. */
+    /** Consistent 206: the received bytes are appended to the partial file. */
     data object Append : RangeOutcome
 
-    /** 200 : contenu complet depuis le début (Range ignoré ou absent) ; le fichier partiel est vidé. */
+    /** 200: full content from the start (Range ignored or absent); the partial file is emptied. */
     data object RestartFromZero : RangeOutcome
 
-    /** 416 alors que le fichier partiel a déjà la taille attendue : rien à télécharger. */
+    /** 416 while the partial file already has the expected size: nothing to download. */
     data object AlreadyComplete : RangeOutcome
 
-    /** Réponse incohérente : le fichier partiel ne peut pas être complété sûrement. */
+    /** Inconsistent response: the partial file cannot be safely completed. */
     data class Invalid(val reason: String) : RangeOutcome
 }
 
 /**
- * Classement d'une réponse 2xx/416 de l'hôte de téléchargement pour une requête depuis [offset]
- * ([expectedSize] = taille annoncée par Graph). Graph documente qu'un Range peut être ignoré
- * (200 avec tout le contenu) : le fichier repart alors de zéro.
+ * Classifies a 2xx/416 response from the download host for a request from [offset]
+ * ([expectedSize] = size announced by Graph). Graph documents that a Range may be ignored
+ * (200 with the whole content): the file then restarts from zero.
  */
 internal fun classifyRangeResponse(code: Int, contentRange: ContentRange?, offset: Long, expectedSize: Long): RangeOutcome = when (code) {
     200 -> RangeOutcome.RestartFromZero
     206 -> when {
-        contentRange == null -> RangeOutcome.Invalid("206 sans Content-Range")
-        contentRange.start != offset -> RangeOutcome.Invalid("206 hors position")
+        contentRange == null -> RangeOutcome.Invalid("206 without Content-Range")
+        contentRange.start != offset -> RangeOutcome.Invalid("206 at wrong position")
         contentRange.total != null && expectedSize > 0 && contentRange.total != expectedSize ->
-            RangeOutcome.Invalid("206 de taille inattendue")
+            RangeOutcome.Invalid("206 with unexpected size")
         else -> RangeOutcome.Append
     }
     416 -> if (offset > 0 && offset == expectedSize && (contentRange?.total == null || contentRange.total == expectedSize)) {
@@ -87,7 +87,7 @@ internal fun classifyRangeResponse(code: Int, contentRange: ContentRange?, offse
     else -> RangeOutcome.Invalid("HTTP $code")
 }
 
-/** Reprise d'un fichier partiel. */
+/** Resumption of a partial file. */
 internal sealed interface ResumePlan {
     data object FromZero : ResumePlan
     data class From(val offset: Long) : ResumePlan
@@ -95,10 +95,10 @@ internal sealed interface ResumePlan {
 }
 
 /**
- * Plan de reprise d'un fichier partiel de [partLength] octets commencé pour la version
- * [partCTag], alors que l'élément est maintenant en version [currentCTag] avec [expectedSize]
- * octets. Une version inconnue (null) d'un côté ou de l'autre n'est jamais considérée comme
- * identique : reprise de zéro, comme après un changement de version ou un fichier trop long.
+ * Resume plan for a partial file of [partLength] bytes started for version [partCTag], while
+ * the item is now at version [currentCTag] with [expectedSize] bytes. An unknown (null)
+ * version on either side is never considered identical: restart from zero, as after a version
+ * change or a file that is too long.
  */
 internal fun resumePlan(partLength: Long, expectedSize: Long, partCTag: String?, currentCTag: String?): ResumePlan = when {
     partLength <= 0 -> ResumePlan.FromZero
@@ -109,9 +109,9 @@ internal fun resumePlan(partLength: Long, expectedSize: Long, partCTag: String?,
 }
 
 /**
- * Nom de fichier d'une copie OneDrive : `<sha1(itemId)[0..16]>_<sha1(cTag)[0..8]>.<ext>`. Aucun
- * nom d'utilisateur ni caractère de chemin : l'extension (minuscules, 1 à 5 caractères [a-z0-9])
- * vient du nom affiché, sinon du type MIME, sinon `bin`. Une nouvelle version donne un nouveau nom.
+ * File name of a OneDrive copy: `<sha1(itemId)[0..16]>_<sha1(cTag)[0..8]>.<ext>`. No user name
+ * or path character: the extension (lower case, 1 to 5 [a-z0-9] characters) comes from the
+ * display name, else the MIME type, else `bin`. A new version yields a new name.
  */
 internal fun cacheFileName(itemId: String, cTag: String?, displayName: String, mimeType: String?): String {
     val idHash = sha1Hex(itemId).take(16)
@@ -121,7 +121,7 @@ internal fun cacheFileName(itemId: String, cTag: String?, displayName: String, m
 
 private val EXTENSION = Regex("^[a-z0-9]{1,5}$")
 
-/** Extension sûre d'un fichier : celle du nom, sinon d'après le type MIME, sinon `bin`. */
+/** Safe file extension: the name's, else derived from the MIME type, else `bin`. */
 internal fun fileExtension(displayName: String, mimeType: String?): String {
     val fromName = displayName.substringAfterLast('.', "").lowercase()
     if (displayName.contains('.') && EXTENSION.matches(fromName)) return fromName
@@ -146,8 +146,8 @@ internal fun fileExtension(displayName: String, mimeType: String?): String {
 }
 
 /**
- * Nom affiché sûr pour l'appli qui reçoit un partage : sans séparateur de chemin ni caractère
- * réservé ou de contrôle, sans `.`/`..` seuls, au plus 120 caractères, jamais vide.
+ * Safe display name for the app receiving a share: no path separator, reserved or control
+ * character, no bare `.`/`..`, at most 120 characters, never empty.
  */
 internal fun safeDisplayName(name: String): String {
     val cleaned = name
@@ -158,21 +158,21 @@ internal fun safeDisplayName(name: String): String {
     val capped = if (cleaned.length <= MAX_DISPLAY_NAME) {
         cleaned
     } else {
-        // Coupe en gardant l'extension (et sans couper une paire de substitution).
+        // Truncate while keeping the extension (and without splitting a surrogate pair).
         val ext = cleaned.substringAfterLast('.', "").takeIf { it.isNotEmpty() && it.length <= 10 }
         val keep = MAX_DISPLAY_NAME - (ext?.length?.plus(1) ?: 0)
         var base = cleaned.take(keep)
         if (base.isNotEmpty() && Character.isHighSurrogate(base.last())) base = base.dropLast(1)
         if (ext != null) "$base.$ext" else base
     }
-    return capped.ifEmpty { "fichier" }
+    return capped.ifEmpty { "file" }
 }
 
 private const val MAX_DISPLAY_NAME = 120
 
 /**
- * Progression à publier (Room, notification, UI) : au plus une fois par seconde ou tous les
- * 4 Mio, et toujours à la fin du téléchargement ([bytes] atteint [totalBytes]).
+ * Progress to publish (Room, notification, UI): at most once per second or every 4 MiB, and
+ * always at the end of the download ([bytes] reaches [totalBytes]).
  */
 internal fun shouldEmitProgress(lastEmitMs: Long, nowMs: Long, lastBytes: Long, bytes: Long, totalBytes: Long = -1): Boolean =
     (totalBytes > 0 && bytes >= totalBytes) ||
@@ -182,27 +182,26 @@ internal fun shouldEmitProgress(lastEmitMs: Long, nowMs: Long, lastBytes: Long, 
 private const val PROGRESS_MIN_INTERVAL_MS = 1_000L
 private const val PROGRESS_MIN_BYTES = 4L * 1024 * 1024
 
-/** Suffixe des fichiers partiels (téléchargement en cours ou à reprendre). */
+/** Suffix of partial files (download in progress or to resume). */
 internal const val PART_SUFFIX = ".part"
 
-/** Fichiers partiels abandonnés supprimés au nettoyage au-delà de cet âge (24 h). */
+/** Abandoned partial files deleted during cleanup beyond this age (24 h). */
 internal const val PART_MAX_AGE_MS = 24L * 60 * 60 * 1000
 
 /**
- * Fichiers sans ligne en base supprimés au nettoyage au-delà de cet âge (1 h) : une copie juste
- * renommée mais pas encore enregistrée est toujours plus récente.
+ * Files without a database row deleted during cleanup beyond this age (1 h): a copy just
+ * renamed but not yet recorded is always more recent.
  */
 internal const val ORPHAN_MIN_AGE_MS = 60L * 60 * 1000
 
-/** Fichier d'un dossier de copies vu par le nettoyage : nom, fichier ordinaire, âge (ms). */
+/** File of a copies folder as seen by cleanup: name, regular file, age (ms). */
 internal data class SweepEntry(val name: String, val isFile: Boolean, val ageMs: Long)
 
 /**
- * Fichiers à supprimer au nettoyage d'un dossier de copies de l'appli : jamais un fichier
- * enregistré ([known] : noms des lignes `cached_file`), ni un fichier (ou son fichier partiel) en
- * cours d'utilisation ([busy] : noms de base des téléchargements en cours ou à reprendre), ni
- * un dossier ; fichiers partiels abandonnés depuis plus de [partMaxAgeMs], autres fichiers sans
- * ligne depuis plus de [orphanMinAgeMs].
+ * Files to delete when cleaning up one of the app's copies folders: never a recorded file
+ * ([known]: names of the `cached_file` rows), nor a file (or its partial file) in use ([busy]:
+ * base names of downloads in progress or to resume), nor a folder; partial files abandoned for
+ * more than [partMaxAgeMs], other row-less files for more than [orphanMinAgeMs].
  */
 internal fun filesToSweep(
     entries: List<SweepEntry>,

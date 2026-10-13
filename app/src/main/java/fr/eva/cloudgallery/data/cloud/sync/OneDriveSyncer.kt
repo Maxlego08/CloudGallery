@@ -44,21 +44,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Synchronisation OneDrive -> index local par la requête delta de Microsoft Graph (tout le
- * lecteur, lecture seule).
+ * OneDrive -> local index sync through the Microsoft Graph delta query (whole drive,
+ * read-only).
  *
- * - Chaque page est appliquée dès sa réception (écritures idempotentes par identifiant
- *   d'élément) ; le deltaLink n'est enregistré qu'à la fin : un passage interrompu reprend depuis
- *   le curseur précédent.
- * - Le curseur est lié au lecteur (drive.id) dès le début d'une énumération complète : un autre
- *   compte ne purge jamais l'index sans la confirmation de l'utilisateur.
- * - 410 (jeton expiré) ou dossier restauré : énumération complète, les éléments absents sont
- *   masqués. Le deltaLink est effacé dès la décision (un passage interrompu reprend par une
- *   énumération complète, jamais depuis l'ancien curseur).
- * - Limitation Graph : la fin de la pause est enregistrée ([CloudSyncThrottleStore]) et
- *   respectée même après un redémarrage du processus.
- * - Uniquement pour un compte connecté ; demandes regroupées, un seul passage à la fois.
- * - Journaux : ni jeton, ni deltaLink, ni nom de compte.
+ * - Each page is applied as soon as it is received (writes idempotent by item identifier);
+ *   the deltaLink is only saved at the end: an interrupted pass resumes from the previous
+ *   cursor.
+ * - The cursor is bound to the drive (drive.id) from the start of a full enumeration: another
+ *   account never purges the index without the user's confirmation.
+ * - 410 (expired token) or restored folder: full enumeration, missing items are hidden. The
+ *   deltaLink is cleared as soon as the decision is made (an interrupted pass resumes with a
+ *   full enumeration, never from the old cursor).
+ * - Graph throttling: the end of the pause is saved ([CloudSyncThrottleStore]) and honored
+ *   even after a process restart.
+ * - Only for a signed-in account; requests coalesced, one pass at a time.
+ * - Logs: no token, no deltaLink, no account name.
  */
 @Singleton
 class OneDriveSyncer @Inject constructor(
@@ -76,13 +76,13 @@ class OneDriveSyncer @Inject constructor(
     private val _state = MutableStateFlow(CloudSyncState())
     override val state: StateFlow<CloudSyncState> = _state.asStateFlow()
 
-    /** Un seul passage (ou une seule opération exclusive : déconnexion, purge) à la fois. */
+    /** Only one pass (or one exclusive operation: sign-out, purge) at a time. */
     private val mutex = Mutex()
 
-    /** Parent des passages lancés, pour pouvoir les interrompre avant une purge. */
+    /** Parent of launched passes, so they can be interrupted before a purge. */
     private val runs = SupervisorJob(scope.coroutineContext.job)
 
-    /** Numéro de demande : un passage démarré après une demande la satisfait (coalescence). */
+    /** Request number: a pass started after a request satisfies it (coalescing). */
     private val requestCounter = AtomicLong(0)
 
     @Volatile
@@ -94,7 +94,7 @@ class OneDriveSyncer @Inject constructor(
     init {
         if (feature.enabled) {
             scope.launch(io) { reloadState() }
-            // Connexion ou reconnexion réussie : premier passage sans attendre le premier plan.
+            // Successful sign-in or re-sign-in: first pass without waiting for the foreground.
             scope.launch {
                 auth.signInOutcomes.collect { if (it is SignInOutcome.Success) requestSync(CloudSyncReason.SIGN_IN) }
             }
@@ -110,8 +110,8 @@ class OneDriveSyncer @Inject constructor(
     override suspend fun syncAndWait(reason: CloudSyncReason): Boolean {
         if (!feature.enabled) return false
         val ticket = requestCounter.incrementAndGet()
-        // Enfant de [runs] : interrompu comme les autres passages par exclusive(). L'appelant
-        // annulé (travail arrêté par WorkManager : réseau perdu) arrête aussi le passage.
+        // Child of [runs]: interrupted like the other passes by exclusive(). A cancelled caller
+        // (work stopped by WorkManager: network lost) also stops the pass.
         val run = scope.async(runs + io) { runRequest(ticket, reason) }
         return try {
             run.await()
@@ -121,7 +121,7 @@ class OneDriveSyncer @Inject constructor(
         }
     }
 
-    /** Vrai si un passage a interrogé OneDrive pour cette demande (ou un passage démarré après elle). */
+    /** True if a pass queried OneDrive for this request (or a pass started after it). */
     private suspend fun runRequest(ticket: Long, reason: CloudSyncReason): Boolean = mutex.withLock {
         if (lastStartedRequest >= ticket) return@withLock true
         val startTicket = requestCounter.get()
@@ -142,26 +142,26 @@ class OneDriveSyncer @Inject constructor(
             mutex.withLock { block() }
         } finally {
             withContext(NonCancellable + io) {
-                // Données OneDrive éventuellement retirées : état repris de zéro. La pause Graph
-                // est relue (conservée sauf si les données du compte ont été purgées).
+                // OneDrive data possibly removed: state reset from scratch. The Graph pause is
+                // read back (kept unless the account's data has been purged).
                 _state.value = CloudSyncState()
                 reloadState()
             }
         }
     }
 
-    /** Vrai si un passage a réellement interrogé OneDrive (même en échec). */
+    /** True if a pass actually queried OneDrive (even if it failed). */
     private suspend fun runGuarded(reason: CloudSyncReason): Boolean {
         if (!stateLoaded) reloadState()
-        // Etat du compte pas encore lu (démarrage du processus) ou lecture précédente en échec.
+        // Account state not read yet (process startup) or previous read failed.
         auth.refreshIfNeeded()
         val signedIn = auth.state.value as? CloudAccountState.SignedIn ?: return false
         val accountId = signedIn.account.id
         val now = System.currentTimeMillis()
         val current = _state.value
         if (now < current.retryNotBefore) return false
-        // Compte pas encore vérifié (autre compte connecté) : passage sans attendre l'intervalle,
-        // l'accès au contenu reste bloqué jusque-là.
+        // Account not verified yet (another account signed in): pass without waiting for the
+        // interval, access to content stays blocked until then.
         val verified = cloudAccountAllowed(accountId, throttle.verifiedAccountId(), mismatch = false)
         val skippable = reason == CloudSyncReason.FOREGROUND || reason == CloudSyncReason.BACKGROUND
         if (skippable && verified && !shouldRunForegroundSync(current.lastSyncAt, current.retryNotBefore, now)) {
@@ -185,7 +185,7 @@ class OneDriveSyncer @Inject constructor(
 
     private suspend fun runSync(accountId: String?) {
         val driveId = graph.drive().id?.takeIf { it.isNotBlank() }
-            ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Lecteur OneDrive sans identifiant"))
+            ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("OneDrive drive without an identifier"))
         val previous = cursorDao.get(ONEDRIVE_PROVIDER)
         val start = planSyncStart(
             storedLink = previous?.cursor,
@@ -195,33 +195,33 @@ class OneDriveSyncer @Inject constructor(
             hasIndexedData = writer.hasIndexedData(),
         )
         if (start is SyncStart.AccountMismatch) {
-            Log.w(TAG, "OneDrive connecté différent de celui de l'index : synchronisation suspendue")
+            Log.w(TAG, "Signed-in OneDrive differs from the index's: sync suspended")
             _state.update { it.copy(accountMismatch = true) }
-            // Conservé : l'accès reste bloqué après un redémarrage, jusqu'à la purge.
+            // Persisted: access stays blocked after a restart, until the purge.
             withContext(NonCancellable) { throttle.setAccountMismatch() }
             return
         }
         _state.update { it.copy(accountMismatch = false) }
-        // Lecteur conforme à l'index : ce compte est vérifié (avant l'énumération, qui peut être longue).
+        // Drive matches the index: this account is verified (before the enumeration, which may be long).
         accountId?.let { throttle.setVerified(it) }
 
         val version = cloudCursorVersion(driveId, DELTA_SELECT_VERSION)
         val initialUrl = graph.initialDeltaUrl()
-        // Enumération complète interrompue (arrêt du processus, erreur réseau) : reprise depuis la
-        // dernière page appliquée, avec les éléments vus rejoués depuis le journal.
+        // Interrupted full enumeration (process stopped, network error): resume from the last
+        // applied page, with the seen items replayed from the journal.
         val resume = if (start is SyncStart.Full) loadResume(version) else null
         val run = resume?.run ?: CloudSyncRun(full = start is SyncStart.Full)
         var url = resume?.nextLink ?: (start as? SyncStart.Incremental)?.deltaLink ?: initialUrl
-        // Journal de reprise utilisable (désactivé pour ce passage après une erreur d'écriture).
+        // Resume journal usable (disabled for this pass after a write error).
         var journaling = when {
             resume != null -> {
-                Log.i(TAG, "Reprise de l'énumération complète après ${resume.pages} pages")
+                Log.i(TAG, "Resuming full enumeration after ${resume.pages} pages")
                 true
             }
             run.full -> bindDrive(version)
             else -> false
         }
-        // Pages appliquées et journalisées de l'énumération complète en cours.
+        // Pages applied and journaled for the current full enumeration.
         var pages = resume?.pages ?: 0
         var resumedLinkPending = resume != null
         var restarts = 0
@@ -230,9 +230,9 @@ class OneDriveSyncer @Inject constructor(
             val page = try {
                 graph.deltaPage(url)
             } catch (e: GraphResyncRequiredException) {
-                // Jeton delta expiré : nouvelle énumération complète (Location, sinon delta initial).
+                // Delta token expired: new full enumeration (Location, else initial delta).
                 if (++restarts > MAX_FULL_RESTARTS) throw CloudException(CloudErrorCode.SERVER, e)
-                Log.i(TAG, "Jeton delta expiré : énumération complète")
+                Log.i(TAG, "Delta token expired: full enumeration")
                 journaling = bindDrive(version)
                 run.restartFull()
                 url = resyncStartUrl(e.location, initialUrl)
@@ -240,10 +240,10 @@ class OneDriveSyncer @Inject constructor(
                 resumedLinkPending = false
                 continue
             } catch (e: GraphHttpException) {
-                // Lien de suite repris refusé (expiré, inconnu) : l'énumération repart du début.
+                // Resumed continuation link rejected (expired, unknown): the enumeration restarts from the beginning.
                 if (!resumedLinkPending || !isRejectedResumeLink(e.status)) throw e
                 if (++restarts > MAX_FULL_RESTARTS) throw e
-                Log.i(TAG, "Lien de reprise refusé (HTTP ${e.status}) : énumération complète depuis le début")
+                Log.i(TAG, "Resume link rejected (HTTP ${e.status}): full enumeration from the beginning")
                 journaling = bindDrive(version)
                 run.restartFull()
                 url = initialUrl
@@ -255,8 +255,8 @@ class OneDriveSyncer @Inject constructor(
             writer.applyPage(page.value, run, System.currentTimeMillis())
             processed += page.value.size
             _state.update { it.copy(processedItems = processed) }
-            // Page appliquée (transaction terminée) : ses éléments vus sont journalisés avant
-            // l'enregistrement du lien suivant.
+            // Page applied (transaction finished): its seen items are journaled before the next
+            // link is saved.
             val ops = run.drainPageOps()
             if (run.full && journaling) {
                 journaling = journalPage(ops)
@@ -265,15 +265,15 @@ class OneDriveSyncer @Inject constructor(
 
             val deltaLink = when (val step = deltaPageStep(run.full, run.restoredFolderWithHiddenItems, page.nextLink, page.deltaLink)) {
                 DeltaPageStep.RestartFull -> {
-                    // Dossier restauré : ses éléments masqués ne sont pas forcément renvoyés un par
-                    // un. Le deltaLink a déjà été effacé avec la page (décision durable : le dossier
-                    // étant enregistré, un passage interrompu ne pourrait plus la reprendre) ;
-                    // l'énumération complète démarre sans attendre la fin du flux delta.
+                    // Restored folder: its hidden items are not necessarily returned one by one.
+                    // The deltaLink was already cleared with the page (durable decision: with the
+                    // folder saved, an interrupted pass could no longer make it again); the full
+                    // enumeration starts without waiting for the end of the delta feed.
                     journaling = bindDrive(version)
                     if (++restarts > MAX_FULL_RESTARTS) {
-                        throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Trop d'énumérations complètes"))
+                        throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Too many full enumerations"))
                     }
-                    Log.i(TAG, "Dossier OneDrive restauré : énumération complète")
+                    Log.i(TAG, "OneDrive folder restored: full enumeration")
                     run.restartFull()
                     url = initialUrl
                     pages = 0
@@ -288,7 +288,7 @@ class OneDriveSyncer @Inject constructor(
                     continue
                 }
                 DeltaPageStep.MissingLink ->
-                    throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Page delta sans lien de suite"))
+                    throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Delta page without a continuation link"))
                 is DeltaPageStep.Finish -> step.deltaLink
             }
             val now = System.currentTimeMillis()
@@ -307,20 +307,20 @@ class OneDriveSyncer @Inject constructor(
             try {
                 throttle.clearRetry()
             } catch (e: Exception) {
-                Log.w(TAG, "Effacement de la pause Microsoft Graph impossible", e)
+                Log.w(TAG, "Failed to clear the Microsoft Graph pause", e)
             }
-            // Enumération terminée : plus rien à reprendre.
+            // Enumeration finished: nothing left to resume.
             if (run.full) persistResume { throttle.clearResume() }
             return
         }
     }
 
-    /** Enumération complète reprise : passage, lien de la page suivante, pages déjà appliquées. */
+    /** Resumed full enumeration: pass, next page link, pages already applied. */
     private class Resume(val run: CloudSyncRun, val nextLink: String, val pages: Int)
 
     /**
-     * Etat de reprise utilisable pour [version] ([canResumeEnumeration]), sinon null : l'état
-     * périmé ou incohérent est alors effacé par la nouvelle énumération (bindDrive).
+     * Usable resume state for [version] ([canResumeEnumeration]), otherwise null: a stale or
+     * inconsistent state is then cleared by the new enumeration (bindDrive).
      */
     private suspend fun loadResume(version: String): Resume? = try {
         val meta = throttle.resumeMeta()
@@ -332,25 +332,25 @@ class OneDriveSyncer @Inject constructor(
             if (journal != null && canResumeEnumeration(meta, version, System.currentTimeMillis(), journal)) {
                 Resume(CloudSyncRun.resumed(journal.seen, journal.seenFolders), link, meta.pages)
             } else {
-                Log.i(TAG, "Reprise de l'énumération impossible (état périmé ou incomplet) : départ du début")
+                Log.i(TAG, "Cannot resume enumeration (stale or incomplete state): starting from the beginning")
                 null
             }
         }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Lecture de l'état de reprise impossible", e)
+        Log.w(TAG, "Failed to read the resume state", e)
         null
     }
 
     /**
-     * Journalise les éléments vus d'une page appliquée. Faux si la reprise devient impossible
-     * pour ce passage (identifiant non journalisable, erreur d'écriture) : l'état de reprise est
-     * alors effacé, un arrêt fera repartir l'énumération du début (comme avant).
+     * Journals the seen items of an applied page. False if resuming becomes impossible for this
+     * pass (identifier that cannot be journaled, write error): the resume state is then cleared,
+     * and a stop will restart the enumeration from the beginning (as before).
      */
     private suspend fun journalPage(ops: List<SeenEntry>): Boolean {
         if (ops.any { !isJournalSafeId(it.id) }) {
-            Log.w(TAG, "Identifiant OneDrive non journalisable : reprise désactivée pour ce passage")
+            Log.w(TAG, "OneDrive identifier cannot be journaled: resume disabled for this pass")
             persistResume { throttle.clearResume() }
             return false
         }
@@ -359,20 +359,20 @@ class OneDriveSyncer @Inject constructor(
         }
     }
 
-    /** Ecriture de l'état de reprise : un échec n'interrompt jamais la synchronisation. */
+    /** Writes the resume state: a failure never interrupts the sync. */
     private suspend fun persistResume(block: suspend () -> Unit): Boolean = try {
         block()
         true
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Enregistrement de l'état de reprise impossible", e)
+        Log.w(TAG, "Failed to save the resume state", e)
         false
     }
 
     /**
-     * Lie le curseur au lecteur avant une énumération complète et efface le deltaLink : un passage
-     * interrompu reprendra par une énumération complète du même lecteur.
+     * Binds the cursor to the drive before a full enumeration and clears the deltaLink: an
+     * interrupted pass will resume with a full enumeration of the same drive.
      */
     private suspend fun bindDrive(version: String): Boolean {
         val previous = cursorDao.get(ONEDRIVE_PROVIDER)
@@ -386,8 +386,8 @@ class OneDriveSyncer @Inject constructor(
                 lastError = previous?.lastError,
             ),
         )
-        // Nouvelle énumération : ancien état de reprise et journal effacés. Vrai si la reprise
-        // de celle-ci est possible.
+        // New enumeration: old resume state and journal cleared. True if this one can be
+        // resumed.
         return persistResume { throttle.beginEnumeration(version, System.currentTimeMillis()) }
     }
 
@@ -402,26 +402,26 @@ class OneDriveSyncer @Inject constructor(
             try {
                 withContext(NonCancellable) { throttle.setRetryNotBefore(until) }
             } catch (e: Exception) {
-                Log.w(TAG, "Enregistrement de la pause Microsoft Graph impossible", e)
+                Log.w(TAG, "Failed to save the Microsoft Graph pause", e)
             }
         }
         if (error is CloudException) {
-            Log.w(TAG, "Synchronisation OneDrive interrompue : $code")
+            Log.w(TAG, "OneDrive sync interrupted: $code")
         } else {
-            Log.e(TAG, "Echec de la synchronisation OneDrive", error)
+            Log.e(TAG, "OneDrive sync failed", error)
         }
-        // L'erreur est conservée avec le curseur (inchangé) ; sans curseur, seulement en mémoire.
+        // The error is kept with the (unchanged) cursor; without a cursor, only in memory.
         try {
             withContext(NonCancellable) {
                 cursorDao.get(ONEDRIVE_PROVIDER)?.let { cursorDao.upsert(it.copy(lastError = code.name)) }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Enregistrement de l'erreur de synchronisation impossible", e)
+            Log.w(TAG, "Failed to save the sync error", e)
         }
         _state.update { it.copy(lastError = code) }
     }
 
-    /** Relit le curseur et le nombre d'éléments (base locale). */
+    /** Reads back the cursor and the item count (local database). */
     private suspend fun reloadState() {
         try {
             val cursor = cursorDao.get(ONEDRIVE_PROVIDER)
@@ -432,20 +432,20 @@ class OneDriveSyncer @Inject constructor(
             _state.update {
                 it.copy(
                     itemCount = count,
-                    // Pause Graph enregistrée (survit au redémarrage du processus et à exclusive()).
+                    // Saved Graph pause (survives a process restart and exclusive()).
                     retryNotBefore = maxOf(it.retryNotBefore, pausedUntil),
-                    // Autre compte détecté (survit au redémarrage du processus, effacé par la purge).
+                    // Other account detected (survives a process restart, cleared by the purge).
                     accountMismatch = it.accountMismatch || mismatch,
                     lastSyncAt = cursor?.lastSyncAt ?: 0L,
                     lastFullSyncAt = cursor?.lastFullSyncAt ?: 0L,
-                    // Avec un curseur, l'erreur enregistrée fait foi ; sans curseur, seule la mémoire la porte.
+                    // With a cursor, the saved error is authoritative; without one, only memory holds it.
                     lastError = if (cursor != null) cursor.lastError?.let(::parseErrorCode) else it.lastError,
                 )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Lecture de l'état de synchronisation OneDrive impossible", e)
+            Log.w(TAG, "Failed to read the OneDrive sync state", e)
         }
     }
 
@@ -457,7 +457,7 @@ class OneDriveSyncer @Inject constructor(
     private companion object {
         const val TAG = "OneDriveSync"
 
-        /** Enumérations complètes relancées au plus par passage (410, dossier restauré). */
+        /** Maximum full enumerations restarted per pass (410, restored folder). */
         const val MAX_FULL_RESTARTS = 2
 
         fun parseErrorCode(name: String): CloudErrorCode =

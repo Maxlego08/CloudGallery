@@ -5,44 +5,44 @@ import androidx.media3.common.MediaItem
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.OfflineFile
 
-/** Source physique choisie pour lire un média. */
+/** Physical source chosen to play a media item. */
 sealed interface PlaybackSource {
-    /** Fichier présent sur l'appareil (URI `content://` MediaStore). */
+    /** File present on the device (MediaStore `content://` URI). */
     data class Local(val uri: Uri, val mimeType: String?) : PlaybackSource
 
     /**
-     * Copie hors ligne d'un élément OneDrive (fichier de l'appli, lu tel quel). [file] a été
-     * vérifié (présent, taille attendue) hors du thread principal.
+     * Offline copy of a OneDrive item (app-owned file, played as is). [file] has been
+     * checked (present, expected size) off the main thread.
      */
     data class Offline(val file: OfflineFile, val mimeType: String?) : PlaybackSource
 
     /**
-     * Elément OneDrive lu en streaming (URL de téléchargement temporaire obtenue à l'ouverture,
-     * jamais conservée ici). [cTag] : version du contenu connue de l'index.
+     * OneDrive item played by streaming (temporary download URL obtained when opening,
+     * never stored here). [cTag]: content version known to the index.
      */
     data class Remote(val itemId: String, val cTag: String?, val mimeType: String?) : PlaybackSource
 
-    /** Aucune source lisible maintenant. */
+    /** No playable source right now. */
     data class Unavailable(val reason: UnavailableReason) : PlaybackSource
 }
 
-/** Pourquoi un média ne peut pas être lu. */
+/** Why a media item cannot be played. */
 enum class UnavailableReason {
-    /** Elément OneDrive, mais accès impossible (compte déconnecté, autre compte, OneDrive non configuré). */
+    /** OneDrive item, but access is impossible (signed out, other account, OneDrive not set up). */
     SIGNED_OUT,
 
-    /** Ni fichier local, ni copie hors ligne, ni élément OneDrive visible. */
+    /** No local file, no offline copy and no visible OneDrive item. */
     NO_SOURCE,
 }
 
 /**
- * Choisit la source de lecture d'un média, par priorité : fichier local visible, copie hors
- * ligne intacte, puis élément OneDrive en streaming si [remoteAllowed] (compte connecté, cf.
- * CloudAccessGuard). Jamais l'URI principale du média en repli.
+ * Picks the playback source of a media item, by priority: visible local file, intact offline
+ * copy, then OneDrive item streamed if [remoteAllowed] (account signed in, see
+ * CloudAccessGuard). Never falls back to the media item's primary URI.
  */
 object PlaybackSourceResolver {
 
-    /** Choix de la source, par priorité (fonction pure). */
+    /** Source choice, by priority (pure function). */
     internal enum class Choice { LOCAL, OFFLINE, REMOTE, SIGNED_OUT, NO_SOURCE }
 
     internal fun choose(
@@ -59,8 +59,8 @@ object PlaybackSourceResolver {
     }
 
     /**
-     * Source de [details]. [offlineFileOk] : la copie hors ligne existe et a la taille attendue
-     * (vérifié par l'appelant sur le dispatcher d'E/S, voir [isOfflineFileUsable]).
+     * Source of [details]. [offlineFileOk]: the offline copy exists and has the expected size
+     * (checked by the caller on the I/O dispatcher, see [isOfflineFileUsable]).
      */
     fun resolve(details: MediaDetails, remoteAllowed: Boolean, offlineFileOk: Boolean = false): PlaybackSource {
         val local = details.localSource?.uri
@@ -76,19 +76,19 @@ object PlaybackSourceResolver {
     }
 
     /**
-     * Vrai si la lecture de [details] passerait par OneDrive (l'accès doit alors être vérifié).
-     * [offlineFileOk] : copie hors ligne utilisable.
+     * True if playing [details] would go through OneDrive (access must then be checked).
+     * [offlineFileOk]: usable offline copy.
      */
     fun needsRemote(details: MediaDetails, offlineFileOk: Boolean = false): Boolean =
         choose(details.localSource?.uri != null, details.cloudSource != null, remoteAllowed = true, offlineFileOk) == Choice.REMOTE
 
-    /** Copie hors ligne présente avec la taille enregistrée (à appeler sur le dispatcher d'E/S). */
+    /** Offline copy present with the recorded size (call on the I/O dispatcher). */
     fun isOfflineFileUsable(file: OfflineFile?): Boolean =
         file != null && file.file.isFile && (file.sizeBytes <= 0 || file.file.length() == file.sizeBytes)
 
-    /** Fichier progressif local : ExoPlayer détecte le conteneur lui-même (pas de type MIME forcé). */
+    /** Local progressive file: ExoPlayer detects the container itself (no forced MIME type). */
     fun toMediaItem(source: PlaybackSource.Local): MediaItem = MediaItem.fromUri(source.uri)
 
-    /** Copie hors ligne : fichier de l'appli lu directement (`file://`). */
+    /** Offline copy: app-owned file played directly (`file://`). */
     fun toMediaItem(source: PlaybackSource.Offline): MediaItem = MediaItem.fromUri(Uri.fromFile(source.file.file))
 }

@@ -7,14 +7,14 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Expression FTS sûre, libellés de date de l'index, correspondance des noms, historique. */
+/** Safe FTS expression, index date labels, name matching, history. */
 class SearchLogicTest {
 
     @Test
     fun matchExpression_prefixesEachWord_withImplicitAnd() {
         assertEquals("août* 2026*", ftsMatchExpression("Août 2026"))
         assertEquals("vacances*", ftsMatchExpression("  vacances  "))
-        // Nom de fichier : découpé comme par le tokeniseur (« IMG_2026.jpg » -> img, 2026, jpg).
+        // File name: split as the tokenizer does ("IMG_2026.jpg" -> img, 2026, jpg).
         assertEquals("img* 2026* jpg*", ftsMatchExpression("IMG_2026.jpg"))
     }
 
@@ -32,7 +32,7 @@ class SearchLogicTest {
         )
         for (input in hostile) {
             val expression = ftsMatchExpression(input) ?: continue
-            // Seulement des mots en minuscules suivis de « * », séparés par des espaces.
+            // Only lowercase words followed by "*", separated by spaces.
             assertTrue(input, expression.split(' ').all { Regex("[\\p{L}\\p{N}]+\\*").matches(it) })
             assertFalse(input, Regex("\\b(AND|OR|NOT|NEAR)\\b").containsMatchIn(expression))
         }
@@ -74,14 +74,14 @@ class SearchLogicTest {
     @Test
     fun recentSearch_isMovedFirst_withoutDuplicates_andBounded() {
         assertEquals(listOf("plage", "août"), withRecentSearch(listOf("août"), "  plage "))
-        // Même recherche (casse, accents, espaces) : remontée, pas dupliquée.
+        // Same search (case, accents, spaces): moved to the top, not duplicated.
         assertEquals(listOf("Aout  2026".replace("  ", " "), "plage"), withRecentSearch(listOf("plage", "août 2026"), "Aout  2026"))
         val full = (1..MAX_RECENT_SEARCHES).map { "q$it" }
         val next = withRecentSearch(full, "new")
         assertEquals(MAX_RECENT_SEARCHES, next.size)
         assertEquals("new", next.first())
         assertFalse(next.contains("q$MAX_RECENT_SEARCHES"))
-        // Saisie sans mot : historique inchangé.
+        // Input without any word: history unchanged.
         assertEquals(listOf("plage"), withRecentSearch(listOf("plage"), " -* "))
     }
 }

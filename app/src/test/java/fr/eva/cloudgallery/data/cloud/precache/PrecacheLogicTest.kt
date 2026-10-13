@@ -65,7 +65,7 @@ class PrecacheLogicTest {
 
     @Test
     fun gridBucket_followsCellWidthAtDefaultZoom() {
-        // 1080 px de large, 3 colonnes : cellules de 360 px, palier 384.
+        // 1080 px wide, 3 columns: 360 px cells, 384 bucket.
         assertEquals(384, precacheGridBucket(1080))
         assertEquals(512, precacheGridBucket(1440))
         assertEquals(256, precacheGridBucket(720))
@@ -73,12 +73,12 @@ class PrecacheLogicTest {
 
     @Test
     fun previewSide_matchesViewerOnUnmeteredNetwork() {
-        // Écran de 2340 px : palier 2048, sauf petite image ou palier refusé par Graph.
+        // 2340 px screen: 2048 bucket, unless the image is small or Graph refuses that bucket.
         assertEquals(2048, precachePreviewSide(2340, imageLongPx = 4000, isVideo = false, maxAcceptedSide = 2048))
         assertEquals(CLOUD_PREVIEW_PX, precachePreviewSide(2340, imageLongPx = 1200, isVideo = false, maxAcceptedSide = 2048))
         assertEquals(CLOUD_PREVIEW_PX, precachePreviewSide(2340, imageLongPx = 4000, isVideo = false, maxAcceptedSide = CLOUD_PREVIEW_PX))
         assertEquals(2048, precachePreviewSide(2340, imageLongPx = null, isVideo = false, maxAcceptedSide = 2048))
-        // Vidéo : aperçu fixe de la visionneuse.
+        // Video: the viewer's fixed preview.
         assertEquals(PRECACHE_VIDEO_PREVIEW_PX, precachePreviewSide(2340, imageLongPx = 3840, isVideo = true, maxAcceptedSide = 2048))
     }
 
@@ -86,18 +86,18 @@ class PrecacheLogicTest {
     fun estimatedBytes_countsThumbnailAndPreview() {
         assertEquals(0L, precacheEstimatedBytes(0))
         assertEquals(2 * (ESTIMATED_GRID_BYTES + ESTIMATED_PREVIEW_BYTES), precacheEstimatedBytes(2))
-        // Pas de débordement pour une grosse bibliothèque.
+        // No overflow for a large library.
         assertEquals(100_000L * (ESTIMATED_GRID_BYTES + ESTIMATED_PREVIEW_BYTES), precacheEstimatedBytes(100_000))
     }
 
     @Test
     fun hasRoom_keepsTwoGigabytesOrFivePercent() {
-        // Volume de 20 Go : 5 % = 1 Go, sous le minimum de 2 Go.
+        // 20 GB volume: 5% = 1 GB, below the 2 GB minimum.
         val small = 20_000_000_000L
         assertTrue(precacheHasRoom(MIN_FREE_BYTES + 1, small))
         assertFalse(precacheHasRoom(MIN_FREE_BYTES, small))
         val large = 1_000_000_000_000L
-        // 5 % de 1 To = 50 Go.
+        // 5% of 1 TB = 50 GB.
         assertFalse(precacheHasRoom(40_000_000_000L, large))
         assertTrue(precacheHasRoom(50_000_000_001L, large))
     }

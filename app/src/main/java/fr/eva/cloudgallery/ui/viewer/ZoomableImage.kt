@@ -65,8 +65,8 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * Etat de zoom/translation d'une page de la visionneuse. Toutes les valeurs sont en pixels.
- * Les animations (double tap, inertie, retour du glisser vertical) tournent dans [scope].
+ * Zoom/translation state of a viewer page. All values are in pixels.
+ * Animations (double tap, inertia, vertical drag spring-back) run in [scope].
  */
 @Stable
 internal class ZoomState(private val scope: CoroutineScope) {
@@ -77,7 +77,7 @@ internal class ZoomState(private val scope: CoroutineScope) {
     var offsetY by mutableFloatStateOf(0f)
         private set
 
-    /** Translation verticale du geste « glisser vers le bas pour fermer / vers le haut pour les détails ». */
+    /** Vertical translation of the "swipe down to close / swipe up for details" gesture. */
     var dragY by mutableFloatStateOf(0f)
         private set
 
@@ -108,7 +108,7 @@ internal class ZoomState(private val scope: CoroutineScope) {
         dragY = 0f
     }
 
-    /** Pincement : [focalX]/[focalY] relatifs au centre du conteneur. */
+    /** Pinch: [focalX]/[focalY] relative to the container's center. */
     fun transform(zoom: Float, panX: Float, panY: Float, focalX: Float, focalY: Float) {
         val newScale = ZoomMath.clampScale(scale * zoom)
         val ox = ZoomMath.zoomAround(offsetX, scale, newScale, focalX) + panX
@@ -118,7 +118,7 @@ internal class ZoomState(private val scope: CoroutineScope) {
         offsetY = clampY(oy, newScale)
     }
 
-    /** Déplacement de l'image zoomée. Renvoie la part horizontale non absorbée (bord atteint). */
+    /** Pans the zoomed image. Returns the horizontal share that was not absorbed (edge reached). */
     fun pan(dx: Float, dy: Float): Float {
         val targetX = offsetX + dx
         val clampedX = clampX(targetX, scale)
@@ -128,11 +128,11 @@ internal class ZoomState(private val scope: CoroutineScope) {
     }
 
     fun dragVertical(dy: Float) {
-        // Résistance vers le haut : le geste ne sert qu'à ouvrir le panneau Détails.
+        // Resistance upwards: the gesture only serves to open the Details sheet.
         dragY += if (dragY + dy < 0f) dy * 0.4f else dy
     }
 
-    /** Double tap : 1x <-> 2,5x autour du point touché ([x], [y] dans le repère du conteneur). */
+    /** Double tap: 1x <-> 2.5x around the touched point ([x], [y] in the container's space). */
     fun animateDoubleTap(x: Float, y: Float) {
         stop()
         val s0 = scale
@@ -154,7 +154,7 @@ internal class ZoomState(private val scope: CoroutineScope) {
         }
     }
 
-    /** Inertie après un déplacement de l'image zoomée, bornée aux bords. */
+    /** Inertia after panning the zoomed image, bounded by the edges. */
     fun fling(vx: Float, vy: Float, decay: DecayAnimationSpec<Offset>) {
         if (!isZoomed) return
         stop()
@@ -180,25 +180,25 @@ internal class ZoomState(private val scope: CoroutineScope) {
     }
 }
 
-/** Rappels des gestes de page vers l'écran (pager, chrome, fermeture). */
+/** Callbacks from page gestures to the screen (pager, chrome, close). */
 internal class PageGestureCallbacks(
     val onTap: () -> Unit,
     val onDismiss: () -> Unit,
     val onSwipeUp: () -> Unit,
-    /** Progression 0..1 du glisser vers le bas (fond et chrome s'estompent). */
+    /** 0..1 progress of the downward drag (background and chrome fade out). */
     val onDragProgress: (Float) -> Unit,
-    /** Déplacement horizontal (px, sens du doigt) à transmettre au pager quand l'image zoomée est au bord. */
+    /** Horizontal move (px, finger direction) to forward to the pager when the zoomed image is at the edge. */
     val onPagerDrag: (Float) -> Unit,
-    /** Fin d'un geste ayant entraîné le pager : vitesse horizontale du doigt en px/s. */
+    /** End of a gesture that dragged the pager: horizontal finger velocity in px/s. */
     val onPagerDragEnd: (Float) -> Unit,
 )
 
 private enum class GestureMode { Undecided, Transform, Pan, Vertical, Ignore }
 
 /**
- * Conteneur de page : gère tap / double tap, pincement, déplacement avec inertie, transfert au pager
- * au bord de l'image et glisser vertical. [content] est dessiné dans la zone ajustée (Fit) et suit le zoom.
- * À 1x, les glissements horizontaux ne sont pas consommés : le pager les reçoit normalement.
+ * Page container: handles tap / double tap, pinch, pan with inertia, hand-off to the pager at the
+ * image edge, and vertical drag. [content] is drawn in the fitted (Fit) area and follows the zoom.
+ * At 1x, horizontal drags are not consumed: the pager receives them normally.
  */
 @Composable
 internal fun ZoomableBox(
@@ -377,18 +377,18 @@ private suspend fun PointerInputScope.detectViewerGestures(
 }
 
 /**
- * Page image zoomable. Selon [source] :
- * - fichier local MediaStore : miniature MediaStore instantanée, puis image bornée à 2 x l'écran
- *   (≤ 4096 px), puis rechargement haute résolution (≤ ~24 MP, plafond Coil relevé en
- *   conséquence) au-delà de 2,5x ;
- * - fichier de l'appli (original OneDrive téléchargé) : même chose, avec l'aperçu OneDrive en
- *   attendant le décodage ;
- * - aperçu OneDrive : zoomable ; [onHiResWanted] signale l'entrée et la sortie du zoom profond
- *   (avec le grand côté demandé en px) pour proposer ou charger l'original.
- * L'état de zoom est propre au média : passer de l'aperçu à l'original garde le cadrage.
+ * Zoomable image page. Depending on [source]:
+ * - local MediaStore file: instant MediaStore thumbnail, then image bounded to 2 x the screen
+ *   (≤ 4096 px), then high-resolution reload (≤ ~24 MP, Coil cap raised accordingly)
+ *   beyond 2.5x;
+ * - app-owned file (downloaded OneDrive original): same, with the OneDrive preview shown
+ *   while decoding;
+ * - OneDrive preview: zoomable; [onHiResWanted] reports entering and leaving deep zoom
+ *   (with the requested long side in px) to offer or load the original.
+ * The zoom state belongs to the media: switching from the preview to the original keeps the framing.
  *
- * TODO(viewer): décodage par tuiles (BitmapRegionDecoder) pour afficher les très grandes images
- *  (> 24 MP, panoramas) à pleine résolution sans risque d'OOM.
+ * TODO(viewer): tiled decoding (BitmapRegionDecoder) to display very large images
+ *  (> 24 MP, panoramas) at full resolution without risking an OOM.
  */
 @Composable
 internal fun ZoomableImage(
@@ -409,7 +409,7 @@ internal fun ZoomableImage(
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
     val currentOnHiResWanted by rememberUpdatedState(onHiResWanted)
 
-    // Fichier décodé par Coil (local ou original téléchargé) ; null pour un aperçu OneDrive seul.
+    // File decoded by Coil (local or downloaded original); null for a OneDrive preview alone.
     val fileUri: Uri? = when (source) {
         is ViewerImageSource.MediaStore -> source.uri
         is ViewerImageSource.File -> source.uri
@@ -425,8 +425,8 @@ internal fun ZoomableImage(
         val longDp = max(configuration.screenWidthDp, configuration.screenHeightDp)
         ZoomMath.baseMaxSide((longDp * density.density).toInt())
     }
-    // Dimensions inconnues dans l'index (OneDrive peut renvoyer 0 x 0) : lues dans le fichier
-    // téléchargé ou la copie hors ligne (en-tête seulement, sur le dispatcher d'E/S).
+    // Dimensions unknown in the index (OneDrive may return 0 x 0): read from the downloaded
+    // file or the offline copy (header only, on the I/O dispatcher).
     val fileBounds by produceState<Pair<Int, Int>?>(null, source) {
         value = if (source is ViewerImageSource.File && (media.width <= 0 || media.height <= 0)) {
             withContext(Dispatchers.IO) { imageFileBounds(source.uri) }
@@ -442,15 +442,15 @@ internal fun ZoomableImage(
         fileUri?.let { fullImageRequest(context, it, version, baseSide) }
     }
 
-    // Taille du contenu gardée d'une source à l'autre (aperçu puis original OneDrive) : pas de
-    // saut. Fichier local modifié (rotation sans perte : même média, nouvelle date) : taille relue.
+    // Content size kept from one source to the next (preview then OneDrive original): no jump.
+    // Modified local file (lossless rotation: same media, new date): size re-read.
     val localVersion = (source as? ViewerImageSource.MediaStore)?.dateModified
     var loadedSize by remember(media.id, localVersion) { mutableStateOf<Size?>(null) }
     var baseLoaded by remember(fileUri, version) { mutableStateOf(false) }
     var hiResWanted by remember(fileUri, version) { mutableStateOf(false) }
     var hiResLoaded by remember(fileUri, version) { mutableStateOf(false) }
 
-    // Taille du contenu : celle de l'image décodée (orientation EXIF appliquée), sinon les métadonnées.
+    // Content size: that of the decoded image (EXIF orientation applied), otherwise the metadata.
     val size = loadedSize
     val swap = media.orientation % 180 != 0
     val contentW = size?.width ?: (if (swap) media.height else media.width).toFloat()
@@ -480,7 +480,7 @@ internal fun ZoomableImage(
     val isCloudPreview = source is ViewerImageSource.CloudPreview
     LaunchedEffect(state, isCurrentPage, isCloudPreview) {
         if (isCurrentPage && isCloudPreview) {
-            // Entrée / sortie du zoom profond (pas chaque image du pincement).
+            // Entering / leaving deep zoom (not every frame of the pinch).
             snapshotFlow { state.scale > ZoomMath.HI_RES_THRESHOLD }.collect { deep ->
                 val (fw, fh) = state.fitted
                 currentOnHiResWanted(deep, (state.scale * max(fw, fh)).toInt())
@@ -510,7 +510,7 @@ internal fun ZoomableImage(
                             placeholder = false,
                         )
                     } else if (source is ViewerImageSource.File && source.cloud != null) {
-                        // Aperçu OneDrive pendant le décodage du fichier (copie hors ligne : cache seulement).
+                        // OneDrive preview while the file is decoded (offline copy: cache only).
                         CloudPreviewImage(
                             ref = source.cloud,
                             side = source.previewSide,
@@ -551,8 +551,8 @@ internal fun ZoomableImage(
 }
 
 /**
- * Dimensions d'une image de l'appli ([uri] `file://`) lues dans son en-tête, sans décoder les
- * pixels ; null si illisibles. Appel bloquant : dispatcher d'E/S uniquement.
+ * Dimensions of an app-owned image ([uri] `file://`) read from its header, without decoding the
+ * pixels; null if unreadable. Blocking call: I/O dispatcher only.
  */
 private fun imageFileBounds(uri: Uri): Pair<Int, Int>? {
     val path = uri.path ?: return null

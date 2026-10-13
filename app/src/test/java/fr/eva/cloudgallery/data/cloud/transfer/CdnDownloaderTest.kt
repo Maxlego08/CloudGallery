@@ -38,7 +38,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Téléchargement depuis l'hôte OneDrive avec un transport factice (aucun accès réseau). */
+/** Download from the OneDrive host with a fake transport (no network access). */
 class CdnDownloaderTest {
 
     @get:Rule
@@ -93,10 +93,10 @@ class CdnDownloaderTest {
     private suspend fun expectError(expected: DownloadError, block: suspend () -> Unit) {
         try {
             block()
-            fail("$expected attendu")
+            fail("$expected expected")
         } catch (e: CloudDownloadException) {
             assertEquals(expected, e.error)
-            // Jamais d'URL ni de jeton dans un message d'erreur.
+            // Never a URL or token in an error message.
             generateSequence<Throwable>(e) { it.cause }.forEach { assertFalse(it.message.orEmpty().contains("tempauth")) }
         }
     }
@@ -138,7 +138,7 @@ class CdnDownloaderTest {
         )
         h.downloader.download(h.infoProvider, part("0123".toByteArray()), expectedCTag = "c1")
         assertEquals(listOf(true), h.infoCalls)
-        // Sans fichier partiel : l'URL en cache peut servir.
+        // Without a partial file: the cached URL can be used.
         val fresh = Harness(listOf({ info() }), response(200, content))
         fresh.downloader.download(fresh.infoProvider, File(tmp.root, "new.part"), expectedCTag = "c1")
         assertEquals(listOf(false), fresh.infoCalls)
@@ -146,7 +146,7 @@ class CdnDownloaderTest {
 
     @Test
     fun resume_contentChangedMeanwhile_isRefusedBeforeAppending() = runTest {
-        // Version fraîche différente (fichier modifié sur OneDrive) : aucun octet ajouté au fichier partiel.
+        // Different fresh version (file modified on OneDrive): no byte appended to the partial file.
         val h = Harness(listOf({ info(cTag = "c2") }))
         val file = part("0123".toByteArray())
         expectError(DownloadError.CONTENT_CHANGED) { h.downloader.download(h.infoProvider, file, expectedCTag = "c1") }
@@ -160,7 +160,7 @@ class CdnDownloaderTest {
         val file = part("0123".toByteArray())
         h.downloader.download(h.infoProvider, file, expectedCTag = "c1")
         assertEquals("bytes=4-", h.requests.single().header("Range"))
-        // Pas d'ajout au fichier partiel : contenu complet réécrit depuis le début.
+        // No append to the partial file: full content rewritten from the start.
         assertArrayEquals(content, file.readBytes())
     }
 
@@ -205,7 +205,7 @@ class CdnDownloaderTest {
         )
         val file = part("0123".toByteArray())
         h.downloader.download(h.infoProvider, file, expectedCTag = "c1")
-        // Reprise : version fraîche demandée d'emblée, puis nouvelle URL après le refus.
+        // Resume: fresh version requested up front, then a new URL after the refusal.
         assertEquals(listOf(true, true), h.infoCalls)
         assertEquals("other.files.1drv.com", h.requests[1].url.host)
         assertArrayEquals(content, file.readBytes())
@@ -274,7 +274,7 @@ class CdnDownloaderTest {
 
     @Test
     fun transportFailure_isNetwork() = runTest {
-        val h = Harness(listOf({ info() }), { throw IOException("connexion coupée") })
+        val h = Harness(listOf({ info() }), { throw IOException("connection dropped") })
         expectError(DownloadError.NETWORK) { h.downloader.download(h.infoProvider, part(), expectedCTag = "c1") }
     }
 
@@ -291,7 +291,7 @@ class CdnDownloaderTest {
         failingWith(CloudException(CloudErrorCode.SERVER), DownloadError.SERVER)
     }
 
-    /** Corps qui livre quelques octets puis bloque jusqu'à l'annulation de l'appel. */
+    /** Body that delivers a few bytes then blocks until the call is cancelled. */
     private class BlockingSource(private val cancelled: CountDownLatch) : Source {
         private var sent = false
         override fun read(sink: Buffer, byteCount: Long): Long {
@@ -300,7 +300,7 @@ class CdnDownloaderTest {
                 sink.write("0123".toByteArray())
                 return 4
             }
-            if (!cancelled.await(10, TimeUnit.SECONDS)) throw IOException("délai du test dépassé")
+            if (!cancelled.await(10, TimeUnit.SECONDS)) throw IOException("test timeout exceeded")
             throw IOException("Canceled")
         }
 

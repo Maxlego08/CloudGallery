@@ -1,10 +1,10 @@
 package fr.eva.cloudgallery.domain.model
 
 /**
- * Estimation avant « Mettre en cache tout OneDrive » : éléments concernés (miniature et aperçu
- * venant de OneDrive), éléments pas encore mis en cache, taille estimée de ce qui reste à
- * télécharger et espace libre sur l'appareil. [enoughSpace] : l'estimation tient en gardant
- * l'espace minimal réservé (sinon le passage s'arrêtera avant la fin).
+ * Estimate before "Cache all of OneDrive": items concerned (thumbnail and preview coming from
+ * OneDrive), items not cached yet, estimated size of what remains to download and free space
+ * on the device. [enoughSpace]: the estimate fits while keeping the minimum reserved space
+ * (otherwise the pass will stop before the end).
  */
 data class PrecacheEstimate(
     val total: Int,
@@ -14,29 +14,29 @@ data class PrecacheEstimate(
     val enoughSpace: Boolean,
 )
 
-/** Issue du dernier passage de mise en cache. */
+/** Outcome of the last caching pass. */
 enum class PrecacheOutcome {
-    /** Tout est en cache (hors éléments sans miniature). */
+    /** Everything is cached (except items without a thumbnail). */
     COMPLETED,
 
-    /** Arrêté pour garder de l'espace libre sur l'appareil. */
+    /** Stopped to keep free space on the device. */
     LOW_SPACE,
 
-    /** Compte OneDrive déconnecté ou à reconnecter. */
+    /** OneDrive account signed out or needing re-sign-in. */
     SIGNED_OUT,
 }
 
-/** État de la mise en cache de tout OneDrive, vu par la page Stockage. */
+/** State of the caching of all of OneDrive, as seen by the Storage page. */
 sealed interface PrecacheState {
-    /** Rien en cours (jamais lancé, ou annulé). */
+    /** Nothing in progress (never started, or cancelled). */
     data object Idle : PrecacheState
 
-    /** En attente des conditions (Wi-Fi, batterie) ou d'une reprise après une coupure réseau. */
+    /** Waiting for conditions (Wi-Fi, battery) or for a resume after a network outage. */
     data object Waiting : PrecacheState
 
-    /** En cours : [done] éléments traités sur [total], [bytes] téléchargés pendant ce passage. */
+    /** In progress: [done] items processed out of [total], [bytes] downloaded during this pass. */
     data class Running(val done: Int, val total: Int, val bytes: Long, val failed: Int) : PrecacheState
 
-    /** Dernier passage terminé. [failed] : éléments sans miniature ou en échec. */
+    /** Last pass finished. [failed]: items without a thumbnail or that failed. */
     data class Finished(val outcome: PrecacheOutcome, val done: Int, val total: Int, val failed: Int) : PrecacheState
 }

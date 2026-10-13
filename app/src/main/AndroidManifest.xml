@@ -2,28 +2,28 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Médias locaux (Android 13+) : accès complet -->
+    <!-- Local media (Android 13+): full access -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <!-- Android 14+ : accès partiel « photos sélectionnées » -->
+    <!-- Android 14+: partial "selected photos" access -->
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    <!-- Coordonnées GPS non masquées dans les EXIF -->
+    <!-- Unredacted GPS coordinates in EXIF -->
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
-    <!-- Réseau : OneDrive (phase 3+) -->
+    <!-- Network: OneDrive (phase 3+) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Copies hors ligne (phase 4) : tâche de transfert lancée par l'utilisateur (JobScheduler) -->
+    <!-- Offline copies (phase 4): user-initiated transfer job (JobScheduler) -->
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
-    <!-- Progression des copies hors ligne (demandée au premier « Conserver hors ligne », facultative) -->
+    <!-- Offline copy progress (requested on the first "Keep offline", optional) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Mise en cache de tout OneDrive : travail WorkManager en service de premier plan (dataSync) -->
+    <!-- Caching of all of OneDrive: WorkManager work as a foreground service (dataSync) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- « Déplacer vers le Dossier sécurisé » : proposé seulement si l'appli Samsung est installée -->
+    <!-- "Move to Secure Folder": offered only if the Samsung app is installed -->
     <queries>
         <package android:name="com.samsung.knox.securefolder" />
-        <!-- Navigateurs : « Ouvrir dans OneDrive » ouvre le dossier sur le web. -->
+        <!-- Browsers: "Open in OneDrive" opens the folder on the web. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
@@ -43,8 +43,8 @@
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.CloudGallery">
 
-        <!-- WorkManager configuré par l'appli (CloudGalleryApp : workers Hilt) : initialiseur par
-             défaut retiré, les autres initialiseurs androidx.startup sont gardés. -->
+        <!-- WorkManager configured by the app (CloudGalleryApp: Hilt workers): default initializer
+             removed, the other androidx.startup initializers are kept. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -69,7 +69,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.APP_GALLERY" />
             </intent-filter>
-            <!-- Permet de choisir CloudGallery pour ouvrir des photos / vidéos depuis d'autres applis -->
+            <!-- Lets the user pick CloudGallery to open photos / videos from other apps -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
@@ -83,9 +83,9 @@
         </activity>
 
         <!--
-           Retour de la connexion Microsoft (MSAL) : l'onglet de navigateur redirige vers
-           msauth://<applicationId>/<empreinte de signature>. Chemin NON encodé ici (il l'est dans
-           la configuration JSON). L'activité est fournie par MSAL ; seul le filtre est ajouté.
+           Return from the Microsoft sign-in (MSAL): the browser tab redirects to
+           msauth://<applicationId>/<signature hash>. Path NOT encoded here (it is in the JSON
+           configuration). The activity is provided by MSAL; only the filter is added.
         -->
         <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
@@ -104,9 +104,9 @@
         </activity>
 
         <!--
-           Partage et « Ouvrir avec » des originaux OneDrive téléchargés et des copies hors ligne :
-           URI content:// en lecture seule (autorisation accordée par l'intent), dossiers listés
-           dans file_paths.xml.
+           Share and "Open with" for downloaded OneDrive originals and offline copies: read-only
+           content:// URIs (permission granted by the intent), folders listed in
+           file_paths.xml.
         -->
         <provider
             android:name=".ui.util.CloudGalleryFileProvider"
@@ -119,8 +119,8 @@
         </provider>
 
         <!--
-           Téléchargement des copies hors ligne (JobScheduler). Seul le système détient
-           BIND_JOB_SERVICE : exporté uniquement pour lui (comme SystemJobService de WorkManager).
+           Download of offline copies (JobScheduler). Only the system holds BIND_JOB_SERVICE:
+           exported for it only (like WorkManager's SystemJobService).
         -->
         <service
             android:name=".data.cloud.offline.OfflineTransferJobService"
@@ -128,15 +128,15 @@
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!--
-           Service de premier plan de WorkManager (mise en cache de tout OneDrive) : type déclaré
-           obligatoire depuis Android 14 pour setForeground(ForegroundInfo(…, DATA_SYNC)).
+           WorkManager foreground service (caching of all of OneDrive): declared type mandatory
+           since Android 14 for setForeground(ForegroundInfo(…, DATA_SYNC)).
         -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
-        <!-- Bouton « Annuler » de la notification des copies hors ligne (intent explicite). -->
+        <!-- "Cancel" button of the offline copies notification (explicit intent). -->
         <receiver
             android:name=".data.cloud.offline.OfflineActionReceiver"
             android:exported="false" />

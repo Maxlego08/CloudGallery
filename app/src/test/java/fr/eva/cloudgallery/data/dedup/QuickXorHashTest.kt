@@ -8,13 +8,13 @@ import java.util.Base64
 import kotlin.random.Random
 
 /**
- * QuickXorHash comparé à une implémentation de référence indépendante, écrite bit à bit d'après
- * la définition de l'algorithme (registre circulaire de 160 bits, octet n au décalage 11 × n,
- * longueur petit-boutiste combinée aux 8 derniers octets).
+ * QuickXorHash compared against an independent reference implementation, written bit by bit from
+ * the algorithm's definition (160-bit circular register, byte n at shift 11 × n,
+ * little-endian length combined into the last 8 bytes).
  */
 class QuickXorHashTest {
 
-    /** Définition littérale, sans l'optimisation par cellules de 64 bits de l'implémentation. */
+    /** Literal definition, without the implementation's 64-bit cell optimization. */
     private fun referenceHash(bytes: ByteArray): String {
         val bits = BooleanArray(160)
         bytes.forEachIndexed { n, value ->
@@ -45,7 +45,7 @@ class QuickXorHashTest {
 
     @Test
     fun singleByte_matchesTheDefinition() {
-        // Octet 0x01 au décalage 0, longueur 1 dans l'octet 12 : 0x01 00… 01 00…
+        // Byte 0x01 at shift 0, length 1 in byte 12: 0x01 00… 01 00…
         val expected = ByteArray(20).also { it[0] = 1; it[12] = 1 }
         assertEquals(Base64.getEncoder().encodeToString(expected), hashOf(byteArrayOf(1)))
     }
@@ -55,7 +55,7 @@ class QuickXorHashTest {
         val random = Random(42)
         for (size in listOf(1, 2, 7, 8, 15, 20, 31, 64, 159, 160, 161, 319, 320, 1000, 4096, 65_537)) {
             val data = random.nextBytes(size)
-            assertEquals("taille $size", referenceHash(data), hashOf(data))
+            assertEquals("size $size", referenceHash(data), hashOf(data))
         }
     }
 
@@ -71,7 +71,7 @@ class QuickXorHashTest {
                 hash.update(data, offset, n)
                 offset += n
             }
-            assertEquals("morceaux de $chunk", whole, hash.digestBase64())
+            assertEquals("chunks of $chunk", whole, hash.digestBase64())
         }
         assertEquals(whole, QuickXorHash.of(ByteArrayInputStream(data), bufferBytes = 333))
     }
@@ -81,7 +81,7 @@ class QuickXorHashTest {
         val data = ByteArray(500) { (it % 251).toByte() }
         val changed = data.copyOf().also { it[250] = (it[250] + 1).toByte() }
         assertNotEquals(hashOf(data), hashOf(changed))
-        // Zéros ajoutés : seul le compteur de longueur change, l'empreinte aussi.
+        // Appended zeros: only the length counter changes, and so does the hash.
         assertNotEquals(hashOf(ByteArray(10)), hashOf(ByteArray(11)))
     }
 
@@ -92,8 +92,8 @@ class QuickXorHashTest {
         QuickXorHash.of(ByteArrayInputStream(data), bufferBytes = 400) { seen += it }
         assertEquals(listOf(400L, 800L, 1000L), seen)
         val stopped = runCatching {
-            QuickXorHash.of(ByteArrayInputStream(data), bufferBytes = 400) { if (it >= 400) throw IllegalStateException("arrêt") }
+            QuickXorHash.of(ByteArrayInputStream(data), bufferBytes = 400) { if (it >= 400) throw IllegalStateException("stop") }
         }
-        assertEquals("arrêt", stopped.exceptionOrNull()?.message)
+        assertEquals("stop", stopped.exceptionOrNull()?.message)
     }
 }

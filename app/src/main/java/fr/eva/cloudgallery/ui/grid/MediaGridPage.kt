@@ -78,27 +78,27 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.shareMedia
 import fr.eva.cloudgallery.ui.util.progressPercent
 
-/** Action de sélection propre à un écran (remplace une action par défaut de la barre inférieure). */
+/** Screen-specific selection action (replaces a default action of the bottom bar). */
 data class GridExtraAction(val icon: ImageVector, val label: String, val onClick: () -> Unit)
 
 private const val LARGE_TITLE_KEY = "large_title"
 
-/** Éléments de la grille avant les éléments paginés : la ligne de titre ([largeTitleItem] ou [compactCountItem]). */
+/** Grid items before the paged items: the title row ([largeTitleItem] or [compactCountItem]). */
 private const val GRID_LEADING_ITEMS = 1
 
 /**
- * Ecran de grille complet partagé par Photos et les collections : grand titre, barre supérieure
- * dont le titre apparaît au défilement, grille paginée, mode sélection avec barre d'actions,
- * dialogues (suppression, copie) et feuille de choix d'album.
+ * Full grid screen shared by Photos and the collections: large title, top bar whose title
+ * appears on scroll, paged grid, selection mode with an action bar, dialogs (delete, copy) and
+ * album picker sheet.
  *
- * @param bottomPadding espace réservé en bas hors mode sélection (barre d'onglets ou barre système).
- * @param albumActionOverride remplace « Ajouter à l'album » dans la barre (l'action passe dans « Plus »).
- * @param favoriteActionOverride remplace l'action Favori par défaut.
- * @param emptyAction boutons de l'état vide (hors indexation en cours).
- * @param topBarActions icônes ajoutées à la barre supérieure, avant le menu « Plus ».
- * @param topBar remplace la barre supérieure hors mode sélection (ex. champ de recherche) ; elle
- *   reçoit le modificateur qui la place en haut et applique elle-même l'inset de la barre d'état.
- * @param largeTitle faux : pas de grand titre, une ligne discrète avec le nombre d'éléments.
+ * @param bottomPadding space reserved at the bottom outside selection mode (tab bar or system bar).
+ * @param albumActionOverride replaces "Add to album" in the bar (the action moves to "More").
+ * @param favoriteActionOverride replaces the default Favorite action.
+ * @param emptyAction buttons of the empty state (not while indexing).
+ * @param topBarActions icons added to the top bar, before the "More" menu.
+ * @param topBar replaces the top bar outside selection mode (e.g. search field); it receives the
+ *   modifier that places it at the top and applies the status bar inset itself.
+ * @param largeTitle false: no large title, a discreet row with the number of items.
  */
 @Composable
 fun MediaGridPage(
@@ -139,7 +139,7 @@ fun MediaGridPage(
     val items = viewModel.gridItems.collectAsLazyPagingItems()
     val fastScrollIndex by viewModel.fastScrollIndex.collectAsStateWithLifecycle()
     val gridGrouping by viewModel.gridGrouping.collectAsStateWithLifecycle()
-    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    // Notification permission requested on the first "Keep offline" (optional).
     val withNotificationPermission = rememberNotificationPermissionGate(
         alreadyAsked = settings?.offlineNotificationsAsked ?: true,
         onAsked = viewModel::markNotificationsAsked,
@@ -191,7 +191,7 @@ fun MediaGridPage(
         if (largeTitle) largeTitleItem(title, subtitle) else compactCountItem(subtitle)
     }
 
-    // Le petit titre apparaît quand le grand titre quitte l'écran.
+    // The small title appears when the large title leaves the screen.
     val titleAlpha by rememberCollapsedTitleAlpha(gridState)
 
     Box(modifier.fillMaxSize().background(colors.background)) {
@@ -292,8 +292,8 @@ fun MediaGridPage(
 
         if (selectionMode) {
             val enabled = selection.isNotEmpty()
-            // Supprimer / Copier : seulement si la sélection contient un fichier local. Partager :
-            // aussi pour les éléments OneDrive (original téléchargé au moment du partage).
+            // Delete / Copy: only if the selection contains a local file. Share: also for OneDrive
+            // items (original downloaded at share time).
             val localEnabled = localActionsEnabled(selection, selectionTargets)
             val canShare = shareEnabled(selection, selectionTargets) && sharePreparation == null
             val shareLabel = stringResource(R.string.common_share)
@@ -333,11 +333,11 @@ fun MediaGridPage(
                     add(OneUiMenuItem(addToAlbumLabel) { moreOpen = false; showAlbumPicker = true })
                 }
                 add(OneUiMenuItem(copyLabel, enabled = localEnabled) { moreOpen = false; showCopyDialog = true })
-                // Fichiers du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                // Phone files only, Samsung Secure Folder app installed.
                 if (showSecureFolder) {
                     add(OneUiMenuItem(secureFolderLabel) { moreOpen = false; viewModel.moveToSecureFolder() })
                 }
-                // Copies hors ligne : éléments OneDrive à conserver, copies à libérer.
+                // Offline copies: OneDrive items to keep, copies to release.
                 if (offlineMenu == OfflineMenuState.KEEP || offlineMenu == OfflineMenuState.BOTH) {
                     add(
                         OneUiMenuItem(keepOfflineLabel) {
@@ -364,7 +364,7 @@ fun MediaGridPage(
         }
     }
 
-    // Nombres exacts : seuls les fichiers locaux sont supprimés ou copiés.
+    // Exact counts: only local files are deleted or copied.
     val counts = actionCounts(selection, selectionTargets)
     val skippedNotice = if (counts.skippedCloud > 0) {
         pluralStringResource(R.plurals.grid_cloud_items_skipped, counts.skippedCloud, counts.skippedCloud)
@@ -458,14 +458,14 @@ fun MediaGridPage(
     }
 }
 
-/** Grand titre One UI, premier élément pleine largeur de la grille. */
+/** One UI large title, first full-width item of the grid. */
 private fun largeTitleItem(title: String, subtitle: String?): LazyGridScope.() -> Unit = {
     item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
         OneUiLargeTitleHeader(title = title, subtitle = subtitle)
     }
 }
 
-/** Ligne discrète en tête de grille (sans grand titre) : nombre d'éléments. */
+/** Discreet row at the top of the grid (without large title): number of items. */
 private fun compactCountItem(subtitle: String?): LazyGridScope.() -> Unit = {
     item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
         Text(
@@ -477,7 +477,7 @@ private fun compactCountItem(subtitle: String?): LazyGridScope.() -> Unit = {
     }
 }
 
-/** Consomme les événements ponctuels du ViewModel (partage, demande de suppression, toasts). */
+/** Consumes the ViewModel's one-off events (share, deletion request, toasts). */
 @Composable
 private fun GridEventsEffect(viewModel: MediaGridViewModel) {
     val context = LocalContext.current

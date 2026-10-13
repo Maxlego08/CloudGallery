@@ -17,9 +17,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Bouton « Annuler » de la notification de progression (récepteur non exporté). Passe par
- * [OfflineRepository.cancelAll] : arrêt du moteur (fichiers fermés) puis mise à jour de la base,
- * puis suppression des fichiers partiels, hors du thread principal.
+ * "Cancel" button of the progress notification (non-exported receiver). Goes through
+ * [OfflineRepository.cancelAll]: stops the engine (files closed), then updates the database,
+ * then deletes the partial files, off the main thread.
  */
 class OfflineActionReceiver : BroadcastReceiver() {
 
@@ -43,7 +43,7 @@ class OfflineActionReceiver : BroadcastReceiver() {
             try {
                 deps.offlineRepository().cancelAll()
             } catch (e: Exception) {
-                Log.w(TAG, "Annulation des copies hors ligne impossible", e)
+                Log.w(TAG, "Could not cancel offline copies", e)
             } finally {
                 pending.finish()
             }
@@ -54,7 +54,7 @@ class OfflineActionReceiver : BroadcastReceiver() {
         private const val TAG = "OfflineAction"
         private const val ACTION_CANCEL_ALL = "fr.eva.cloudgallery.action.OFFLINE_CANCEL_ALL"
 
-        /** Intent du bouton « Annuler » (explicite, immuable). */
+        /** Intent of the "Cancel" button (explicit, immutable). */
         fun cancelAllIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
             context,
             0,

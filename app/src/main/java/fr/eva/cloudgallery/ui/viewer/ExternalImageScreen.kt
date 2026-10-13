@@ -55,10 +55,10 @@ import fr.eva.cloudgallery.ui.util.shareMedia
 private val ScrimColor = Color(0x99000000)
 
 /**
- * Image reçue d'une autre appli et absente de l'index (URI FileProvider, sélecteur de photos,
- * accès partiel…) : affichage zoomable en lecture seule depuis l'URI accordée par l'appelant.
- * Aucune action d'écriture (favori, suppression, rotation) : le fichier n'appartient pas à la
- * bibliothèque indexée.
+ * Image received from another app and missing from the index (FileProvider URI, photo picker,
+ * partial access…): read-only zoomable display from the URI granted by the caller.
+ * No write actions (favorite, delete, rotate): the file does not belong to the indexed
+ * library.
  */
 @Composable
 fun ExternalImageScreen(
@@ -73,7 +73,7 @@ fun ExternalImageScreen(
     var dismissProgress by remember { mutableFloatStateOf(0f) }
     var loadError by remember(uri) { mutableStateOf(false) }
 
-    // Métadonnées minimales : dimensions et orientation inconnues, déterminées au décodage.
+    // Minimal metadata: dimensions and orientation unknown, determined at decode time.
     val media = remember(uri, title, mimeType) {
         MediaDetails(
             id = -1L,
@@ -113,7 +113,7 @@ fun ExternalImageScreen(
     ) {
         ZoomableImage(
             media = media,
-            // URI content:// d'une autre appli : même chargement qu'un fichier MediaStore.
+            // content:// URI from another app: loaded the same way as a MediaStore file.
             source = ViewerImageSource.MediaStore(uri, media.dateModified),
             isCurrentPage = true,
             callbacks = callbacks,
@@ -168,7 +168,7 @@ fun ExternalImageScreen(
                         contentDescription = stringResource(R.string.common_share),
                         onClick = {
                             runCatching { shareMedia(context, listOf(uri), listOf(mimeType)) }.onFailure {
-                                Log.w(TAG, "Partage impossible : $uri", it)
+                                Log.w(TAG, "Share failed: $uri", it)
                                 Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show()
                             }
                         },
@@ -179,7 +179,7 @@ fun ExternalImageScreen(
                         contentDescription = stringResource(R.string.common_open_with),
                         onClick = {
                             runCatching { openWithExternalApp(context, uri, mimeType) }.onFailure {
-                                Log.w(TAG, "Ouverture externe impossible : $uri", it)
+                                Log.w(TAG, "External open failed: $uri", it)
                                 Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show()
                             }
                         },

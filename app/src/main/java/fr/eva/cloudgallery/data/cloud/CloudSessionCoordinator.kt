@@ -29,14 +29,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Session OneDrive vue par l'UI : relie l'authentification ([MsalAuthService]), la
- * synchronisation ([CloudMediaSyncer]) et les données cloud de l'index local
- * ([CloudDataPurger]). Rien ne dépend de cette classe hormis l'UI, ce qui évite tout cycle
- * d'injection (Graph -> jetons -> MSAL).
+ * OneDrive session as seen by the UI: ties together authentication ([MsalAuthService]),
+ * synchronization ([CloudMediaSyncer]) and the cloud data of the local index
+ * ([CloudDataPurger]). Nothing but the UI depends on this class, which avoids any injection
+ * cycle (Graph -> tokens -> MSAL).
  *
- * Déconnexion et purges s'exécutent dans la portée applicative (quitter l'écran ne les
- * interrompt pas à mi-chemin), en exclusion mutuelle avec la synchronisation : aucune page
- * OneDrive ne peut être écrite pendant ou après la purge.
+ * Sign-out and purges run in the application scope (leaving the screen does not interrupt
+ * them halfway), mutually exclusive with synchronization: no OneDrive page can be written
+ * during or after the purge.
  */
 @Singleton
 class CloudSessionCoordinator @Inject constructor(
@@ -49,7 +49,7 @@ class CloudSessionCoordinator @Inject constructor(
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : CloudAccountRepository {
 
-    /** Une seule déconnexion / purge à la fois. */
+    /** Only one sign-out / purge at a time. */
     private val sessionMutex = Mutex()
 
     override val isAvailable: Boolean get() = feature.enabled
@@ -72,15 +72,15 @@ class CloudSessionCoordinator @Inject constructor(
 
     override suspend fun signOutAndPurge(): Result<Unit> = scope.async {
         sessionMutex.withLock {
-            // Etat « déconnexion » d'abord : plus aucune synchronisation ne peut démarrer.
+            // "Signing out" state first: no synchronization can start anymore.
             auth.beginSignOut()
             var result: Result<Unit>? = null
             try {
                 result = syncer.exclusive {
-                    // Copies hors ligne : téléchargements arrêtés avant la déconnexion, aucun ne
-                    // peut redémarrer pendant la purge.
+                    // Offline copies: downloads stopped before the sign-out, none can restart
+                    // during the purge.
                     offline.get().whileStoppedForPurge {
-                        // Déconnexion MSAL d'abord : en cas d'échec, les données sont conservées.
+                        // MSAL sign-out first: if it fails, the data is kept.
                         val signOut = auth.signOut()
                         if (signOut.isFailure) signOut else purge()
                     }
@@ -89,9 +89,9 @@ class CloudSessionCoordinator @Inject constructor(
             } finally {
                 withContext(NonCancellable) {
                     auth.endSignOut()
-                    // Echec : rien n'a été retiré, le compte reste connecté ; les téléchargements
-                    // en file reprennent (après endSignOut : pendant « déconnexion », l'accès au
-                    // compte est refusé et rien ne serait replanifié).
+                    // Failure: nothing was removed, the account stays signed in; queued downloads
+                    // resume (after endSignOut: while "signing out", account access is denied
+                    // and nothing would be rescheduled).
                     if (result?.isFailure == true) offline.get().resumeIfNeeded()
                 }
             }
@@ -100,10 +100,10 @@ class CloudSessionCoordinator @Inject constructor(
 
     override suspend fun purgeLeftoverData(): Result<Unit> = scope.async {
         sessionMutex.withLock {
-            // Uniquement sans compte connecté : les données d'une session active ne sont retirées
-            // que par la déconnexion.
+            // Only without a signed-in account: the data of an active session is only removed
+            // by signing out.
             if (auth.state.value !is CloudAccountState.SignedOut) {
-                return@withLock Result.failure(IllegalStateException("Un compte OneDrive est connecté"))
+                return@withLock Result.failure(IllegalStateException("A OneDrive account is signed in"))
             }
             val result = syncer.exclusive { offline.get().whileStoppedForPurge { purge() } }
             withContext(NonCancellable) { auth.refresh() }
@@ -113,9 +113,9 @@ class CloudSessionCoordinator @Inject constructor(
 
     override suspend fun replaceMismatchedData(): Result<Unit> = scope.async {
         sessionMutex.withLock {
-            // Confirmé par l'utilisateur, et seulement tant que le décalage de compte est constaté.
+            // Confirmed by the user, and only while the account mismatch is observed.
             if (auth.state.value !is CloudAccountState.SignedIn || !syncer.state.value.accountMismatch) {
-                return@withLock Result.failure(IllegalStateException("Aucun changement de compte OneDrive à confirmer"))
+                return@withLock Result.failure(IllegalStateException("No OneDrive account change to confirm"))
             }
             val result = syncer.exclusive { offline.get().whileStoppedForPurge { purge() } }
             if (result.isSuccess) syncer.requestSync(CloudSyncReason.MANUAL)
@@ -140,10 +140,10 @@ class CloudSessionCoordinator @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: CloudException) {
-            Log.w(TAG, "Profil OneDrive indisponible : ${e.code}")
+            Log.w(TAG, "OneDrive profile unavailable: ${e.code}")
             Result.failure(e)
         } catch (e: Exception) {
-            Log.w(TAG, "Profil OneDrive indisponible", e)
+            Log.w(TAG, "OneDrive profile unavailable", e)
             Result.failure(CloudException(CloudErrorCode.UNKNOWN, e))
         }
     }
@@ -154,7 +154,7 @@ class CloudSessionCoordinator @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.e(TAG, "Echec du retrait des données OneDrive", e)
+        Log.e(TAG, "Failed to remove OneDrive data", e)
         Result.failure(e)
     }
 

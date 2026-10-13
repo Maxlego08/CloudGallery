@@ -35,12 +35,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Passage de synchronisation OneDrive en arrière-plan (WorkManager), regroupé avec les autres
- * demandes et ignoré si la dernière synchro date de moins de 5 min. Les échecs (réseau,
- * limitation Graph) sont enregistrés par la synchro elle-même : le travail réussit toujours et
- * reprend à la période suivante. Les nouvelles versions de copies hors ligne trouvées ici sont
- * téléchargées au prochain retour au premier plan (tâche « lancée par l'utilisateur »,
- * planifiable seulement appli visible).
+ * Background OneDrive sync pass (WorkManager), coalesced with other requests and skipped if
+ * the last sync is less than 5 min old. Failures (network, Graph throttling) are recorded by
+ * the sync itself: the work always succeeds and resumes at the next period. New versions of
+ * offline copies found here are downloaded the next time the app returns to the foreground
+ * ("user-initiated" job, only schedulable while the app is visible).
  */
 @HiltWorker
 class OneDriveSyncWorker @AssistedInject constructor(
@@ -53,11 +52,11 @@ class OneDriveSyncWorker @AssistedInject constructor(
         try {
             syncer.syncAndWait(CloudSyncReason.BACKGROUND)
         } catch (e: CancellationException) {
-            // Travail arrêté par WorkManager : annulation propagée. Sinon, passage interrompu par
-            // une déconnexion ou une purge : rien à refaire.
+            // Work stopped by WorkManager: cancellation propagated. Otherwise, pass interrupted by
+            // a sign-out or a purge: nothing to redo.
             currentCoroutineContext().ensureActive()
         } catch (e: Exception) {
-            Log.w(TAG, "Synchronisation OneDrive en arrière-plan impossible", e)
+            Log.w(TAG, "Background OneDrive sync failed", e)
         }
         return Result.success()
     }
@@ -68,10 +67,10 @@ class OneDriveSyncWorker @AssistedInject constructor(
 }
 
 /**
- * Travail périodique de synchronisation OneDrive, tenu à jour d'après le réglage (fréquence,
- * Wi-Fi uniquement) et l'état du compte ([backgroundSyncPlan]) : planifié pour un compte
- * connecté, annulé à la déconnexion ou réglage désactivé. Premier passage après une période
- * complète (le retour au premier plan synchronise déjà). Batterie faible : attente.
+ * Periodic OneDrive sync work, kept up to date with the setting (frequency, Wi-Fi only) and the
+ * account state ([backgroundSyncPlan]): scheduled for a signed-in account, cancelled on
+ * sign-out or when the setting is disabled. First pass after a full period (returning to the
+ * foreground already syncs). Low battery: wait.
  */
 @Singleton
 class BackgroundSyncScheduler @Inject constructor(
@@ -84,7 +83,7 @@ class BackgroundSyncScheduler @Inject constructor(
 ) {
     private val started = AtomicBoolean(false)
 
-    /** Suivi du réglage et du compte pour la durée du processus (Application.onCreate). */
+    /** Tracks the setting and the account for the lifetime of the process (Application.onCreate). */
     fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch(io) {
@@ -101,7 +100,7 @@ class BackgroundSyncScheduler @Inject constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "Planification de la synchronisation en arrière-plan impossible", e)
+                        Log.w(TAG, "Failed to schedule background sync", e)
                     }
                 }
         }
@@ -121,7 +120,7 @@ class BackgroundSyncScheduler @Inject constructor(
                     .setConstraints(constraints)
                     .setInitialDelay(plan.intervalHours, TimeUnit.HOURS)
                     .build()
-                // UPDATE : fréquence ou réseau modifiés pris en compte, passage en cours non interrompu.
+                // UPDATE: changed frequency or network taken into account, running pass not interrupted.
                 work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
             }
         }

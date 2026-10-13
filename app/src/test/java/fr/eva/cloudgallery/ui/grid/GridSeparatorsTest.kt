@@ -74,7 +74,7 @@ class GridSeparatorsTest {
 
     @Test
     fun dayBoundaryUsesProvidedZone() {
-        // 23:30 UTC le 5 octobre = 01:30 le 6 octobre à Paris.
+        // 23:30 UTC on October 5 = 01:30 on October 6 in Paris.
         val utc = ZoneId.of("UTC")
         val item = media(1, LocalDateTime.of(2026, 10, 5, 23, 30), utc)
         assertEquals(LocalDate.of(2026, 10, 6), headerBetween(null, item, GridGrouping.DAY, paris)?.date)

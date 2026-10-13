@@ -78,7 +78,7 @@ import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import javax.inject.Inject
 
-/** Dépendances communes des écrans de grille (regroupées pour alléger les constructeurs Hilt). */
+/** Common dependencies of the grid screens (grouped to keep the Hilt constructors light). */
 class MediaGridDeps @Inject constructor(
     val mediaRepository: MediaRepository,
     val favoritesRepository: FavoritesRepository,
@@ -96,18 +96,18 @@ class MediaGridDeps @Inject constructor(
 )
 
 /**
- * Téléchargement depuis OneDrive avant un partage : [count] éléments, [done] / [total] octets
- * ([total] ≤ 0 si inconnu).
+ * Download from OneDrive before a share: [count] items, [done] / [total] bytes
+ * ([total] ≤ 0 if unknown).
  */
 data class GridSharePreparation(val count: Int, val done: Long, val total: Long)
 
-/** Message ponctuel à afficher (toast), résolu dans l'UI. */
+/** One-off message to display (toast), resolved in the UI. */
 sealed interface GridMessage {
     data class Text(@StringRes val resId: Int, val args: List<Any> = emptyList()) : GridMessage
     data class Plural(@PluralsRes val resId: Int, val count: Int, val args: List<Any> = emptyList()) : GridMessage
 }
 
-/** Evénements ponctuels VM -> UI. */
+/** One-off VM -> UI events. */
 sealed interface GridEvent {
     data class Share(val uris: List<Uri>, val mimeTypes: List<String?>) : GridEvent
     data class LaunchDeleteRequest(val intentSender: IntentSender) : GridEvent
@@ -115,15 +115,15 @@ sealed interface GridEvent {
 }
 
 /**
- * Base commune des grilles (Photos, albums, favoris, vidéos) : données paginées avec en-têtes,
- * niveau de zoom persistant, sélection et actions sur la sélection.
+ * Common base of the grids (Photos, albums, favorites, videos): paged data with headers,
+ * persistent zoom level, selection and actions on the selection.
  */
 abstract class MediaGridViewModel(
     val mediaContext: MediaContext,
     protected val deps: MediaGridDeps,
 ) : ViewModel() {
 
-    /** Niveau de zoom enregistré pour cet écran. */
+    /** Zoom level saved for this screen. */
     protected abstract fun zoomLevelOf(settings: AppSettings): Int
 
     protected abstract suspend fun persistZoomLevel(level: Int)
@@ -133,7 +133,7 @@ abstract class MediaGridViewModel(
     val settings: StateFlow<AppSettings?> = deps.settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** Valeur locale appliquée immédiatement, avant l'aller-retour DataStore. */
+    /** Local value applied immediately, before the DataStore round trip. */
     private val zoomOverride = MutableStateFlow<Int?>(null)
 
     val zoomLevel: StateFlow<Int?> = combine(settings, zoomOverride) { s, override ->
@@ -145,15 +145,15 @@ abstract class MediaGridViewModel(
         .distinctUntilChanged()
 
     /**
-     * Portée des caches de pagination : les transformations (conversion, insertion des en-têtes
-     * sur toutes les pages en cache lors d'un changement de regroupement) tournent hors du thread
-     * principal ; l'UI collecte ensuite le résultat sur le thread principal.
+     * Scope of the paging caches: the transformations (conversion, insertion of headers on all
+     * cached pages when the grouping changes) run off the main thread; the UI then collects the
+     * result on the main thread.
      */
     private val pagingScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.Default)
 
     /**
-     * Saut du défilement rapide : la pagination repart du rang demandé (une nouvelle demande, même
-     * identique, recrée le Pager : [JumpRequest.seq]).
+     * Fast-scroll jump: the paging restarts from the requested rank (a new request, even an
+     * identical one, recreates the Pager: [JumpRequest.seq]).
      */
     private data class JumpRequest(val offset: Int, val seq: Int)
 
@@ -166,8 +166,8 @@ abstract class MediaGridViewModel(
         .cachedIn(pagingScope)
 
     /**
-     * Grille paginée avec en-têtes de jour / mois. La pagination de base est mise en cache :
-     * un changement de regroupement ne recharge pas les pages, il réinsère seulement les en-têtes.
+     * Paged grid with day / month headers. The base paging is cached: a grouping change does not
+     * reload the pages, it only re-inserts the headers.
      */
     val gridItems: Flow<PagingData<GridItem>> = combine(basePaging, grouping) { data, g ->
         val withHeaders: PagingData<GridItem> = data.insertSeparators { before: GridItem.Media?, after: GridItem.Media? ->
@@ -179,17 +179,17 @@ abstract class MediaGridViewModel(
     val count: StateFlow<Int?> = deps.mediaRepository.observeCount(mediaContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Regroupement courant (jour / mois), pour la bulle et les clés d'en-tête du défilement rapide. */
+    /** Current grouping (day / month), for the bubble and the header keys of the fast scroll. */
     val gridGrouping: StateFlow<GridGrouping?> = grouping
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Dates de tous les médias du contexte (défilement rapide), construites hors du thread principal. */
+    /** Dates of all media in the context (fast scroll), built off the main thread. */
     val fastScrollIndex: StateFlow<FastScrollIndex?> = deps.mediaRepository.observeDates(mediaContext)
         .map { dates -> FastScrollIndex(dates.toLongArray()) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Recharge la grille à partir du média de rang [offset] (cible hors des pages chargées). */
+    /** Reloads the grid starting from the media at rank [offset] (target outside the loaded pages). */
     fun jumpTo(offset: Int) {
         jumpRequest.update { JumpRequest(offset.coerceAtLeast(0), it.seq + 1) }
     }
@@ -205,9 +205,9 @@ abstract class MediaGridViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /**
-     * Fichiers locaux de la sélection (comptés en base, sur le thread d'E/S) : active ou non
-     * Partager / Supprimer / Copier et donne les nombres exacts des boîtes de confirmation.
-     * null si inconnu (échec de lecture) : les actions restent possibles et filtrent elles-mêmes.
+     * Local files of the selection (counted in the database, on the I/O thread): enables or not
+     * Share / Delete / Copy and gives the exact counts for the confirmation dialogs.
+     * null if unknown (read failure): the actions remain possible and filter by themselves.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val selectionTargets: StateFlow<SelectionTargets?> = _selection
@@ -237,39 +237,39 @@ abstract class MediaGridViewModel(
 
     private val _offlinePrompt = MutableStateFlow<OfflinePrompt?>(null)
 
-    /** Boîte de dialogue d'une action hors ligne (gros lot, attente du Wi-Fi, espace, dernière copie). */
+    /** Dialog of an offline action (large batch, waiting for Wi-Fi, space, last copy). */
     val offlinePrompt: StateFlow<OfflinePrompt?> = _offlinePrompt.asStateFlow()
 
     private val _sharePreparation = MutableStateFlow<GridSharePreparation?>(null)
 
-    /** Téléchargement en cours avant un partage (null sinon). */
+    /** Download in progress before a share (null otherwise). */
     val sharePreparation: StateFlow<GridSharePreparation?> = _sharePreparation.asStateFlow()
     private var shareJob: Job? = null
 
     /**
-     * Identifiants complets (base de données) des jours dont l'en-tête a été touché : la pagination
-     * ne charge qu'une partie d'un grand jour, l'état de la case ne peut donc pas en dépendre seul.
+     * Complete IDs (from the database) of the days whose header was tapped: the paging only loads
+     * part of a large day, so the checkbox state cannot depend on it alone.
      */
     private val _dayIds = MutableStateFlow<Map<Long, List<Long>>>(emptyMap())
     val dayIds: StateFlow<Map<Long, List<Long>>> = _dayIds.asStateFlow()
 
-    /** Appli Dossier sécurisé Samsung installée (« Déplacer vers le Dossier sécurisé »). */
+    /** Samsung Secure Folder app installed ("Move to Secure Folder"). */
     val secureFolderAvailable: StateFlow<Boolean> = flow { emit(deps.secureFolder.isInstalled()) }
         .catch { emit(false) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val secureFolderMove = SecureFolderMoveState()
 
-    /** Déplacement vers le Dossier sécurisé en cours (boîtes de dialogue). */
+    /** Move to Secure Folder in progress (dialogs). */
     val secureFolderPrompt: StateFlow<SecureFolderPrompt?> = secureFolderMove.prompt
 
-    /** Suppression découpée en lots (une confirmation système par lot). */
+    /** Deletion split into batches (one system confirmation per batch). */
     private val pendingDeleteBatches = ArrayDeque<List<Uri>>()
     private var pendingDeleteToTrash = true
     private var completedDeleteBatches = 0
 
     init {
-        // Contenu modifié (ajout, suppression) : les listes par jour en cache ne sont plus fiables.
+        // Content changed (addition, deletion): the cached per-day lists are no longer reliable.
         viewModelScope.launch {
             deps.mediaRepository.observeCount(mediaContext).collect { _dayIds.value = emptyMap() }
         }
@@ -285,7 +285,7 @@ abstract class MediaGridViewModel(
         viewModelScope.launch { runCatching { persistZoomLevel(next) } }
     }
 
-    // --- Sélection ---
+    // --- Selection ---
 
     fun enterSelectionMode() {
         _selectionMode.value = true
@@ -301,7 +301,7 @@ abstract class MediaGridViewModel(
         _selection.update { if (id in it) it - id else it + id }
     }
 
-    /** Appui long : entre en mode sélection avec cet élément, ou bascule son état. */
+    /** Long press: enters selection mode with this item, or toggles its state. */
     fun onLongPress(id: Long) {
         if (!_selectionMode.value) {
             _selectionMode.value = true
@@ -318,8 +318,8 @@ abstract class MediaGridViewModel(
     }
 
     /**
-     * En-tête de jour touché en mode sélection : sélectionne (ou désélectionne si tout l'est déjà)
-     * TOUS les médias du jour, lus en base, y compris ceux que la pagination n'a pas encore chargés.
+     * Day header tapped in selection mode: selects (or deselects if all already are) ALL media of
+     * the day, read from the database, including those the paging has not loaded yet.
      */
     fun toggleDay(header: GridItem.Header) {
         if (header.grouping != GridGrouping.DAY) return
@@ -341,8 +341,8 @@ abstract class MediaGridViewModel(
     }
 
     /**
-     * Fin d'un glisser de sélection : la plage entre [anchor] et [end] est résolue en base pour
-     * inclure les éléments que la pagination n'avait pas encore chargés pendant le geste.
+     * End of a drag selection: the range between [anchor] and [end] is resolved in the database to
+     * include the items the paging had not loaded yet during the gesture.
      */
     fun finishDragSelect(anchor: MediaSummary, end: MediaSummary, select: Boolean) {
         if (anchor.id == end.id) return
@@ -387,9 +387,9 @@ abstract class MediaGridViewModel(
         }
 
     /**
-     * Médias sélectionnés disposant d'un fichier local ([localActionTargets]). Les éléments
-     * uniquement sur OneDrive ne sont jamais traités : message si aucun fichier local, et
-     * nombre d'éléments ignorés si [notifySkipped] (déjà indiqué par une boîte de confirmation sinon).
+     * Selected media that have a local file ([localActionTargets]). Items only on OneDrive are
+     * never processed: message if there is no local file, and number of skipped items if
+     * [notifySkipped] (otherwise already shown by a confirmation dialog).
      */
     private suspend fun localSelection(notifySkipped: Boolean): List<MediaSummary> {
         val all = selectedSummaries()
@@ -403,12 +403,12 @@ abstract class MediaGridViewModel(
         return local
     }
 
-    // --- Copies hors ligne ---
+    // --- Offline copies ---
 
-    /** « Conserver hors ligne » pour la sélection (gros lot : confirmation d'abord). */
+    /** "Keep offline" for the selection (large batch: confirmation first). */
     fun keepOffline() = keep(_selection.value.toList(), confirmed = false)
 
-    /** Gros lot confirmé par l'utilisateur. */
+    /** Large batch confirmed by the user. */
     fun confirmLargeBatch(ids: List<Long>) = keep(ids, confirmed = true)
 
     private fun keep(ids: List<Long>, confirmed: Boolean) {
@@ -427,17 +427,17 @@ abstract class MediaGridViewModel(
         }
     }
 
-    /** « Télécharger maintenant » : la file en attente du Wi-Fi utilise le réseau mobile. */
+    /** "Download now": the queue waiting for Wi-Fi uses the mobile network. */
     fun downloadOfflineNow() {
         viewModelScope.launch { runCatching { deps.offline.downloadNow() } }
     }
 
-    /** « Libérer l'espace » : immédiat, sauf s'il y a des dernières copies (confirmation). */
+    /** "Free up space": immediate, unless there are last copies (confirmation). */
     fun releaseOffline() {
         val ids = _selection.value.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            // Compte impossible : rien n'est supprimé (une dernière copie l'aurait été sans confirmation).
+            // Count failed: nothing is deleted (a last copy would have been deleted without confirmation).
             val lastCopies = try {
                 deps.offline.lastCopiesAmong(ids)
             } catch (e: CancellationException) {
@@ -453,7 +453,7 @@ abstract class MediaGridViewModel(
         }
     }
 
-    /** Libération de dernières copies confirmée. */
+    /** Release of last copies confirmed. */
     fun confirmRelease(ids: List<Long>) = release(ids)
 
     private fun release(ids: List<Long>) {
@@ -474,7 +474,7 @@ abstract class MediaGridViewModel(
         _offlinePrompt.value = null
     }
 
-    /** L'autorisation des notifications a été demandée (une seule fois). */
+    /** The notification permission has been requested (only once). */
     fun markNotificationsAsked() {
         viewModelScope.launch { runCatching { deps.settingsRepository.setOfflineNotificationsAsked(true) } }
     }
@@ -489,9 +489,9 @@ abstract class MediaGridViewModel(
     }
 
     /**
-     * Partage la sélection : fichiers locaux et copies hors ligne tels quels, éléments uniquement
-     * sur OneDrive après téléchargement de leur original (compte connecté, au plus
-     * [MAX_SHARE_CLOUD_ITEMS] éléments et [MAX_SHARE_CLOUD_BYTES] octets, progression annulable).
+     * Shares the selection: local files and offline copies as is, items only on OneDrive after
+     * downloading their original (signed-in account, at most [MAX_SHARE_CLOUD_ITEMS] items and
+     * [MAX_SHARE_CLOUD_BYTES] bytes, cancellable progress).
      */
     fun share() {
         if (shareJob?.isActive == true) return
@@ -499,7 +499,7 @@ abstract class MediaGridViewModel(
             val all = selectedSummaries()
             val local = localActionTargets(all)
             val nonLocal = all.filter { !isLocalActionTarget(it.hasLocal, it.uri != null) }
-            // Copies hors ligne intactes : partagées sans téléchargement ; sinon repli sur OneDrive.
+            // Intact offline copies: shared without download; otherwise fall back to OneDrive.
             val offlineCopies = withContext(deps.ioDispatcher) {
                 nonLocal.filter { it.hasOffline }.mapNotNull { summary ->
                     val details = deps.mediaRepository.getMedia(summary.id) ?: return@mapNotNull null
@@ -515,7 +515,7 @@ abstract class MediaGridViewModel(
             }
             val cloudAllowed = cloud.isNotEmpty() && deps.cloudAccess.canAccess()
             if (cloudAllowed && cloud.size > MAX_SHARE_CLOUD_ITEMS) {
-                // Refus avant de lire les détails des éléments.
+                // Refuse before reading the item details.
                 emit(GridEvent.Message(GridMessage.Plural(R.plurals.share_cloud_too_many, MAX_SHARE_CLOUD_ITEMS, listOf(MAX_SHARE_CLOUD_ITEMS))))
                 return@launch
             }
@@ -588,14 +588,14 @@ abstract class MediaGridViewModel(
         }
     }
 
-    /** Annule le téléchargement qui précède un partage. */
+    /** Cancels the download that precedes a share. */
     fun cancelSharePreparation() {
         shareJob?.cancel()
         shareJob = null
         _sharePreparation.value = null
     }
 
-    /** Ajoute la sélection aux favoris, ou l'en retire si tous les éléments y sont déjà. */
+    /** Adds the selection to favorites, or removes it if all items already are. */
     fun toggleFavorite() {
         viewModelScope.launch {
             val ids = _selection.value
@@ -631,14 +631,14 @@ abstract class MediaGridViewModel(
     }
 
     /**
-     * Prépare la demande système de suppression (corbeille ou définitive selon les réglages).
-     * Une grande sélection est découpée en lots : toutes les URI d'une demande transitent dans une
-     * seule transaction Binder (~1 Mo). Chaque lot reste confirmé par la boîte de dialogue système.
+     * Prepares the system deletion request (trash or permanent depending on the settings).
+     * A large selection is split into batches: all URIs of a request go through a single Binder
+     * transaction (~1 MB). Each batch is still confirmed by the system dialog.
      */
     fun requestDelete() {
         viewModelScope.launch {
             if (pendingDeleteBatches.isNotEmpty()) return@launch
-            // Avec confirmation, la boîte de dialogue a déjà indiqué les éléments OneDrive non concernés.
+            // With confirmation, the dialog has already mentioned the OneDrive items left out.
             val local = localSelection(notifySkipped = settings.value?.confirmBeforeDelete == false)
             if (local.isEmpty()) return@launch
             startDeleteBatches(local.mapNotNull { it.uri }, toTrash = settings.value?.useTrash ?: true)
@@ -658,11 +658,11 @@ abstract class MediaGridViewModel(
         launchNextDeleteBatch()
     }
 
-    // --- Dossier sécurisé ---
+    // --- Secure Folder ---
 
     /**
-     * « Déplacer vers le Dossier sécurisé » : fichiers du téléphone de la sélection (éléments
-     * uniquement sur OneDrive ignorés), explications puis feuille de partage.
+     * "Move to Secure Folder": phone files of the selection (items only on OneDrive are skipped),
+     * explanations then share sheet.
      */
     fun moveToSecureFolder() {
         viewModelScope.launch {
@@ -690,18 +690,18 @@ abstract class MediaGridViewModel(
 
     fun onSecureFolderShareReturned() = secureFolderMove.onShareReturned()
 
-    /** Abandon avant l'envoi : la sélection est conservée. */
+    /** Cancelled before sending: the selection is kept. */
     fun cancelSecureFolder() = secureFolderMove.dismiss()
 
-    /** Envoi fait, originaux gardés. */
+    /** Sent, originals kept. */
     fun keepOriginalsAfterSecureFolder() {
         secureFolderMove.dismiss()
         exitSelectionMode()
     }
 
     /**
-     * Ajout au Dossier sécurisé confirmé par l'utilisateur : originaux envoyés à la corbeille
-     * Android (toujours la corbeille, quel que soit le réglage), demande système par lot.
+     * Addition to Secure Folder confirmed by the user: originals sent to the Android trash (always
+     * the trash, whatever the setting), one system request per batch.
      */
     fun trashAfterSecureFolder() {
         val moved = secureFolderMove.takeForTrash() ?: return
@@ -733,7 +733,7 @@ abstract class MediaGridViewModel(
 
     fun onDeleteResult(granted: Boolean) {
         if (!granted) {
-            // Refus : on s'arrête là (les lots déjà confirmés restent supprimés).
+            // Refused: stop here (batches already confirmed stay deleted).
             pendingDeleteBatches.clear()
             finishDelete()
             return
@@ -746,7 +746,7 @@ abstract class MediaGridViewModel(
         }
     }
 
-    /** Copie les fichiers locaux sélectionnés vers « Pictures/<nom>/ ». */
+    /** Copies the selected local files to "Pictures/<name>/". */
     fun copyToFolder(folderName: String) {
         val clean = sanitizeFolderName(folderName)
         if (clean.isEmpty()) {
@@ -754,7 +754,7 @@ abstract class MediaGridViewModel(
             return
         }
         viewModelScope.launch {
-            // La boîte de saisie a déjà indiqué les éléments OneDrive non concernés.
+            // The input dialog has already mentioned the OneDrive items left out.
             val local = localSelection(notifySkipped = false)
             if (local.isEmpty()) return@launch
             val path = "Pictures/$clean/"
@@ -772,7 +772,7 @@ abstract class MediaGridViewModel(
         }
     }
 
-    /** Relance l'indexation après une écriture (survit à la fermeture de l'écran). */
+    /** Restarts indexing after a write (survives the screen being closed). */
     protected fun resync() {
         deps.applicationScope.launch(deps.ioDispatcher) {
             runCatching { deps.localMediaIndexer.sync() }
@@ -780,16 +780,16 @@ abstract class MediaGridViewModel(
     }
 
     companion object {
-        /** Limite de variables SQLite par requête : on découpe les listes d'identifiants. */
+        /** SQLite variable limit per query: ID lists are split into chunks. */
         private const val SQL_CHUNK = 500
 
-        /** Au-delà, l'intent de partage dépasse la taille maximale d'une transaction Binder. */
+        /** Beyond this, the share intent exceeds the maximum size of a Binder transaction. */
         const val MAX_SHARE = 500
 
-        /** URI par demande de suppression système (une transaction Binder par demande). */
+        /** URIs per system deletion request (one Binder transaction per request). */
         const val MAX_DELETE_BATCH = 1_000
 
-        /** Nom de dossier sûr pour MediaStore (pas de séparateurs ni caractères réservés). */
+        /** Folder name safe for MediaStore (no separators or reserved characters). */
         fun sanitizeFolderName(name: String): String =
             name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "").trim().trim('.').trim()
     }

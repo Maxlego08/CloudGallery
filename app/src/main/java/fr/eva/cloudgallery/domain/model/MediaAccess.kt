@@ -1,20 +1,20 @@
 package fr.eva.cloudgallery.domain.model
 
-/** Niveau d'accès aux médias de l'appareil. */
+/** Level of access to the device's media. */
 enum class MediaAccess {
-    /** Photos et vidéos : accès complet. */
+    /** Photos and videos: full access. */
     FULL,
 
-    /** Android 14+ : seulement les éléments choisis par l'utilisateur (READ_MEDIA_VISUAL_USER_SELECTED). */
+    /** Android 14+: only the items selected by the user (READ_MEDIA_VISUAL_USER_SELECTED). */
     PARTIAL,
 
-    /** Aucun accès. */
+    /** No access. */
     NONE,
 }
 
 /**
- * Accès déduit des autorisations accordées : complet avec images et vidéos, partiel avec l'une
- * des deux ou la sélection de photos (Android 14+), aucun sinon.
+ * Access derived from the granted permissions: full with images and videos, partial with one
+ * of the two or the photo selection (Android 14+), none otherwise.
  */
 fun mediaAccessOf(images: Boolean, videos: Boolean, selected: Boolean): MediaAccess = when {
     images && videos -> MediaAccess.FULL
@@ -23,9 +23,9 @@ fun mediaAccessOf(images: Boolean, videos: Boolean, selected: Boolean): MediaAcc
 }
 
 /**
- * Photos et Vidéos montrent aussi les éléments présents uniquement sur OneDrive : réglage
- * « Afficher les éléments OneDrive dans Photos », ou aucun accès aux photos du téléphone (usage
- * « OneDrive seul », décision utilisateur : OneDrive d'office).
+ * Photos and Videos also show items that exist only on OneDrive: "Show OneDrive items in
+ * Photos" setting, or no access to the phone's photos ("OneDrive only" usage, user decision:
+ * OneDrive by default).
  */
 fun includeCloudOnlyInLibrary(showCloudInPhotos: Boolean, access: MediaAccess): Boolean =
     showCloudInPhotos || access == MediaAccess.NONE

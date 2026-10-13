@@ -23,19 +23,19 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Durée d'un passage de la bande lumineuse sur toute la largeur de l'écran. */
+/** Duration of one pass of the light band across the full width of the screen. */
 private const val SHIMMER_PERIOD_MS = 1_400L
 
-/** Inclinaison de la bande (décalage horizontal par pixel vertical). */
+/** Slant of the band (horizontal offset per vertical pixel). */
 private const val SHIMMER_SLANT = 0.35f
 
 /**
- * Fond d'attente animé (« skeleton ») d'une image en cours de chargement : couleur d'attente et
- * bande lumineuse oblique qui balaie l'écran. La phase vient de l'horloge des images et de la
- * position de la cellule dans la fenêtre : toutes les cellules en attente forment une seule bande
- * continue, au lieu de clignoter chacune de son côté. Seul le dessin est invalidé (aucune
- * recomposition) ; l'animation s'arrête quand l'appelant retire ce composant. Animations
- * désactivées dans les options d'accessibilité / développeur : fond fixe.
+ * Animated placeholder background ("skeleton") of an image being loaded: placeholder color and
+ * an oblique light band sweeping across the screen. The phase comes from the frame clock and the
+ * cell's position in the window: all waiting cells form a single continuous band, instead of
+ * each one blinking on its own. Only drawing is invalidated (no
+ * recomposition); the animation stops when the caller removes this composable. Animations
+ * disabled in the accessibility / developer options: static background.
  */
 @Composable
 internal fun LoadingSkeleton(modifier: Modifier = Modifier) {
@@ -63,11 +63,11 @@ internal fun LoadingSkeleton(modifier: Modifier = Modifier) {
             .drawBehind {
                 drawRect(base)
                 if (!animate) return@drawBehind
-                // Coordonnée oblique s = x + SLANT·y (repère de la fenêtre) ; le centre de la bande
-                // parcourt [-bande, largeur + bande] à chaque période.
+                // Oblique coordinate s = x + SLANT·y (window coordinates); the band center
+                // travels [-band, width + band] in each period.
                 val phase = (frameMs % SHIMMER_PERIOD_MS) / SHIMMER_PERIOD_MS.toFloat()
                 val center = -bandPx + phase * (windowWidth + 2 * bandPx)
-                // Point local d'ordonnée 0 où s = centre - bande/2, puis direction (1, SLANT).
+                // Local point with y = 0 where s = center - band/2, then direction (1, SLANT).
                 val startX = center - bandPx / 2f - origin.x - SHIMMER_SLANT * origin.y
                 val length = bandPx / (1f + SHIMMER_SLANT * SHIMMER_SLANT)
                 drawRect(

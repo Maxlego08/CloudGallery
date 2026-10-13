@@ -39,8 +39,8 @@ data class OneUiAction(
 )
 
 /**
- * Barre d'actions inférieure Samsung (icône au-dessus d'un petit libellé, actions réparties
- * uniformément). Gère elle-même l'inset de la barre de navigation.
+ * Samsung bottom action bar (icon above a small label, actions spread
+ * evenly). Handles the navigation bar inset itself.
  */
 @Composable
 fun OneUiBottomActionBar(

@@ -45,7 +45,7 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Téléchargement d'un fichier OneDrive dans un fichier partiel (remplaçable dans les tests). */
+/** Downloads a OneDrive file into a partial file (replaceable in tests). */
 fun interface OfflineFileFetcher {
     suspend fun fetch(
         itemId: String,
@@ -57,63 +57,63 @@ fun interface OfflineFileFetcher {
     ): CdnResult
 }
 
-/** Espace disque du dossier des copies (remplaçable dans les tests). */
+/** Disk space of the copy directory (replaceable in tests). */
 interface OfflineSpace {
-    /** Espace libre du volume (File.getUsableSpace). */
+    /** Free space on the volume (File.getUsableSpace). */
     suspend fun usableBytes(): Long
 
-    /** Espace obtenable en libérant le cache d'autres applis (StorageManager.getAllocatableBytes). */
+    /** Space obtainable by freeing other apps' cache (StorageManager.getAllocatableBytes). */
     suspend fun allocatableBytes(): Long
 
-    /** Demande au système de libérer [bytes] octets (StorageManager.allocateBytes) ; [IOException] si impossible. */
+    /** Asks the system to free [bytes] bytes (StorageManager.allocateBytes); [IOException] if impossible. */
     suspend fun reserve(bytes: Long)
 }
 
-/** Fin d'un passage du moteur. */
+/** End of an engine pass. */
 enum class DrainOutcome {
     /**
-     * Plus rien de téléchargeable maintenant : file vide, entièrement en échec ou en pause, ou
-     * tâches restantes qui attendent le Wi-Fi ou la mise à jour de l'index.
+     * Nothing left to download right now: queue empty, entirely failed or paused, or remaining
+     * tasks waiting for Wi-Fi or for the index to be updated.
      */
     DONE,
 
-    /** Erreur passagère : le travail doit être relancé plus tard (attente gérée par le système). */
+    /** Transient error: the job must be relaunched later (backoff handled by the system). */
     RETRY_LATER,
 }
 
-/** Progression d'un passage, pour la notification et JobScheduler. */
+/** Progress of a pass, for the notification and JobScheduler. */
 data class OfflineProgress(
-    /** Nom affiché de l'élément en cours (jamais journalisé). */
+    /** Display name of the current item (never logged). */
     val displayName: String,
     val itemDone: Long,
     val itemTotal: Long,
-    /** Eléments terminés pendant ce passage. */
+    /** Items completed during this pass. */
     val completed: Int,
-    /** Eléments restants, celui en cours compris. */
+    /** Remaining items, including the current one. */
     val remaining: Int,
-    /** Octets reçus pendant ce passage (tous éléments). */
+    /** Bytes received during this pass (all items). */
     val sessionBytes: Long,
 )
 
-/** Bilan d'un passage (notification de fin). */
+/** Summary of a pass (end notification). */
 data class DrainSummary(val completed: Int, val failed: Int)
 
 /**
- * Moteur des copies hors ligne : vide la file `download_task`, un élément à la fois.
+ * Offline copy engine: drains the `download_task` queue, one item at a time.
  *
- * - Un seul passage à la fois ([drain] attend la fin du précédent, nettoyage compris) ; au début
- *   d'un passage, toute tâche « en cours » vient d'un processus disparu et repart en attente.
- * - Chaque tâche est d'abord autorisée sur le réseau du travail (réglage « Wi-Fi uniquement »,
- *   lot « Télécharger maintenant ») : les autres restent en attente du Wi-Fi.
- * - Chaque fichier est écrit dans `offline/<nom>.part` (reprise par Range de la même version),
- *   renommé une fois complet, puis enregistré en une transaction qui revérifie : données
- *   OneDrive non vidées entre-temps, tâche toujours en cours (pas libérée ni annulée), élément
- *   toujours présent dans l'index avec la même version. Sinon le fichier est supprimé.
- * - « Libérer » / « Annuler » d'un élément arrêtent seulement cet élément ([withItemsStopped]) :
- *   le passage continue avec les suivants.
- * - Renommage, enregistrement et suppression ne sont jamais interrompus à moitié.
- * - L'ancienne copie (nouvelle version) reste servie jusqu'à l'enregistrement de la nouvelle,
- *   puis est supprimée.
+ * - One pass at a time ([drain] waits for the previous one to end, cleanup included); at the
+ *   start of a pass, any "running" task comes from a dead process and goes back to the queue.
+ * - Each task is first checked against the job's network ("Wi-Fi only" setting, "Download now"
+ *   batch): the others keep waiting for Wi-Fi.
+ * - Each file is written to `offline/<name>.part` (resumed by Range on the same version), renamed
+ *   once complete, then recorded in a transaction that rechecks: OneDrive data not cleared in the
+ *   meantime, task still running (not freed up or cancelled), item still present in the index
+ *   with the same version. Otherwise the file is deleted.
+ * - "Free up" / "Cancel" on an item only stops that item ([withItemsStopped]): the pass carries
+ *   on with the following ones.
+ * - Renaming, recording and deletion are never interrupted halfway.
+ * - The old copy (new version) keeps being served until the new one is recorded, and is then
+ *   deleted.
  */
 @Singleton
 class OfflineDownloadEngine internal constructor(
@@ -153,12 +153,12 @@ class OfflineDownloadEngine internal constructor(
     private val mediaDao = db.mediaDao()
     private val cachedFiles = db.cachedFileDao()
 
-    /** Un seul passage à la fois (P0-4). */
+    /** One pass at a time (P0-4). */
     private val drainMutex = Mutex()
 
     /**
-     * Décision « plus rien à prendre, fin du passage » prise sous ce verrou, comme l'ajout d'une
-     * tâche ([withQueue]).
+     * The "nothing left to take, end of pass" decision is made under this lock, like adding a
+     * task ([withQueue]).
      */
     private val queueLock = Mutex()
 
@@ -170,10 +170,10 @@ class OfflineDownloadEngine internal constructor(
 
     private val _currentName = MutableStateFlow<String?>(null)
 
-    /** Nom de fichier de la copie en cours de téléchargement (fichier partiel à ne pas toucher). */
+    /** File name of the copy being downloaded (partial file not to be touched). */
     val currentName: StateFlow<String?> = _currentName.asStateFlow()
 
-    /** Elément en cours de traitement : son téléchargement, et la fin de son traitement (enregistrement compris). */
+    /** Item being processed: its download, and the end of its processing (recording included). */
     private class CurrentItem(val mediaId: Long) {
         var fetch: Job? = null
         val done = CompletableDeferred<Unit>()
@@ -181,30 +181,30 @@ class OfflineDownloadEngine internal constructor(
 
     private val itemLock = Any()
 
-    /** Médias en cours de libération ou d'annulation (nombre de demandes en cours par média). */
+    /** Media being freed up or cancelled (number of pending requests per media item). */
     private val stopRequests = HashMap<Long, Int>()
     private var current: CurrentItem? = null
 
-    /** Un passage est en cours dans ce processus. */
+    /** A pass is running in this process. */
     val isDraining: Boolean get() = drainMutex.isLocked
 
-    /** Bilan du dernier passage terminé. */
+    /** Summary of the last finished pass. */
     @Volatile
     var lastSummary: DrainSummary = DrainSummary(0, 0)
         private set
 
     /**
-     * Exécute [block] sous le verrou de la file ; [draining] vrai si un passage en cours prendra
-     * encore de nouvelles tâches.
+     * Runs [block] under the queue lock; [draining] is true if a running pass will still pick up
+     * new tasks.
      */
     internal suspend fun <T> withQueue(block: suspend (draining: Boolean) -> T): T =
         queueLock.withLock { block(accepting) }
 
     /**
-     * Exécute [block] (suppression des tâches et des copies de [mediaIds]) une fois que le moteur
-     * ne travaille plus sur aucun de ces médias : un téléchargement en cours de l'un d'eux est
-     * arrêté (fichier fermé) et son enregistrement éventuel terminé ; tant que [block] s'exécute,
-     * le moteur ne commence ni n'enregistre aucun d'eux. Le passage continue avec les autres.
+     * Runs [block] (deletion of the tasks and copies of [mediaIds]) once the engine no longer
+     * works on any of these media: a running download of one of them is stopped (file closed) and
+     * its possible recording finished; while [block] runs, the engine neither starts nor records
+     * any of them. The pass carries on with the others.
      */
     suspend fun <T> withItemsStopped(mediaIds: Collection<Long>, block: suspend () -> T): T {
         val ids = mediaIds.toSet()
@@ -228,10 +228,10 @@ class OfflineDownloadEngine internal constructor(
     private fun isStopRequested(mediaId: Long): Boolean = synchronized(itemLock) { mediaId in stopRequests }
 
     /**
-     * Vide la file. [network] : réseau choisi par JobScheduler (contrainte « Wi-Fi uniquement »
-     * respectée par la connexion elle-même). [allowed] : tâches autorisées sur ce réseau, relu
-     * avant chaque tâche (null : toutes). Annulable à tout moment (arrêt du travail, purge) : la
-     * tâche en cours repart en attente, son fichier partiel est gardé pour la reprise.
+     * Drains the queue. [network]: network chosen by JobScheduler ("Wi-Fi only" constraint
+     * honoured by the connection itself). [allowed]: tasks allowed on this network, re-read
+     * before each task (null: all of them). Cancellable at any time (job stop, purge): the
+     * current task goes back to the queue, its partial file is kept for resuming.
      */
     suspend fun drain(
         network: Network?,
@@ -250,24 +250,23 @@ class OfflineDownloadEngine internal constructor(
         }
 
     /**
-     * Arrête le passage en cours et attend sa fin (fichiers fermés, tâche remise en attente).
-     * Utilisé par la purge et « Annuler » de la notification.
+     * Stops the running pass and waits for it to end (files closed, task put back in the queue).
+     * Used by the purge and by the notification's "Cancel".
      */
     suspend fun stopAndJoin() {
         drainJob?.cancelAndJoin()
     }
 
-    /** Arrête le passage en cours puis exécute [block] sans qu'aucun passage ne puisse démarrer. */
+    /** Stops the running pass, then runs [block] without any pass being able to start. */
     suspend fun <T> whileStopped(block: suspend () -> T): T {
         stopAndJoin()
         return drainMutex.withLock { block() }
     }
 
     /**
-     * Hors passage seulement : tâches « en cours » d'un processus disparu remises en attente ou,
-     * si ce processus a été arrêté par l'utilisateur pendant un téléchargement, toute la file en
-     * pause (voir [startupRecovery]). Sans effet pendant un passage. Renvoie le nombre de tâches
-     * modifiées.
+     * Outside a pass only: "running" tasks of a dead process are put back in the queue or, if
+     * that process was stopped by the user during a download, the whole queue is paused (see
+     * [startupRecovery]). No effect during a pass. Returns the number of modified tasks.
      */
     suspend fun recoverIfIdle(firstStart: Boolean, userRequestedExit: Boolean): Int {
         if (!drainMutex.tryLock()) return 0
@@ -289,7 +288,7 @@ class OfflineDownloadEngine internal constructor(
         var sessionBytes = 0L
         var spaceChecked = false
 
-        /** Tâches laissées de côté pendant ce passage (libération ou annulation en cours). */
+        /** Tasks set aside during this pass (free-up or cancellation in progress). */
         val skipped = HashSet<Long>()
     }
 
@@ -300,7 +299,7 @@ class OfflineDownloadEngine internal constructor(
     ): DrainOutcome {
         val state = DrainState()
         try {
-            // Un seul moteur par processus et son verrou est tenu : toute tâche « en cours » est périmée.
+            // A single engine per process and its lock is held: any "running" task is stale.
             tasks.resetRunningToQueued(clock())
             accepting = true
             if (!canAccess()) {
@@ -309,7 +308,7 @@ class OfflineDownloadEngine internal constructor(
             }
             val driveId = parseCloudCursorVersion(db.syncCursorDao().get(ONEDRIVE_PROVIDER)?.version)?.driveId
             while (true) {
-                // Réglage relu à chaque tâche : le passer à « Wi-Fi uniquement » s'applique aussitôt.
+                // Setting re-read for each task: switching to "Wi-Fi only" applies immediately.
                 val permitted = allowed()
                 val task = queueLock.withLock {
                     nextTask(permitted, state.skipped).also { if (it == null) accepting = false }
@@ -327,7 +326,7 @@ class OfflineDownloadEngine internal constructor(
     }
 
     private suspend fun nextTask(permitted: Set<Long>?, skipped: Set<Long>): DownloadTaskEntity? {
-        // Liste jamais vide dans la requête (identifiant impossible) : SQL plus simple à lire.
+        // List never empty in the query (impossible id): simpler SQL to read.
         val skip = skipped.toList().ifEmpty { listOf(NO_ID) }
         return when {
             permitted == null -> tasks.nextRunnable(skip)
@@ -338,7 +337,7 @@ class OfflineDownloadEngine internal constructor(
 
     private enum class Step { NEXT, RETRY_LATER, STOP }
 
-    /** La tâche a disparu pendant son téléchargement (libérée, annulée) : téléchargement arrêté. */
+    /** The task disappeared during its download (freed up, cancelled): download stopped. */
     private class TaskGoneException : Exception()
 
     private suspend fun processTask(
@@ -348,8 +347,8 @@ class OfflineDownloadEngine internal constructor(
         state: DrainState,
         onProgress: suspend (OfflineProgress) -> Unit,
     ): Step {
-        // Elément pris en charge avant toute écriture : une libération ou une annulation qui
-        // arrive à partir de maintenant arrête ce téléchargement (et l'attend).
+        // Item claimed before any write: a free-up or cancellation arriving from now on stops
+        // this download (and waits for it).
         val item = CurrentItem(task.mediaId)
         val stopping = synchronized(itemLock) {
             if (task.mediaId in stopRequests) {
@@ -360,7 +359,7 @@ class OfflineDownloadEngine internal constructor(
             }
         }
         if (stopping) {
-            // Libération ou annulation en cours : la tâche va être supprimée par l'appelant.
+            // Free-up or cancellation in progress: the task is about to be deleted by the caller.
             state.skipped += task.id
             return Step.NEXT
         }
@@ -388,7 +387,7 @@ class OfflineDownloadEngine internal constructor(
         }
         val source = itemId?.let { sources.find(SourceKind.ONEDRIVE, it) }
         if (itemId == null || source == null || source.mediaId != task.mediaId || source.missingSince != null) {
-            // Elément supprimé ou masqué sur OneDrive depuis la mise en file.
+            // Item deleted or hidden on OneDrive since it was queued.
             tasks.markFailed(task.id, DownloadError.NOT_FOUND.name, task.attempts, clock())
             state.failed++
             return Step.NEXT
@@ -420,7 +419,7 @@ class OfflineDownloadEngine internal constructor(
             coroutineScope {
                 val fetch = async(start = CoroutineStart.LAZY) {
                     fetcher.fetch(itemId, part, cTag, network, driveId) { done, total ->
-                        // Reprise : le premier relevé part de la taille du fichier partiel.
+                        // Resume: the first reading starts from the partial file's size.
                         if (itemBytes < 0) itemBytes = done
                         if (done > itemBytes) progressed = true
                         state.sessionBytes += (done - itemBytes).coerceAtLeast(0)
@@ -429,7 +428,7 @@ class OfflineDownloadEngine internal constructor(
                         if (shouldEmitProgress(lastEmitMs, now, lastBytes, done, total)) {
                             lastEmitMs = now
                             lastBytes = done
-                            // Tâche supprimée entre-temps (libérée, annulée) : inutile de continuer.
+                            // Task deleted in the meantime (freed up, cancelled): no point continuing.
                             if (tasks.updateProgress(task.id, done, total, now) == 0) throw TaskGoneException()
                             onProgress(OfflineProgress(media.displayName, done, total, state.completed, remaining, state.sessionBytes))
                         }
@@ -444,11 +443,11 @@ class OfflineDownloadEngine internal constructor(
             }
         } catch (e: CancellationException) {
             if (currentCoroutineContext().isActive) {
-                // Cet élément seulement (libéré ou annulé) : la tâche est supprimée par l'appelant.
+                // This item only (freed up or cancelled): the task is deleted by the caller.
                 state.skipped += task.id
                 return Step.NEXT
             }
-            // Arrêt du travail : la tâche repart en attente, le fichier partiel reste pour la reprise.
+            // Job stopped: the task goes back to the queue, the partial file stays for resuming.
             withContext(NonCancellable) { tasks.requeue(task.id, null, task.attempts, clock()) }
             throw e
         } catch (_: TaskGoneException) {
@@ -457,7 +456,7 @@ class OfflineDownloadEngine internal constructor(
         } catch (e: Exception) {
             val error = downloadErrorOf(e) ?: if (e is IOException) DownloadError.NETWORK else DownloadError.SERVER
             if (error != DownloadError.NETWORK && error != DownloadError.THROTTLED) {
-                Log.w(TAG, "Copie hors ligne interrompue : $error")
+                Log.w(TAG, "Offline copy interrupted: $error")
             }
             return onFailure(task, error, state, progressed)
         } finally {
@@ -466,7 +465,7 @@ class OfflineDownloadEngine internal constructor(
         return withContext(NonCancellable) { finish(task, media, itemId, name, part, dest, result, startGeneration, state) }
     }
 
-    /** Fin du téléchargement : renommage puis enregistrement (jamais interrompus). */
+    /** End of the download: rename then record (never interrupted). */
     private suspend fun finish(
         task: DownloadTaskEntity,
         media: MediaEntity,
@@ -485,7 +484,7 @@ class OfflineDownloadEngine internal constructor(
         val outcome = try {
             commit(task, media, itemId, name, result, startGeneration)
         } catch (e: Exception) {
-            Log.w(TAG, "Enregistrement de la copie hors ligne impossible", e)
+            Log.w(TAG, "Could not record the offline copy", e)
             Commit.Failed
         }
         return when (outcome) {
@@ -499,7 +498,7 @@ class OfflineDownloadEngine internal constructor(
                 onFailure(task, DownloadError.CONTENT_CHANGED, state, progressed = false)
             }
             Commit.Discarded -> {
-                // Données vidées, tâche libérée ou annulée, élément disparu : rien n'est gardé.
+                // Data cleared, task freed up or cancelled, item gone: nothing is kept.
                 dest.delete()
                 Step.NEXT
             }
@@ -526,7 +525,7 @@ class OfflineDownloadEngine internal constructor(
         startGeneration: Long,
     ): Commit = db.withTransaction {
         if (generation.value != startGeneration) return@withTransaction Commit.Discarded
-        // Libération ou annulation de cet élément en cours : la copie n'est pas enregistrée.
+        // Free-up or cancellation of this item in progress: the copy is not recorded.
         if (isStopRequested(media.id)) return@withTransaction Commit.Discarded
         val current = tasks.getById(task.id)
         if (current == null || current.state != DownloadState.RUNNING) return@withTransaction Commit.Discarded
@@ -544,10 +543,10 @@ class OfflineDownloadEngine internal constructor(
         val fields = MediaSourceEntity(
             mediaId = media.id,
             kind = SourceKind.OFFLINE_COPY,
-            // Identifiant OneDrive : unique par type et stable (le chemin du fichier est dans cached_file).
+            // OneDrive id: unique per kind and stable (the file path is in cached_file).
             externalId = itemId,
             uri = null,
-            // Jamais d'album-dossier : l'appartenance vient de la source OneDrive.
+            // Never a folder album: membership comes from the OneDrive source.
             bucketKey = null,
             bucketName = null,
             relativePath = null,
@@ -596,8 +595,8 @@ class OfflineDownloadEngine internal constructor(
                 Step.RETRY_LATER
             }
             FailureAction.WAIT_FOR_INDEX -> {
-                // Laissée en attente (sans compter d'essai) jusqu'à la prochaine synchronisation ;
-                // la requête des tâches téléchargeables l'écarte d'ici là.
+                // Left pending (without counting an attempt) until the next sync; the downloadable
+                // tasks query leaves it out until then.
                 tasks.requeue(task.id, error.name, attempts, now)
                 state.skipped += task.id
                 Step.NEXT
@@ -630,9 +629,9 @@ class OfflineDownloadEngine internal constructor(
     }
 
     /**
-     * Espace pour toute la file (une seule demande au système par passage) : l'espace libre
-     * suffit, ou le système libère le cache d'autres applis (allocateBytes : une écriture
-     * ordinaire ne le ferait pas), ou l'espace manque même ainsi.
+     * Space for the whole queue (a single request to the system per pass): the free space is
+     * enough, or the system frees other apps' cache (allocateBytes: an ordinary write would not),
+     * or there is not enough space even then.
      */
     private suspend fun ensureSpace(): Boolean {
         val needed = tasks.remainingBytes()

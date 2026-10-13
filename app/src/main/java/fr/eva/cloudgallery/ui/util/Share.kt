@@ -10,9 +10,9 @@ import fr.eva.cloudgallery.MainActivity
 import fr.eva.cloudgallery.R
 
 /**
- * Ouvre la feuille de partage Android pour des URI `content://` : fichiers MediaStore, ou
- * fichiers OneDrive téléchargés exposés par le FileProvider de l'appli. Lecture seule
- * (FLAG_GRANT_READ_URI_PERMISSION et ClipData), jamais d'autorisation d'écriture.
+ * Opens the Android share sheet for `content://` URIs: MediaStore files, or
+ * downloaded OneDrive files exposed by the app's FileProvider. Read-only
+ * (FLAG_GRANT_READ_URI_PERMISSION and ClipData), never a write permission.
  */
 fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
     if (uris.isEmpty()) return
@@ -20,13 +20,13 @@ fun shareMedia(context: Context, uris: List<Uri>, mimeTypes: List<String?>) {
 }
 
 /**
- * Feuille de partage de « Déplacer vers le Dossier sécurisé » ([title] : consigne courte), à lancer
- * pour un résultat : le retour dans l'appli déclenche la question « ajout réussi ? ».
+ * Share sheet for "Move to Secure Folder" ([title]: short instruction), to be launched
+ * for a result: returning to the app triggers the "added successfully?" question.
  */
 fun secureFolderShareIntent(context: Context, uris: List<Uri>, mimeTypes: List<String?>, @StringRes title: Int): Intent =
     chooser(context, sendIntent(uris, mimeTypes), title)
 
-/** ACTION_SEND(_MULTIPLE) en lecture seule (FLAG_GRANT_READ_URI_PERMISSION et ClipData). */
+/** Read-only ACTION_SEND(_MULTIPLE) (FLAG_GRANT_READ_URI_PERMISSION and ClipData). */
 private fun sendIntent(uris: List<Uri>, mimeTypes: List<String?>): Intent {
     require(uris.isNotEmpty())
     return if (uris.size == 1) {
@@ -46,7 +46,7 @@ private fun sendIntent(uris: List<Uri>, mimeTypes: List<String?>): Intent {
     }
 }
 
-// Type MIME commun : jpeg + png -> "image/STAR" ; image + vidéo -> "STAR/STAR" (STAR = joker).
+// Common MIME type: jpeg + png -> "image/STAR"; image + video -> "STAR/STAR" (STAR = wildcard).
 fun commonMimeType(mimeTypes: List<String?>): String {
     val known = mimeTypes.filterNotNull().filter { it.contains('/') }
     if (known.isEmpty()) return "*/*"
@@ -56,9 +56,9 @@ fun commonMimeType(mimeTypes: List<String?>): String {
 }
 
 /**
- * Ouvre le média dans une autre application (lecteur externe en cas de format non pris en charge),
- * en lecture seule. CloudGallery est exclue du choix : elle se proposerait sinon elle-même pour
- * ses propres URI (filtre VIEW de MainActivity).
+ * Opens the media in another application (external player for unsupported formats),
+ * read-only. CloudGallery is excluded from the chooser: otherwise it would offer itself for
+ * its own URIs (MainActivity's VIEW filter).
  */
 fun openWithExternalApp(context: Context, uri: Uri, mimeType: String?) {
     val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -69,7 +69,7 @@ fun openWithExternalApp(context: Context, uri: Uri, mimeType: String?) {
     context.startActivity(chooser(context, intent, R.string.common_open_with))
 }
 
-/** Sélecteur d'applis sans CloudGallery elle-même. */
+/** App chooser without CloudGallery itself. */
 private fun chooser(context: Context, target: Intent, @StringRes title: Int): Intent =
     Intent.createChooser(target, context.getString(title)).apply {
         putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(context, MainActivity::class.java)))

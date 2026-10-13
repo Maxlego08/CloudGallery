@@ -93,10 +93,10 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 
 /**
- * Ecran « Compte OneDrive » : connexion (accès en lecture seule), reconnexion après
- * expiration, profil et quota, synchronisation, affichage dans Photos, déconnexion avec
- * confirmation (les données OneDrive sont retirées de l'index, jamais les fichiers), retrait des
- * données restées d'une session précédente ou d'un autre compte.
+ * "OneDrive account" screen: sign-in (read-only access), re-sign-in after
+ * expiry, profile and quota, sync, display in Photos, sign-out with
+ * confirmation (OneDrive data is removed from the index, never the files), removal of
+ * data left over from a previous session or another account.
  */
 @Composable
 fun AccountScreen(
@@ -107,7 +107,7 @@ fun AccountScreen(
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val resources = LocalResources.current
-    // Sans activité hôte, la connexion interactive est impossible : les boutons sont masqués.
+    // Without a host activity, interactive sign-in is impossible: the buttons are hidden.
     val activity = LocalActivity.current
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
@@ -122,8 +122,8 @@ fun AccountScreen(
     var showReplaceDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteCopiesDialog by rememberSaveable { mutableStateOf(false) }
     var showCancelOfflineDialog by rememberSaveable { mutableStateOf(false) }
-    // Copies hors ligne que la purge supprimerait (dont dernières copies), lues à l'ouverture d'une
-    // confirmation : bouton de confirmation désactivé tant qu'elles ne sont pas connues (D3).
+    // Offline copies the purge would delete (including last copies), read when a confirmation
+    // opens: confirm button disabled until they are known (D3).
     val purgeDialogOpen = showSignOutDialog || showPurgeDialog || showReplaceDialog
     val purgeImpact by produceState<PurgeImpactUi>(PurgeImpactUi.Loading, purgeDialogOpen) {
         value = PurgeImpactUi.Loading
@@ -132,7 +132,7 @@ fun AccountScreen(
     val offlineNotice = offlinePurgeNotice(purgeImpact)
     val purgeConfirmable = purgeConfirmEnabled(purgeImpact)
 
-    // Compte éventuellement persisté par MSAL pendant que l'appli était en arrière-plan.
+    // Account possibly persisted by MSAL while the app was in the background.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
     LaunchedEffect(viewModel) {
@@ -250,7 +250,7 @@ fun AccountScreen(
         )
     }
     if (showDeleteCopiesDialog) {
-        // Liste affichée = liste confirmée : seuls ces éléments sont traités.
+        // Displayed list = confirmed list: only these items are processed.
         val confirmed = uiState.deletedCopies.map { it.mediaId }
         val count = confirmed.size
         OneUiDialog(
@@ -283,10 +283,10 @@ fun AccountScreen(
 }
 
 /**
- * Complément des confirmations de purge (déconnexion, données restantes, autre compte) : copies
- * hors ligne supprimées de l'appareil et, parmi elles, dernières copies d'éléments supprimés de
- * OneDrive (décision D3). Vide sans copie hors ligne ; avertissement prudent si le nombre n'a pas
- * pu être lu.
+ * Addendum to the purge confirmations (sign-out, leftover data, other account): offline
+ * copies deleted from the device and, among them, last copies of items deleted from
+ * OneDrive (decision D3). Empty without offline copies; cautious warning if the count could
+ * not be read.
  */
 @Composable
 private fun offlinePurgeNotice(impact: PurgeImpactUi): String = when (val notice = purgeNotice(impact)) {
@@ -322,7 +322,7 @@ private fun AccountContent(
     onCancelOffline: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
-        // Décision D1 : copies hors ligne d'éléments supprimés de OneDrive depuis plus de 30 jours.
+        // Decision D1: offline copies of items deleted from OneDrive more than 30 days ago.
         if (state.deletedCopies.isNotEmpty() && state.account != CloudAccountState.NotConfigured) {
             DeletedCopiesCard(
                 copies = state.deletedCopies,
@@ -428,7 +428,7 @@ private fun AccountContent(
     }
 }
 
-/** Synchronisation : état, « Synchroniser maintenant » et affichage dans Photos. */
+/** Sync: status, "Sync now" and display in Photos. */
 @Composable
 private fun SyncSection(
     sync: CloudSyncState,
@@ -437,7 +437,7 @@ private fun SyncSection(
     onSyncNow: () -> Unit,
     onShowCloudInPhotos: (Boolean) -> Unit,
 ) {
-    // Limitation Microsoft Graph : aucune requête avant retryNotBefore, l'action redevient active ensuite.
+    // Microsoft Graph throttling: no request before retryNotBefore, the action becomes active again afterwards.
     val throttled by produceState(sync.retryNotBefore > System.currentTimeMillis(), sync.retryNotBefore) {
         val wait = sync.retryNotBefore - System.currentTimeMillis()
         if (wait > 0) {
@@ -452,7 +452,7 @@ private fun SyncSection(
             title = stringResource(R.string.account_sync_now),
             subtitle = cloudSyncStatusText(sync),
             icon = Icons.Rounded.Sync,
-            // Pas de bouton inopérant : inactif pendant une synchro, une purge, une limitation ou un changement de compte.
+            // No dead button: disabled during a sync, a purge, throttling or an account change.
             onClick = if (sync.running || busy || throttled || sync.accountMismatch) null else onSyncNow,
             trailing = if (sync.running) RunningTrailing else null,
         )
@@ -469,8 +469,8 @@ private fun SyncSection(
 }
 
 /**
- * Copies hors ligne : état de la file (en cours, en attente du Wi-Fi, en pause, échecs) et des
- * copies présentes, avec « Télécharger maintenant », reprise et annulation.
+ * Offline copies: queue status (in progress, waiting for Wi-Fi, paused, failures) and
+ * existing copies, with "Download now", resume and cancel.
  */
 @Composable
 private fun OfflineSection(
@@ -488,7 +488,7 @@ private fun OfflineSection(
             } else {
                 pluralStringResource(R.plurals.offline_queue_queued, queue.queued, queue.queued)
             }
-            // Taille restant à télécharger (tailles connues), utile avant « Télécharger maintenant ».
+            // Size left to download (known sizes), useful before "Download now".
             add(if (queue.remainingBytes > 0) "$waiting · ${Formatter.formatShortFileSize(context, queue.remainingBytes)}" else waiting)
         }
         if (queue.paused > 0) add(pluralStringResource(R.plurals.offline_queue_paused, queue.paused, queue.paused))
@@ -529,8 +529,8 @@ private fun OfflineSection(
 }
 
 /**
- * Copies hors ligne d'éléments supprimés de OneDrive (délai de grâce écoulé) : aperçus tirés des
- * copies elles-mêmes, puis « Supprimer les copies » (confirmation) ou « Les conserver ».
+ * Offline copies of items deleted from OneDrive (grace period elapsed): previews taken from
+ * the copies themselves, then "Delete copies" (confirmation) or "Keep them".
  */
 @Composable
 private fun DeletedCopiesCard(
@@ -608,8 +608,8 @@ private fun DeletedCopiesCard(
 private const val MAX_DELETED_THUMBNAILS = 12
 
 /**
- * Compte connecté (ou en attente de reconnexion) : identité, quota, accès en lecture seule,
- * sections supplémentaires ([extra]) puis déconnexion.
+ * Signed-in account (or awaiting re-sign-in): identity, quota, read-only access,
+ * additional sections ([extra]) then sign-out.
  */
 @Composable
 private fun SignedInSections(
@@ -655,8 +655,8 @@ private fun SignedInSections(
 }
 
 /**
- * Carte d'explication avec une action principale. [onAction] null (pas d'activité hôte) :
- * le bouton n'est pas affiché plutôt que de ne rien faire.
+ * Explanation card with a main action. [onAction] null (no host activity):
+ * the button is not shown rather than doing nothing.
  */
 @Composable
 private fun InfoCard(

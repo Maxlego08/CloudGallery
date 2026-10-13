@@ -10,31 +10,29 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Issue d'une demande de planification. */
+/** Outcome of a scheduling request. */
 enum class ScheduleResult {
-    /** Travail planifié (il démarre dès que le réseau demandé est disponible). */
+    /** Job scheduled (it starts as soon as the requested network is available). */
     SCHEDULED,
 
-    /** Refusé par le système (appli pas au premier plan, autorisation absente) : reprise au prochain premier plan. */
+    /** Refused by the system (app not in the foreground, permission missing): resumed next time the app is in the foreground. */
     REFUSED,
 }
 
 /**
- * Planification du travail de téléchargement des copies hors ligne : tâche de transfert de
- * données lancée par l'utilisateur (JobScheduler, `setUserInitiated`), sans quota ni limite de
- * durée, avec notification de progression obligatoire. WorkManager 2.12 ne sait pas créer ce
- * type de tâche (vérifié dans le bytecode).
+ * Scheduling of the offline copy download job: user-initiated data transfer job (JobScheduler,
+ * `setUserInitiated`), with no quota or duration limit, and a mandatory progress notification.
+ * WorkManager 2.12 cannot create this kind of job (checked in the bytecode).
  *
- * - Espace de noms JobScheduler propre (« offline ») : aucun conflit d'identifiant avec
- *   WorkManager, qui utilise le sien.
- * - Réseau exigé par `setRequiredNetworkType` (Wi-Fi non facturé, ou tout réseau après
- *   « Télécharger maintenant ») : cette forme garde les VPN acceptés, contrairement à une
- *   NetworkRequest construite à la main.
- * - Ne peut être planifié que lorsque l'appli est visible (sinon refus du système).
- * - Non persistant : après un redémarrage, la file reprend au prochain lancement de l'appli.
+ * - Dedicated JobScheduler namespace ("offline"): no id clash with WorkManager, which uses its
+ *   own.
+ * - Network required through `setRequiredNetworkType` (unmetered Wi-Fi, or any network after
+ *   "Download now"): this form keeps VPNs accepted, unlike a hand-built NetworkRequest.
+ * - Can only be scheduled while the app is visible (otherwise the system refuses).
+ * - Not persisted: after a reboot, the queue resumes the next time the app is launched.
  *
- * Toutes les méthodes sont des appels Binder courts (JobScheduler) : appelables depuis le
- * dispatcher d'E/S comme depuis le thread principal.
+ * All methods are short Binder calls (JobScheduler): callable from the I/O dispatcher as well as
+ * from the main thread.
  */
 @Singleton
 class OfflineJobScheduler @Inject constructor(
@@ -46,8 +44,8 @@ class OfflineJobScheduler @Inject constructor(
     }
 
     /**
-     * Planifie (ou replanifie) le travail. Un travail en cours avec le même identifiant serait
-     * arrêté par le système : l'appelant ne replanifie pas pendant un passage du moteur.
+     * Schedules (or reschedules) the job. A running job with the same id would be stopped by the
+     * system: the caller does not reschedule during an engine pass.
      */
     fun schedule(estimatedBytes: Long, network: JobNetwork): ScheduleResult {
         val scheduler = jobs ?: return ScheduleResult.REFUSED
@@ -68,15 +66,15 @@ class OfflineJobScheduler @Inject constructor(
                 .build()
             if (scheduler.schedule(info) == JobScheduler.RESULT_SUCCESS) ScheduleResult.SCHEDULED else ScheduleResult.REFUSED
         } catch (e: SecurityException) {
-            Log.w(TAG, "Planification refusée", e)
+            Log.w(TAG, "Scheduling refused", e)
             ScheduleResult.REFUSED
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Planification refusée", e)
+            Log.w(TAG, "Scheduling refused", e)
             ScheduleResult.REFUSED
         }
     }
 
-    /** Réseau exigé par le travail planifié, null s'il n'y en a pas. */
+    /** Network required by the scheduled job, null if there is none. */
     fun pendingNetwork(): JobNetwork? {
         val info = try {
             jobs?.getPendingJob(JOB_ID)
@@ -87,12 +85,12 @@ class OfflineJobScheduler @Inject constructor(
         return if (unmetered) JobNetwork.UNMETERED else JobNetwork.ANY
     }
 
-    /** Retire le travail planifié ou en cours (arrêt avec le motif « annulé par l'appli »). */
+    /** Removes the scheduled or running job (stopped with the "cancelled by app" reason). */
     fun cancel() {
         try {
             jobs?.cancel(JOB_ID)
         } catch (e: RuntimeException) {
-            Log.w(TAG, "Annulation du travail impossible", e)
+            Log.w(TAG, "Could not cancel the job", e)
         }
     }
 

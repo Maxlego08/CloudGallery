@@ -26,21 +26,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Point unique de déclenchement de l'indexation locale : au passage au premier plan, à
- * l'obtention de l'autorisation, ou à la demande (Menu / Paramètres). Ne fait rien sans accès
- * aux médias. Les synchronisations ne se chevauchent pas ; une demande complète pendant une
- * synchro incrémentale est enchaînée après elle.
+ * Single trigger point for local indexing: when moving to the foreground, when
+ * permission is granted, or on demand (Menu / Settings). Does nothing without media
+ * access. Syncs do not overlap; a full request during an incremental
+ * sync is chained after it.
  *
- * La synchronisation OneDrive est demandée en parallèle (premier plan, « Synchroniser
- * maintenant »), indépendamment de l'accès aux médias locaux ; elle ne s'exécute que pour un
- * compte connecté et se limite elle-même au premier plan.
+ * OneDrive sync is requested in parallel (foreground, "Sync
+ * now"), independently of local media access; it only runs for a
+ * signed-in account and limits itself to the foreground.
  *
- * Au premier passage au premier plan du processus, le cache temporaire des originaux OneDrive
- * est nettoyé (plus de 7 jours, plafond 1 Go, fichiers partiels abandonnés).
+ * On the process's first move to the foreground, the temporary cache of OneDrive originals
+ * is cleaned up (older than 7 days, 1 GB limit, abandoned partial files).
  *
- * Copies hors ligne : à chaque passage au premier plan et à la fin de chaque synchronisation
- * OneDrive (nouvelles versions à télécharger), la file est relancée si besoin. Le travail de
- * téléchargement ne peut être planifié que lorsque l'appli est visible.
+ * Offline copies: every time the app moves to the foreground and at the end of every OneDrive
+ * sync (new versions to download), the queue is restarted if needed. The download
+ * work can only be scheduled while the app is visible.
  */
 @Singleton
 class MediaSyncCoordinator @Inject constructor(
@@ -57,7 +57,7 @@ class MediaSyncCoordinator @Inject constructor(
 
     fun hasMediaAccess(): Boolean = MediaPermissions.currentAccess(context) != MediaAccess.NONE
 
-    /** Appli revenue au premier plan : synchro incrémentale (locale et OneDrive). */
+    /** App back in the foreground: incremental sync (local and OneDrive). */
     fun onForeground() {
         syncIfAllowed(full = false)
         cloudSync.get().requestSync(CloudSyncReason.FOREGROUND)
@@ -68,10 +68,10 @@ class MediaSyncCoordinator @Inject constructor(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.w(TAG, "Nettoyage des originaux OneDrive impossible", e)
+                    Log.w(TAG, "Unable to clean up OneDrive originals", e)
                 }
             }
-            // Fin d'une synchronisation OneDrive : versions modifiées à retélécharger.
+            // End of a OneDrive sync: modified versions to download again.
             scope.launch(io) {
                 cloudSync.get().state
                     .map { it.running }
@@ -90,16 +90,16 @@ class MediaSyncCoordinator @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Reprise des copies hors ligne impossible", e)
+            Log.w(TAG, "Unable to resume offline copies", e)
         }
     }
 
-    /** Autorisation accordée ou étendue (partielle -> complète, nouveaux éléments choisis). */
+    /** Permission granted or extended (partial -> full, new items chosen). */
     fun onAccessChanged() = syncIfAllowed(full = false)
 
     /**
-     * Synchro immédiate. La relecture complète ([full]) ne concerne que les médias locaux : la
-     * synchro OneDrive est toujours incrémentale (énumération complète automatique si nécessaire).
+     * Immediate sync. The full re-read ([full]) only concerns local media: the
+     * OneDrive sync is always incremental (automatic full enumeration if necessary).
      */
     fun syncNow(full: Boolean) {
         syncIfAllowed(full)
@@ -120,8 +120,8 @@ class MediaSyncCoordinator @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // L'indexeur publie lui-même l'erreur dans IndexState ; on se contente de journaliser.
-                Log.w(TAG, "Echec de la synchronisation locale", e)
+                // The indexer publishes the error to IndexState itself; we only log it.
+                Log.w(TAG, "Local sync failed", e)
             }
         }
     }

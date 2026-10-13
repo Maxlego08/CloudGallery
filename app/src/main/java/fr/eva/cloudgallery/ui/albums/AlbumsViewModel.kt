@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Entrée d'accès rapide (Favoris, Vidéos) présentée comme un album. */
+/** Quick-access entry (Favorites, Videos) presented as an album. */
 data class QuickAlbum(
     val count: Int = 0,
     val cover: MediaSummary? = null,
@@ -46,7 +46,7 @@ data class AlbumsUiState(
     val favorites: QuickAlbum = QuickAlbum(),
     val videos: QuickAlbum = QuickAlbum(),
     val sort: AlbumSort = AlbumSort.CUSTOM,
-    /** Mode sélection actif (il peut l'être avec 0 élément, via « Sélectionner »). */
+    /** Selection mode active (it can be with 0 items, via "Select"). */
     val selectionMode: Boolean = false,
     val selection: Set<Long> = emptySet(),
 ) {
@@ -55,7 +55,7 @@ data class AlbumsUiState(
     val actions: AlbumSelectionActions get() = AlbumsLogic.selectionActions(selectedAlbums)
 }
 
-/** Etat interne de la sélection. */
+/** Internal selection state. */
 internal data class AlbumSelection(val active: Boolean = false, val ids: Set<Long> = emptySet())
 
 sealed interface AlbumsEvent {
@@ -106,7 +106,7 @@ class AlbumsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AlbumsUiState())
 
-    /** Nombre d'éléments + première miniature (média le plus récent) d'un contexte. */
+    /** Item count + first thumbnail (most recent media item) of a context. */
     private fun quickAlbum(context: MediaContext): Flow<QuickAlbum> = combine(
         mediaRepository.observeCount(context),
         mediaRepository.observeMediaIds(context)
@@ -116,9 +116,9 @@ class AlbumsViewModel @Inject constructor(
         .flowOn(io)
         .catch { emit(QuickAlbum()) }
 
-    // --- Sélection ---
+    // --- Selection ---
 
-    /** Entre en mode sélection, en sélectionnant éventuellement [albumId] (appui long). */
+    /** Enters selection mode, optionally selecting [albumId] (long press). */
     fun startSelection(albumId: Long? = null) = selection.update {
         AlbumSelection(active = true, ids = if (albumId != null) it.ids + albumId else it.ids)
     }
@@ -142,7 +142,7 @@ class AlbumsViewModel @Inject constructor(
         launchSafe { albumRepository.createVirtualAlbum(clean) }
     }
 
-    /** Renomme l'album sélectionné (nom affiché uniquement pour un album-dossier). */
+    /** Renames the selected album (display name only for a folder album). */
     fun renameSelected(name: String) {
         val clean = AlbumsLogic.normalizeName(name) ?: return
         val album = uiState.value.selectedAlbums.singleOrNull() ?: return
@@ -158,7 +158,7 @@ class AlbumsViewModel @Inject constructor(
         launchSafe { selected.forEach { albumRepository.setPinned(it.id, pin) } }
     }
 
-    /** Supprime les albums virtuels sélectionnés ; les médias ne sont jamais touchés. */
+    /** Deletes the selected virtual albums; media items are never touched. */
     fun deleteSelected() {
         val selected = uiState.value.selectedAlbums
         if (!AlbumsLogic.selectionActions(selected).canDelete) return

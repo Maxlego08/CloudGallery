@@ -32,9 +32,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Fusion local / OneDrive sur une base en mémoire : uniquement sur empreinte et taille
- * identiques, transfert des favoris, albums, couvertures, caches, téléchargements et position de
- * lecture ; défusion quand le contenu diverge ; appartenance aux albums-dossiers.
+ * Local / OneDrive merging on an in-memory database: only on identical hash and
+ * size, transfer of favorites, albums, covers, caches, downloads and playback
+ * position; unmerging when the content diverges; folder album membership.
  */
 @RunWith(AndroidJUnit4::class)
 class MediaMergerTest {
@@ -61,7 +61,7 @@ class MediaMergerTest {
         hasLocal = local, hasCloud = !local, hasOffline = false,
     )
 
-    /** Fichier local, empreinte à jour par défaut ([hashCurrent] faux : signature périmée). */
+    /** Local file, hash up to date by default ([hashCurrent] false: stale signature). */
     private suspend fun seedLocal(name: String, hash: String?, size: Long = 100, hashCurrent: Boolean = true, bucket: String = "local:1"): Long {
         val id = db.mediaDao().insert(media(name, size, local = true).copy(contentHash = contentHashOf(hash)))
         db.mediaSourceDao().insert(
@@ -102,12 +102,12 @@ class MediaMergerTest {
         assertEquals(listOf(SourceKind.LOCAL, SourceKind.ONEDRIVE), sourcesOf(local))
         val merged = db.mediaDao().getById(local)!!
         assertTrue(merged.hasLocal && merged.hasCloud)
-        // Métadonnées et fichier du téléphone conservés.
+        // The phone's metadata and file are kept.
         assertEquals("a", merged.displayName)
         assertEquals(90, merged.orientation)
         assertNotNull(merged.primaryUri)
         assertEquals("A", merged.cloudItemId)
-        // Un seul média dans Photos, même avec OneDrive affiché.
+        // A single media in Photos, even with OneDrive shown.
         assertEquals(listOf(local), db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
         // Idempotent.
         assertEquals(0, merger.reconcile())
@@ -172,7 +172,7 @@ class MediaMergerTest {
         assertEquals(2, merger.reconcile())
         assertEquals(first, cloudMediaOf("A1"))
         assertEquals(second, cloudMediaOf("A2"))
-        // Elément en surnombre : reste un média OneDrive à part.
+        // Surplus item: stays a separate OneDrive media.
         val extra = cloudMediaOf("A3")
         assertNotEquals(first, extra)
         assertNotEquals(second, extra)
@@ -185,7 +185,7 @@ class MediaMergerTest {
         merger.reconcile()
         db.favoriteDao().insertAll(listOf(FavoriteEntity(local, addedAt = 5)))
         db.cachedFileDao().upsert(CachedFileEntity(mediaId = local, sourceId = null, kind = CacheKind.ORIGINAL, path = "A.jpg", sizeBytes = 100, createdAt = 1, lastAccessAt = 1, pinned = false, version = "c-A"))
-        // Nouvelle version sur OneDrive (synchro) : autre empreinte, même taille.
+        // New version on OneDrive (sync): different hash, same size.
         val source = db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!
         db.mediaSourceDao().update(source.copy(quickXorHash = "H9", cTag = "c2"))
 
@@ -210,11 +210,11 @@ class MediaMergerTest {
         seedCloud("A", "H1")
         merger.reconcile()
         val source = db.mediaSourceDao().find(SourceKind.LOCAL, "img:a")!!
-        // Fichier touché sans changement de taille (signature périmée) : fusion gardée.
+        // File touched without a size change (stale signature): merge kept.
         db.mediaSourceDao().update(source.copy(generation = 4))
         merger.reconcile()
         assertEquals(local, cloudMediaOf("A"))
-        // Taille changée : contenu forcément différent, fusion défaite aussitôt.
+        // Size changed: content necessarily different, merge undone right away.
         db.mediaSourceDao().update(source.copy(generation = 5, sizeBytes = 120))
         merger.reconcile()
         assertNotEquals(local, cloudMediaOf("A"))
@@ -230,7 +230,7 @@ class MediaMergerTest {
         assertEquals(listOf(local), db.mediaDao().observeAlbumIds(camera).first())
         assertEquals(listOf(local), db.mediaDao().observeAlbumIds(photos).first())
 
-        // Elément supprimé de OneDrive : le média reste dans son dossier du téléphone seulement.
+        // Item deleted from OneDrive: the media stays in its phone folder only.
         val cloudSource = db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!
         db.mediaSourceDao().markMissing(listOf(cloudSource.id), now = 50)
         db.mediaDao().refreshSourceFlags(listOf(local))
@@ -248,11 +248,11 @@ class MediaMergerTest {
         val album = db.albumDao().insert(AlbumEntity(name = "Mix", type = AlbumType.VIRTUAL, sourceKey = null, relativePath = null, createdAt = 1, updatedAt = 1))
         db.albumDao().insertMembers(listOf(AlbumMediaEntity(album, local, addedAt = 1)))
         val localSource = db.mediaSourceDao().find(SourceKind.LOCAL, "img:a")!!
-        // Fichier envoyé à la corbeille du téléphone : l'élément OneDrive le garde affiché.
+        // File sent to the phone's trash: the OneDrive item keeps it displayed.
         db.mediaSourceDao().markMissing(listOf(localSource.id), now = 50)
         db.mediaDao().refreshSourceFlags(listOf(local))
         assertEquals(listOf(local), db.mediaDao().observeAlbumIds(album).first())
-        // Plus aucune source visible : masqué (comportement existant), rien n'est supprimé.
+        // No visible source left: hidden (existing behavior), nothing is deleted.
         val cloudSource = db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!
         db.mediaSourceDao().markMissing(listOf(cloudSource.id), now = 60)
         db.mediaDao().refreshSourceFlags(listOf(local))
@@ -268,7 +268,7 @@ class MediaMergerTest {
         assertEquals(local, target.mediaId)
         assertEquals(1, dedup.setLocalHash(target.sourceId, "H1", target.signature))
         assertTrue(dedup.staleLocalHashes().isEmpty())
-        // Signature lue avant une modification : rien n'est écrit.
+        // Signature read before a modification: nothing is written.
         val source = db.mediaSourceDao().getById(target.sourceId)!!
         db.mediaSourceDao().update(source.copy(generation = 9))
         assertEquals(0, dedup.setLocalHash(target.sourceId, "H2", target.signature))

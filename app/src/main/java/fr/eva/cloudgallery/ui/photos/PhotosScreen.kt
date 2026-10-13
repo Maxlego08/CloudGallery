@@ -29,8 +29,8 @@ import fr.eva.cloudgallery.ui.components.OneUiPillButton
 import fr.eva.cloudgallery.ui.grid.MediaGridPage
 
 /**
- * Etat vide de Photos en usage « OneDrive seul » : sans compte connecté, invite à se connecter à
- * OneDrive ([onSignIn] : écran Compte) ou à autoriser les photos du téléphone ([onAllowPhotos]).
+ * Empty state of Photos in "OneDrive only" usage: without a signed-in account, prompts to sign in
+ * to OneDrive ([onSignIn]: Account screen) or to allow the phone's photos ([onAllowPhotos]).
  */
 data class NoLocalAccessEmpty(
     val cloudSignedIn: Boolean,
@@ -39,10 +39,10 @@ data class NoLocalAccessEmpty(
 )
 
 /**
- * Onglet Photos : chronologie de tous les médias, groupée par jour ou par mois selon le zoom.
- * La position de défilement est conservée (état sauvegardable + pagination mise en cache dans le VM).
- * [noLocalAccess] : usage « OneDrive seul » (état vide adapté). [onOpenSearch] : icône de
- * recherche dans la barre supérieure (absente si null).
+ * Photos tab: timeline of all media, grouped by day or by month depending on the zoom.
+ * The scroll position is preserved (saveable state + paging cached in the VM).
+ * [noLocalAccess]: "OneDrive only" usage (adapted empty state). [onOpenSearch]: search icon in
+ * the top bar (absent if null).
  */
 @Composable
 fun PhotosScreen(

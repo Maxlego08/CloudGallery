@@ -57,18 +57,18 @@ class CloudDataPurgerTest {
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
-        // Dossier propre au test : les originaux de l'appli installée ne sont jamais touchés.
+        // Test-specific folder: the installed app's originals are never touched.
         originalsDir = File(context.cacheDir, "test-purger-originals").apply {
             deleteRecursively()
             mkdirs()
         }
-        // Dossier « offline » propre au test (OfflineStore.clear ne vide qu'un dossier de ce nom).
+        // Test-specific "offline" folder (OfflineStore.clear only empties a folder with this name).
         offlineDir = File(File(context.cacheDir, "test-purger-files"), OfflineStore.OFFLINE_DIR).apply {
             parentFile?.deleteRecursively()
             mkdirs()
         }
         val urls = CloudDownloadUrlProvider(
-            fetch = { error("Aucun appel réseau dans ce test") },
+            fetch = { error("No network call in this test") },
             ensureAccess = {},
             clock = { 0L },
             io = Dispatchers.IO,
@@ -76,7 +76,7 @@ class CloudDataPurgerTest {
         val originals = CloudOriginalStore(
             root = originalsDir,
             downloader = CloudFileDownloader(
-                client = dagger.Lazy<OkHttpClient> { error("Aucun appel réseau dans ce test") },
+                client = dagger.Lazy<OkHttpClient> { error("No network call in this test") },
                 urls = urls,
                 io = Dispatchers.IO,
             ),
@@ -102,14 +102,14 @@ class CloudDataPurgerTest {
             downloadUrls = urls,
             originals = originals,
             offlineStore = OfflineStore(rootProvider = { offlineDir }, storage = { null }, io = Dispatchers.IO, clock = { 0L }),
-            // Mise en cache de l'appli installée et WorkManager jamais touchés par le test.
+            // The installed app's precache and WorkManager are never touched by the test.
             precache = { precacheClears++ },
             generation = generation,
             io = Dispatchers.IO,
         )
     }
 
-    /** Cache de miniatures factice : le test ne touche pas au cache Coil de l'appareil. */
+    /** Fake thumbnail cache: the test does not touch the device's Coil cache. */
     private class FakeThumbnailCache : CloudThumbnailCache {
         var clears = 0
         override suspend fun clear() {
@@ -151,7 +151,7 @@ class CloudDataPurgerTest {
         sourceDao.insert(source(local, SourceKind.LOCAL, "image:1", "local:1"))
         val cloud = mediaDao.insert(media("cloud"))
         sourceDao.insert(source(cloud, SourceKind.ONEDRIVE, "A", "onedrive:ROOT"))
-        // Elément supprimé sur OneDrive, encore masqué pendant le délai de grâce.
+        // Item deleted on OneDrive, still hidden during the grace period.
         val hidden = mediaDao.insert(media("hidden"))
         sourceDao.insert(source(hidden, SourceKind.ONEDRIVE, "B", "onedrive:ROOT", missingSince = 5))
         mediaDao.refreshSourceFlags(listOf(local, cloud, hidden))
@@ -179,17 +179,17 @@ class CloudDataPurgerTest {
         assertNull(albumDao.getById(cloudAlbum))
         assertTrue(db.cloudFolderDao().getAll().isEmpty())
         assertNull(db.syncCursorDao().get(ONEDRIVE_PROVIDER))
-        // Miniatures OneDrive vidées après la transaction.
+        // OneDrive thumbnails cleared after the transaction.
         assertEquals(1, thumbnails.clears)
         assertEquals(1, precacheClears)
 
-        // Local intact : média, favori, album virtuel et son membre local.
+        // Local data intact: media, favorite, virtual album and its local member.
         assertNotNull(mediaDao.getById(local))
         assertTrue(mediaDao.getById(local)!!.hasLocal)
         assertTrue(db.favoriteDao().isFavorite(local))
         assertNotNull(albumDao.getById(virtual))
         assertEquals(listOf(local), mediaDao.observeAlbumIds(virtual).first())
-        // La couverture qui pointait vers le média OneDrive est effacée.
+        // The cover that pointed to the OneDrive media is cleared.
         assertNull(albumDao.getById(virtual)!!.coverMediaId)
     }
 
@@ -198,7 +198,7 @@ class CloudDataPurgerTest {
         val mediaDao = db.mediaDao()
         val sourceDao = db.mediaSourceDao()
         val cachedFiles = db.cachedFileDao()
-        // Média présent sur l'appareil ET sur OneDrive : conservé, mais son original OneDrive part.
+        // Media on the device AND on OneDrive: kept, but its OneDrive original goes away.
         val both = mediaDao.insert(media("both"))
         sourceDao.insert(source(both, SourceKind.LOCAL, "image:9", "local:1"))
         val cloudSource = sourceDao.insert(source(both, SourceKind.ONEDRIVE, "C", "onedrive:ROOT"))
@@ -222,7 +222,7 @@ class CloudDataPurgerTest {
         assertFalse(file.exists())
         assertFalse(partial.exists())
         assertFalse(purger.hasData())
-        // Le média local reste, sans OneDrive.
+        // The local media remains, without OneDrive.
         val kept = mediaDao.getById(both)!!
         assertTrue(kept.hasLocal)
         assertFalse(kept.hasCloud)
@@ -251,8 +251,8 @@ class CloudDataPurgerTest {
     }
 
     /**
-     * Copies hors ligne : purgées avec les données OneDrive (décision D3). Un média qui n'avait
-     * que OneDrive et sa copie disparaît ; un média local garde son fichier local.
+     * Offline copies: purged along with the OneDrive data (decision D3). A media that only had
+     * OneDrive and its copy disappears; a local media keeps its local file.
      */
     @Test
     fun purgeAll_removesOfflineCopies_rowsTasksAndFiles() = runTest {
@@ -261,7 +261,7 @@ class CloudDataPurgerTest {
         val pinned = mediaDao.insert(media("pinned"))
         val cloudSource = sourceDao.insert(source(pinned, SourceKind.ONEDRIVE, "P", "onedrive:ROOT"))
         sourceDao.insert(source(pinned, SourceKind.OFFLINE_COPY, "P", "onedrive:ROOT").copy(bucketKey = null))
-        // Copie conservée d'un élément déjà supprimé de OneDrive (dernière copie).
+        // Kept copy of an item already deleted from OneDrive (last copy).
         val kept = mediaDao.insert(media("kept"))
         sourceDao.insert(source(kept, SourceKind.OFFLINE_COPY, "K", "onedrive:ROOT").copy(bucketKey = null))
         mediaDao.refreshSourceFlags(listOf(pinned, kept))

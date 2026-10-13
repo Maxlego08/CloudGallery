@@ -62,7 +62,7 @@ photos and your **OneDrive** photos in a single library.
   favourite, share, add to album, copy and delete.
 - **Move to Secure Folder** (Samsung).
 - A loading animation on thumbnails.
-- Light, dark and system themes. The interface is in French and English.
+- Light, dark and system themes. The interface is in English and French.
 - Can be the default app for opening photos and videos.
 
 ### File safety

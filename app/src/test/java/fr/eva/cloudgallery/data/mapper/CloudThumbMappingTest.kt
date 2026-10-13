@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Référence de miniature OneDrive portée par les lignes de grille et d'album (sans URI locale). */
+/** OneDrive thumbnail reference carried by grid and album rows (without a local URI). */
 class CloudThumbMappingTest {
 
     private fun row(cloudItemId: String?, cTag: String?) = MediaRow(

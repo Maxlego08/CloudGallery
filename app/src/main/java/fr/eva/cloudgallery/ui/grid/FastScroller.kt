@@ -61,23 +61,23 @@ private val TouchHeight = 64.dp
 private val TrackMargin = 8.dp
 private const val HIDE_DELAY_MS = 1_500L
 
-/** Attente avant de recharger la grille ailleurs : le doigt peut encore bouger. */
+/** Wait before reloading the grid elsewhere: the finger may still move. */
 private const val JUMP_DEBOUNCE_MS = 90L
 
-/** Délai maximal d'arrivée des pages après un saut. */
+/** Maximum delay for pages to arrive after a jump. */
 private const val JUMP_TIMEOUT_MS = 3_000L
 
 /**
- * Poignée de défilement rapide à droite de la grille (style One UI) : visible pendant le
- * défilement puis masquée après [HIDE_DELAY_MS], déplaçable au doigt avec une bulle de date.
+ * Fast-scroll thumb on the right of the grid (One UI style): visible while scrolling, then hidden
+ * after [HIDE_DELAY_MS], draggable with the finger with a date bubble.
  *
- * La position couvre toute la liste ([index] : dates de tous les médias), pas seulement les pages
- * chargées. Une période déjà chargée est atteinte par `scrollToItem` ; sinon [onJump] recharge la
- * pagination à partir de son premier média, puis la grille se place sur son en-tête dès qu'il
- * arrive. Seule la poignée capte les gestes : sélection par glisser et pincement restent intacts.
+ * The position spans the whole list ([index]: dates of all media), not just the loaded pages. A
+ * period already loaded is reached with `scrollToItem`; otherwise [onJump] reloads the paging
+ * starting from its first media, then the grid moves to its header as soon as it arrives. Only the
+ * thumb captures gestures: drag-to-select and pinch remain intact.
  *
- * @param leadingItems éléments de la grille avant les éléments paginés (grand titre).
- * @param topPadding / [bottomPadding] limites de la piste (barres, onglets, insets).
+ * @param leadingItems grid items before the paged items (large title).
+ * @param topPadding / [bottomPadding] bounds of the track (bars, tabs, insets).
  */
 @Composable
 internal fun FastScroller(
@@ -100,14 +100,14 @@ internal fun FastScroller(
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
     var shown by remember { mutableStateOf(false) }
-    /** Période visée par le doigt (jour epoch du début), null hors glisser. */
+    /** Period targeted by the finger (epoch day of its start), null outside of a drag. */
     var targetPeriod by remember { mutableStateOf<Long?>(null) }
 
     val currentIndex by rememberUpdatedState(index)
     val currentGrouping by rememberUpdatedState(grouping)
     val currentOnJump by rememberUpdatedState(onJump)
 
-    // Apparition au défilement, disparition après une pause.
+    // Appears on scroll, disappears after a pause.
     val active = dragging || state.isScrollInProgress
     LaunchedEffect(active) {
         if (active) {
@@ -131,7 +131,7 @@ internal fun FastScroller(
         }
     }
 
-    // Saut vers la période visée : immédiat si déjà chargée, sinon rechargement de la pagination.
+    // Jump to the targeted period: immediate if already loaded, otherwise the paging is reloaded.
     LaunchedEffect(state, items) {
         snapshotFlow { targetPeriod }.filterNotNull().collectLatest { epochDay ->
             val g = currentGrouping
@@ -144,8 +144,8 @@ internal fun FastScroller(
             delay(JUMP_DEBOUNCE_MS)
             currentOnJump(currentIndex.periodStartRank(epochDay, g, zone))
             withTimeoutOrNull(JUMP_TIMEOUT_MS) {
-                // En-tête trouvé : terminé. Premier média de la période en tête de liste (en-tête
-                // pas encore inséré, page précédente en cours) : on s'y place en attendant.
+                // Header found: done. First media of the period at the top of the list (header not
+                // inserted yet, previous page loading): scroll to it in the meantime.
                 snapshotFlow {
                     val snapshot = items.itemSnapshotList
                     val header = snapshot.indexOfFirst { it?.key == key }
@@ -177,13 +177,13 @@ internal fun FastScroller(
             val range = (trackBottomPx - trackTopPx - thumbHeightPx).coerceAtLeast(0f)
             val fraction = if (dragging) dragFraction else scrollFraction
             val thumbTopPx = trackTopPx + fraction * range
-            // Lus dans le geste (bloc pointerInput non relancé pendant le glisser).
+            // Read inside the gesture (pointerInput block not restarted during the drag).
             val currentThumbTop by rememberUpdatedState(thumbTopPx)
             val currentFraction by rememberUpdatedState(fraction)
             val currentTrackTop by rememberUpdatedState(trackTopPx)
             val currentTrackBottom by rememberUpdatedState(trackBottomPx)
 
-            // Bulle de date pendant le glisser, à gauche de la poignée.
+            // Date bubble during the drag, to the left of the thumb.
             val period = targetPeriod
             if (dragging && period != null) {
                 var bubbleHeight by remember { mutableFloatStateOf(0f) }
@@ -230,7 +230,7 @@ internal fun FastScroller(
                         }
                         detectVerticalDragGestures(
                             onDragStart = { offset ->
-                                // Position absolue du doigt dans la piste (la poignée suit le doigt).
+                                // Absolute finger position in the track (the thumb follows the finger).
                                 pointerY = currentThumbTop - (touchHeightPx - thumbHeightPx) / 2f + offset.y
                                 dragFraction = currentFraction
                                 lastMonth = Int.MIN_VALUE

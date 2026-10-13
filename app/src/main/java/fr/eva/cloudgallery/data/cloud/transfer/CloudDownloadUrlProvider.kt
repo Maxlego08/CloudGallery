@@ -12,14 +12,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * URL de téléchargement temporaires des éléments OneDrive (`@microsoft.graph.downloadUrl`).
+ * Temporary download URLs of OneDrive items (`@microsoft.graph.downloadUrl`).
  *
- * - Gardées **en mémoire uniquement** (jamais persistées ni journalisées), au plus [MAX_ENTRIES]
- *   éléments, et réutilisées pendant [DOWNLOAD_URL_TTL_MS] au plus.
- * - Chaque demande passe par [CloudAccessGuard] : jamais d'URL pour un compte déconnecté ou
- *   différent de celui de l'index.
- * - [clear] (déconnexion, purge, changement de compte) oublie tout ; une demande en cours à ce
- *   moment-là échoue au lieu de remettre en cache une URL de l'ancien compte.
+ * - Kept **in memory only** (never persisted or logged), for at most [MAX_ENTRIES] items, and
+ *   reused for at most [DOWNLOAD_URL_TTL_MS].
+ * - Every request goes through [CloudAccessGuard]: never a URL for a signed-out account or one
+ *   different from the index's.
+ * - [clear] (sign-out, purge, account change) forgets everything; a request in flight at that
+ *   moment fails instead of caching a URL of the old account again.
  */
 @Singleton
 class CloudDownloadUrlProvider internal constructor(
@@ -45,18 +45,18 @@ class CloudDownloadUrlProvider internal constructor(
 
     private val lock = Any()
 
-    /** Ordre d'accès : l'entrée la moins récemment utilisée est retirée en premier. */
+    /** Access order: the least recently used entry is evicted first. */
     private val entries = object : LinkedHashMap<String, Entry>(MAX_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>): Boolean = size > MAX_ENTRIES
     }
 
-    /** Incrémenté par [clear] : une URL obtenue avant n'est jamais mise en cache. */
+    /** Incremented by [clear]: a URL obtained before is never cached. */
     private var epoch = 0L
 
     /**
-     * URL de téléchargement de [itemId] : réutilisée si elle est récente, sinon (ou avec
-     * [forceRefresh]) redemandée à Microsoft Graph. Lève les exceptions de [CloudAccessGuard] et
-     * de Graph ([fr.eva.cloudgallery.domain.model.CloudException] et dérivées).
+     * Download URL of [itemId]: reused if recent, otherwise (or with [forceRefresh]) requested
+     * again from Microsoft Graph. Throws the exceptions of [CloudAccessGuard] and of Graph
+     * ([fr.eva.cloudgallery.domain.model.CloudException] and subclasses).
      */
     suspend fun get(itemId: String, forceRefresh: Boolean = false): CloudDownloadInfo = withContext(io) {
         ensureAccess()
@@ -69,19 +69,19 @@ class CloudDownloadUrlProvider internal constructor(
         }
         val info = fetch(itemId)
         synchronized(lock) {
-            // Données OneDrive vidées pendant la requête : l'URL appartient peut-être à l'ancien compte.
+            // OneDrive data cleared during the request: the URL may belong to the old account.
             if (epoch != startEpoch) throw CloudAuthRequiredException()
             entries[itemId] = Entry(info, clock())
         }
         info
     }
 
-    /** Oublie l'URL de [itemId] (refusée par l'hôte de téléchargement). Appelable de tout thread. */
+    /** Forgets the URL of [itemId] (rejected by the download host). Callable from any thread. */
     fun invalidate(itemId: String) {
         synchronized(lock) { entries.remove(itemId) }
     }
 
-    /** Oublie toutes les URL (déconnexion, purge des données OneDrive, changement de compte). */
+    /** Forgets all URLs (sign-out, OneDrive data purge, account change). */
     fun clear() {
         synchronized(lock) {
             entries.clear()

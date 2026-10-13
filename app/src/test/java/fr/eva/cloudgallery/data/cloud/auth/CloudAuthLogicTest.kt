@@ -142,8 +142,8 @@ class CloudAuthLogicTest {
         assertEquals(MsalFailure.CANCELLED, classifyMsalError(MsalUserCancelException()))
         assertEquals(
             MsalFailure.TRANSIENT,
-            classifyMsalError(MsalServiceException(MsalServiceException.SERVICE_NOT_AVAILABLE, "indisponible", null)),
+            classifyMsalError(MsalServiceException(MsalServiceException.SERVICE_NOT_AVAILABLE, "unavailable", null)),
         )
-        assertEquals(MsalFailure.UNKNOWN, classifyMsalError(IllegalArgumentException("autre")))
+        assertEquals(MsalFailure.UNKNOWN, classifyMsalError(IllegalArgumentException("other")))
     }
 }

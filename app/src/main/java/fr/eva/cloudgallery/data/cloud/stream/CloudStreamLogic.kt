@@ -12,24 +12,24 @@ import java.io.IOException
 import java.net.URLEncoder
 
 /*
- * Logique pure de la lecture en streaming OneDrive (testée en JVM, sans Media3 ni android.net.Uri).
+ * Pure logic for OneDrive streaming playback (tested on the JVM, without Media3 or android.net.Uri).
  */
 
-/** Schéma de l'URI stable d'un élément OneDrive lu en streaming (jamais l'URL de téléchargement). */
+/** Scheme of the stable URI of a streamed OneDrive item (never the download URL). */
 internal const val STREAM_SCHEME = "onedrive"
 
 /**
- * URI stable `onedrive://item/<id>` : URI du MediaItem et URI rapportée par Media3 dans ses
- * événements et erreurs, à la place de l'URL pré-authentifiée.
+ * Stable URI `onedrive://item/<id>`: the MediaItem URI and the URI Media3 reports in its events
+ * and errors, instead of the pre-authenticated URL.
  */
 internal fun streamUriString(itemId: String): String =
     "$STREAM_SCHEME://item/${URLEncoder.encode(itemId, Charsets.UTF_8)}"
 
-/** Cause d'un échec d'obtention de l'URL de lecture, à partir de l'exception de Graph ou de MSAL. */
+/** Cause of a failure to obtain the playback URL, from the Graph or MSAL exception. */
 internal fun cloudStreamFailureFor(error: Throwable): CloudStreamFailure = when (error) {
     is CloudAuthRequiredException -> CloudStreamFailure.AUTH_REQUIRED
     is CloudThrottledException -> CloudStreamFailure.THROTTLED
-    // 410 Gone sur un élément : il n'existe plus.
+    // 410 Gone on an item: it no longer exists.
     is GraphResyncRequiredException -> CloudStreamFailure.NOT_FOUND
     is GraphHttpException ->
         if (error.status == HTTP_NOT_FOUND || error.status == HTTP_GONE) CloudStreamFailure.NOT_FOUND else CloudStreamFailure.SERVER
@@ -43,21 +43,21 @@ internal fun cloudStreamFailureFor(error: Throwable): CloudStreamFailure = when 
     else -> CloudStreamFailure.SERVER
 }
 
-/** Décision de nouvelle tentative après une erreur de chargement en streaming. */
+/** Retry decision after a streaming load error. */
 internal enum class StreamRetry {
-    /** URL probablement expirée : l'oublier, puis politique par défaut (nouvelle URL à la tentative suivante). */
+    /** URL probably expired: forget it, then default policy (new URL on the next attempt). */
     INVALIDATE_URL_THEN_DEFAULT,
 
-    /** Inutile de réessayer (reconnexion nécessaire, élément supprimé, limitation Graph). */
+    /** No point retrying (sign-in required, item deleted, Graph throttling). */
     FATAL,
 
-    /** Politique par défaut de Media3 (quelques tentatives espacées). */
+    /** Media3's default policy (a few spaced-out attempts). */
     DEFAULT,
 }
 
 /**
- * [httpStatus] : statut renvoyé par l'hôte de téléchargement (null si l'erreur n'est pas une
- * réponse HTTP) ; [cloudFailure] : échec d'obtention de l'URL auprès de Graph (null sinon).
+ * [httpStatus]: status returned by the download host (null if the error is not an HTTP
+ * response); [cloudFailure]: failure to obtain the URL from Graph (null otherwise).
  */
 internal fun streamRetryDecision(httpStatus: Int?, cloudFailure: CloudStreamFailure?): StreamRetry = when {
     cloudFailure == CloudStreamFailure.AUTH_REQUIRED ||
@@ -68,7 +68,7 @@ internal fun streamRetryDecision(httpStatus: Int?, cloudFailure: CloudStreamFail
     else -> StreamRetry.DEFAULT
 }
 
-/** Chaîne des causes d'une erreur, bornée (une chaîne cyclique ne bloque jamais). */
+/** Cause chain of an error, bounded (a cyclic chain never hangs). */
 internal fun causeChain(error: Throwable?): Sequence<Throwable> =
     generateSequence(error) { it.cause?.takeIf { cause -> cause !== it } }.take(MAX_CAUSES)
 
@@ -76,8 +76,8 @@ private val URL_PATTERN = Regex("""(?i)\b(?:https?|wss?)://[^\s"'<>]+""")
 private val TEMPAUTH_PATTERN = Regex("""(?i)tempauth=[^\s&"'<>]+""")
 
 /**
- * Texte de journal sans URL : une URL de téléchargement OneDrive vaut un jeton (paramètre
- * `tempauth`), elle ne doit jamais apparaître dans logcat.
+ * Log text without URLs: a OneDrive download URL is as good as a token (`tempauth`
+ * parameter), it must never appear in logcat.
  */
 internal fun redactUrls(text: String): String =
     TEMPAUTH_PATTERN.replace(URL_PATTERN.replace(text, "<url>"), "tempauth=<redacted>")

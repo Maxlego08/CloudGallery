@@ -7,15 +7,15 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
-/** Elément d'une grille paginée : en-tête de période (pleine largeur) ou média. */
+/** Item of a paged grid: period header (full width) or media. */
 @Immutable
 sealed interface GridItem {
-    /** Clé stable pour LazyVerticalGrid (Long pour un média, String pour un en-tête). */
+    /** Stable key for LazyVerticalGrid (Long for a media, String for a header). */
     val key: Any
 
     /**
-     * En-tête de jour ou de mois. [epochDay] = jour concerné (DAY) ou premier jour du mois (MONTH).
-     * Le libellé est résolu dans l'UI (Formatters + ressources).
+     * Day or month header. [epochDay] = the day itself (DAY) or the first day of the month (MONTH).
+     * The label is resolved in the UI (Formatters + resources).
      */
     data class Header(val grouping: GridGrouping, val epochDay: Long) : GridItem {
         override val key: Any
@@ -30,11 +30,11 @@ sealed interface GridItem {
     }
 }
 
-// Fonctions pures de regroupement (testées unitairement).
+// Pure grouping functions (unit-tested).
 
-/** Premier jour de la période contenant [epochMs], exprimé en jour epoch. */
+/** First day of the period containing [epochMs], expressed as an epoch day. */
 fun periodStartEpochDay(epochMs: Long, grouping: GridGrouping, zone: ZoneId): Long {
-    // LocalDate.ofInstant évite l'allocation d'un ZonedDateTime (appelé pour chaque paire d'éléments).
+    // LocalDate.ofInstant avoids allocating a ZonedDateTime (called for every pair of items).
     val date = LocalDate.ofInstant(Instant.ofEpochMilli(epochMs), zone)
     return when (grouping) {
         GridGrouping.DAY -> date.toEpochDay()
@@ -43,8 +43,8 @@ fun periodStartEpochDay(epochMs: Long, grouping: GridGrouping, zone: ZoneId): Lo
 }
 
 /**
- * En-tête à insérer entre [before] et [after] (ordre chronologique décroissant), ou null.
- * Un en-tête précède le premier média de chaque période ; rien après le dernier média.
+ * Header to insert between [before] and [after] (descending chronological order), or null.
+ * A header precedes the first media of each period; nothing after the last media.
  */
 fun headerBetween(
     before: MediaSummary?,
@@ -59,8 +59,8 @@ fun headerBetween(
 }
 
 /**
- * Bornes [début, fin[ en ms de la période d'un en-tête (jour ou mois commençant à [epochDay]),
- * dans le fuseau utilisé pour le regroupement.
+ * Bounds [start, end) in ms of a header's period (day or month starting at [epochDay]), in the
+ * time zone used for grouping.
  */
 fun periodBoundsMs(epochDay: Long, grouping: GridGrouping, zone: ZoneId): Pair<Long, Long> {
     val start = LocalDate.ofEpochDay(epochDay)

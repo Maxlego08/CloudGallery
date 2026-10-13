@@ -12,13 +12,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
-/** Chronologie de tous les médias (onglet Photos). */
+/** Timeline of all media (Photos tab). */
 @HiltViewModel
 class PhotosViewModel @Inject constructor(
     deps: MediaGridDeps,
 ) : MediaGridViewModel(MediaContext.Timeline, deps) {
 
-    /** Indexation MediaStore en cours (affiche « Chargement… » plutôt qu'un écran vide). */
+    /** MediaStore indexing in progress (shows "Loading…" rather than an empty screen). */
     val indexing: StateFlow<Boolean> = deps.localMediaIndexer.state
         .map { it.running }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

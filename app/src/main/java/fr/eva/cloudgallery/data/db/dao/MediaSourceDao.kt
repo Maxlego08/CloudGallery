@@ -10,7 +10,7 @@ import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 import kotlinx.coroutines.flow.Flow
 
-/** Paire légère (externalId, generation) utilisée pour comparer MediaStore et la base. */
+/** Lightweight (externalId, generation) pair used to compare MediaStore with the database. */
 data class SourceStamp(
     val id: Long,
     val mediaId: Long,
@@ -20,7 +20,7 @@ data class SourceStamp(
     val missingSince: Long?,
 )
 
-/** Empreinte d'une source à ré-identifier après un changement de version MediaStore. */
+/** Fingerprint of a source to re-identify after a MediaStore version change. */
 data class StaleSourceRow(
     val id: Long,
     val mediaId: Long,
@@ -50,13 +50,13 @@ interface MediaSourceDao {
     @Query("SELECT * FROM media_source WHERE id = :id")
     suspend fun getById(id: Long): MediaSourceEntity?
 
-    /** Masque des sources (sans écraser un horodatage déjà posé). */
+    /** Hides sources (without overwriting an already set timestamp). */
     @Query("UPDATE media_source SET missingSince = :now WHERE id IN (:ids) AND missingSince IS NULL")
     suspend fun markMissing(ids: List<Long>, now: Long)
 
     /**
-     * Version MediaStore changée : les _ID ne sont plus fiables. Les identifiants externes LOCAL
-     * sont préfixés de « stale: » puis ré-associés par empreinte lors de la relecture complète.
+     * MediaStore version changed: _IDs are no longer reliable. LOCAL external ids are prefixed
+     * with "stale:" and then re-matched by fingerprint during the full rescan.
      */
     @Query(
         """
@@ -87,18 +87,18 @@ interface MediaSourceDao {
     @Query("SELECT COUNT(*) FROM media_source WHERE kind = :kind AND missingSince IS NULL")
     suspend fun count(kind: SourceKind): Int
 
-    /** Vrai s'il existe au moins une source de ce type, masquée ou non (contrairement à [count]). */
+    /** True if at least one source of this kind exists, hidden or not (unlike [count]). */
     @Query("SELECT EXISTS(SELECT 1 FROM media_source WHERE kind = :kind)")
     suspend fun existsAny(kind: SourceKind): Boolean
 
-    /** Médias ayant au moins une source de ce type (masquée ou non). */
+    /** Media with at least one source of this kind (hidden or not). */
     @Query("SELECT DISTINCT mediaId FROM media_source WHERE kind = :kind")
     suspend fun mediaIdsByKind(kind: SourceKind): List<Long>
 
     @Query("DELETE FROM media_source WHERE kind = :kind")
     suspend fun deleteByKind(kind: SourceKind)
 
-    /** Dossiers distincts d'un type de source (pour créer/mettre à jour les albums-dossiers). */
+    /** Distinct folders of a source kind (to create/update folder albums). */
     @Query(
         """
         SELECT bucketKey, bucketName, relativePath FROM media_source
@@ -108,7 +108,7 @@ interface MediaSourceDao {
     )
     suspend fun buckets(kind: SourceKind): List<BucketRow>
 
-    /** Comme [buckets], en ignorant les sources masquées (albums OneDrive). */
+    /** Like [buckets], ignoring hidden sources (OneDrive albums). */
     @Query(
         """
         SELECT bucketKey, bucketName, relativePath FROM media_source
@@ -118,7 +118,7 @@ interface MediaSourceDao {
     )
     suspend fun visibleBuckets(kind: SourceKind): List<BucketRow>
 
-    /** Nom et chemin lisibles d'un dossier OneDrive, recopiés sur ses sources (sans réécriture inutile). */
+    /** Readable name and path of a OneDrive folder, copied onto its sources (no needless rewrite). */
     @Query(
         """
         UPDATE media_source SET bucketName = :name, relativePath = :path
@@ -127,7 +127,7 @@ interface MediaSourceDao {
     )
     suspend fun updateCloudBucketInfo(key: String, name: String, path: String?)
 
-    /** Médias ayant une source OneDrive visible dans ces dossiers (au plus 500 clés par appel). */
+    /** Media with a visible OneDrive source in these folders (at most 500 keys per call). */
     @Query(
         """
         SELECT DISTINCT mediaId FROM media_source
@@ -136,7 +136,7 @@ interface MediaSourceDao {
     )
     suspend fun visibleCloudMediaIdsInBuckets(keys: List<String>): List<Long>
 
-    /** Masque les sources OneDrive de ces dossiers (dossier supprimé sur OneDrive). */
+    /** Hides the OneDrive sources of these folders (folder deleted on OneDrive). */
     @Query(
         """
         UPDATE media_source SET missingSince = :now
@@ -146,8 +146,8 @@ interface MediaSourceDao {
     suspend fun markMissingInBuckets(keys: List<String>, now: Long)
 
     /**
-     * Dossiers (clés `cloudBucketKey`) qui contiennent des sources OneDrive masquées : les
-     * marqueurs de suppression de leurs dossiers et de leurs ancêtres sont gardés.
+     * Folders (`cloudBucketKey` keys) that contain hidden OneDrive sources: the deletion markers
+     * of their folders and of their ancestors are kept.
      */
     @Query(
         """
@@ -158,12 +158,12 @@ interface MediaSourceDao {
     suspend fun hiddenCloudBuckets(): List<String>
 
     /**
-     * Dossier restauré possible sans marqueur : vrai si une source OneDrive masquée appartient à
-     * l'un des dossiers [keys] (dossiers nouvellement reçus), ou à un dossier absent de
-     * `cloud_folder` (ni présent ni marqué). Depuis la v5, un dossier supprimé garde un marqueur
-     * tant que son sous-arbre a des éléments masqués : ce cas ne concerne plus que les dossiers
-     * supprimés avant la v5 (leurs lignes ont été retirées), jusqu'à la purge de leurs éléments.
-     * Les clés suivent `cloudBucketKey` (« onedrive:<id du dossier> »).
+     * Possible restored folder without a marker: true if a hidden OneDrive source belongs to one
+     * of the folders [keys] (newly received folders), or to a folder missing from `cloud_folder`
+     * (neither present nor marked). Since v5, a deleted folder keeps a marker as long as its
+     * subtree has hidden items: this case now only concerns folders deleted before v5 (their
+     * rows were removed), until their items are purged.
+     * Keys follow `cloudBucketKey` ("onedrive:<folder id>").
      */
     @Query(
         """
@@ -176,17 +176,17 @@ interface MediaSourceDao {
     )
     suspend fun existsHiddenCloudInBucketsOrOrphaned(keys: List<String>): Boolean
 
-    /** Vrai si ce dossier contient au moins une source OneDrive visible. */
+    /** True if this folder contains at least one visible OneDrive source. */
     @Query("SELECT EXISTS(SELECT 1 FROM media_source WHERE kind = 'ONEDRIVE' AND bucketKey = :key AND missingSince IS NULL)")
     suspend fun existsVisibleCloudInBucket(key: String): Boolean
 
-    // --- Copies hors ligne (OFFLINE_COPY) ----------------------------------------------------
+    // --- Offline copies (OFFLINE_COPY) -------------------------------------------------------
 
     /**
-     * Une copie hors ligne suit la visibilité de l'élément OneDrive de son média : masquée avec
-     * lui (élément supprimé ou dossier supprimé sur OneDrive), de nouveau visible s'il revient.
-     * Sans source OneDrive (copie conservée après sa suppression de OneDrive), elle est visible.
-     * Appelé dans chaque transaction de synchro, juste avant le recalcul des indicateurs.
+     * An offline copy follows the visibility of its media's OneDrive item: hidden along with it
+     * (item or folder deleted on OneDrive), visible again if it comes back. Without a OneDrive
+     * source (copy kept after its deletion from OneDrive), it is visible.
+     * Called in every sync transaction, right before the flags are recomputed.
      */
     @Query(
         """
@@ -205,14 +205,14 @@ interface MediaSourceDao {
     @Query("DELETE FROM media_source WHERE kind = :kind AND mediaId IN (:mediaIds)")
     suspend fun deleteForMedia(kind: SourceKind, mediaIds: List<Long>)
 
-    /** Nombre de sources de ce type, masquées ou non. */
+    /** Number of sources of this kind, hidden or not. */
     @Query("SELECT COUNT(*) FROM media_source WHERE kind = :kind")
     suspend fun countAll(kind: SourceKind): Int
 
     /**
-     * Copies hors ligne d'éléments supprimés de OneDrive : média sans source OneDrive visible
-     * (élément masqué en délai de grâce, en attente de décision, ou copie déjà conservée seule).
-     * Ce sont les dernières copies connues de ces éléments.
+     * Offline copies of items deleted from OneDrive: media without a visible OneDrive source
+     * (item hidden during the grace period, awaiting a decision, or copy already kept alone).
+     * These are the last known copies of these items.
      */
     @Query(
         """
@@ -225,9 +225,9 @@ interface MediaSourceDao {
     suspend fun countOfflineLastCopies(): Int
 
     /**
-     * Comme [countOfflineLastCopies], parmi [mediaIds] : copies hors ligne, visibles ou masquées,
-     * sans source OneDrive visible ni fichier local visible. Même règle que « Libérer », qui
-     * supprime aussi les copies masquées.
+     * Like [countOfflineLastCopies], among [mediaIds]: offline copies, visible or hidden, with
+     * neither a visible OneDrive source nor a visible local file. Same rule as "Free up", which
+     * also deletes hidden copies.
      */
     @Query(
         """
@@ -240,8 +240,8 @@ interface MediaSourceDao {
     suspend fun countOfflineLastCopiesAmong(mediaIds: List<Long>): Int
 
     /**
-     * Médias en attente de décision (décision D1) : copie hors ligne d'un élément masqué sur
-     * OneDrive depuis au moins [expiredBefore] (délai de grâce écoulé).
+     * Media awaiting a decision (decision D1): offline copy of an item hidden on OneDrive since
+     * at least [expiredBefore] (grace period elapsed).
      */
     @Query(
         """
@@ -252,7 +252,7 @@ interface MediaSourceDao {
     )
     suspend fun awaitingDecisionMediaIds(expiredBefore: Long): List<Long>
 
-    /** Comme [awaitingDecisionMediaIds], observable (invite de l'écran Compte et du Menu). */
+    /** Like [awaitingDecisionMediaIds], observable (prompt on the Account screen and the Menu). */
     @Query(
         """
         SELECT DISTINCT o.mediaId FROM media_source o
@@ -264,9 +264,9 @@ interface MediaSourceDao {
     fun observeAwaitingDecisionMediaIds(expiredBefore: Long): Flow<List<Long>>
 
     /**
-     * Parmi [mediaIds] (liste confirmée par l'utilisateur), ceux qui sont toujours en attente de
-     * décision : à relire dans la transaction qui applique la décision (un élément revenu sur
-     * OneDrive entre-temps n'est plus concerné).
+     * Among [mediaIds] (list confirmed by the user), those still awaiting a decision: to be
+     * re-read inside the transaction that applies the decision (an item that came back on
+     * OneDrive in the meantime is no longer concerned).
      */
     @Query(
         """
@@ -278,13 +278,13 @@ interface MediaSourceDao {
     )
     suspend fun awaitingDecisionAmong(mediaIds: List<Long>, expiredBefore: Long): List<Long>
 
-    /** Supprime les sources masquées de ce type pour [mediaIds] (jamais une source visible). */
+    /** Deletes hidden sources of this kind for [mediaIds] (never a visible source). */
     @Query("DELETE FROM media_source WHERE kind = :kind AND mediaId IN (:mediaIds) AND missingSince IS NOT NULL")
     suspend fun deleteHiddenForMedia(kind: SourceKind, mediaIds: List<Long>)
 
     /**
-     * Elément OneDrive visible de chaque média de [mediaIds] sans copie hors ligne (candidats à
-     * « Conserver hors ligne »), avec ce qu'il faut pour le télécharger.
+     * Visible OneDrive item of each media in [mediaIds] without an offline copy ("Keep offline"
+     * candidates), with what is needed to download it.
      */
     @Query(
         """
@@ -296,8 +296,8 @@ interface MediaSourceDao {
     suspend fun keepOfflineCandidates(mediaIds: List<Long>): List<OfflineCandidateRow>
 
     /**
-     * Eléments OneDrive visibles de [mediaIds] qui ont déjà une copie hors ligne mais dont la mise
-     * à jour (nouvelle version) est en pause ou en échec : « Reprendre le téléchargement ».
+     * Visible OneDrive items of [mediaIds] that already have an offline copy but whose update
+     * (new version) is paused or failed: "Resume download".
      */
     @Query(
         """
@@ -310,26 +310,26 @@ interface MediaSourceDao {
     suspend fun stoppedUpdateCandidates(mediaIds: List<Long>): List<OfflineCandidateRow>
 
     /**
-     * Economiseur d'espace : copies locales visibles déjà présentes sur OneDrive, vérifiées par
-     * empreinte (voir [SPACE_SAVER_SELECT]), les plus récentes d'abord.
+     * Space saver: visible local copies already present on OneDrive, verified by hash (see
+     * [SPACE_SAVER_SELECT]), most recent first.
      */
     @Query("$SPACE_SAVER_SELECT ORDER BY m.dateTaken DESC, l.id DESC")
     suspend fun spaceSaverCandidates(): List<SpaceSaverRow>
 
-    /** Mêmes règles, limitées aux sources [sourceIds] : revérification juste avant la suppression. */
+    /** Same rules, limited to sources [sourceIds]: recheck right before deletion. */
     @Query("$SPACE_SAVER_SELECT AND l.id IN (:sourceIds)")
     suspend fun spaceSaverCandidatesAmong(sourceIds: List<Long>): List<SpaceSaverRow>
 }
 
 /**
- * Copies locales que l'économiseur d'espace peut proposer. Les règles portent sur les sources,
- * que la copie locale et l'élément OneDrive soient regroupés dans un même média ou non :
- * - source LOCAL visible, avec une URI MediaStore ;
- * - empreinte QuickXorHash calculée par l'appli et à jour : `hashSignature` égale à la signature
- *   courante du fichier, au format `"<sizeBytes>:<dateModified>:<generation>"` ;
- * - au moins un élément OneDrive visible de même empreinte et de même taille.
- * [SpaceSaverRow.mergedWithCloud] : cet élément OneDrive appartient au même média ;
- * [SpaceSaverRow.hasUserData] : média favori ou membre d'un album de l'utilisateur.
+ * Local copies the space saver may offer. The rules apply to sources, whether or not the local
+ * copy and the OneDrive item are grouped in the same media item:
+ * - visible LOCAL source, with a MediaStore URI;
+ * - QuickXorHash computed by the app and up to date: `hashSignature` equals the file's current
+ *   signature, in the format `"<sizeBytes>:<dateModified>:<generation>"`;
+ * - at least one visible OneDrive item with the same hash and the same size.
+ * [SpaceSaverRow.mergedWithCloud]: that OneDrive item belongs to the same media item;
+ * [SpaceSaverRow.hasUserData]: media is a favorite or a member of a user album.
  */
 internal const val SPACE_SAVER_SELECT = """
     SELECT l.id AS sourceId, l.mediaId, l.uri, l.sizeBytes, l.dateModified,
@@ -348,7 +348,7 @@ internal const val SPACE_SAVER_SELECT = """
                  AND c.quickXorHash = l.quickXorHash AND c.sizeBytes = l.sizeBytes)
 """
 
-/** Copie locale proposée par l'économiseur d'espace (voir [SPACE_SAVER_SELECT]). */
+/** Local copy offered by the space saver (see [SPACE_SAVER_SELECT]). */
 data class SpaceSaverRow(
     val sourceId: Long,
     val mediaId: Long,
@@ -363,7 +363,7 @@ data class SpaceSaverRow(
     val hasUserData: Boolean,
 )
 
-/** Elément OneDrive à conserver hors ligne. */
+/** OneDrive item to keep offline. */
 data class OfflineCandidateRow(
     val mediaId: Long,
     val itemId: String,

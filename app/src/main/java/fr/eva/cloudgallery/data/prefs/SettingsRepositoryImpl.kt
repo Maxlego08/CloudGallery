@@ -24,17 +24,17 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Bornes des niveaux de zoom des grilles. */
+/** Bounds of the grid zoom levels. */
 internal const val MIN_ZOOM_LEVEL = 0
 internal const val MAX_ZOOM_LEVEL = 4
 
 internal fun clampZoomLevel(level: Int): Int = level.coerceIn(MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)
 
-/** Valeur stockée seulement si elle fait partie de [choices] (sinon [default]). */
+/** Stored value only if it is one of [choices] (otherwise [default]). */
 internal fun choiceOrDefault(value: Long?, choices: List<Long>, default: Long): Long =
     value?.takeIf { it in choices } ?: default
 
-/** Lecture tolérante d'une énumération stockée par son nom. */
+/** Lenient read of an enum stored by its name. */
 internal inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
     name?.let { n -> enumValues<E>().firstOrNull { it.name == n } } ?: default
 
@@ -46,7 +46,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override val settings: Flow<AppSettings> = dataStore.data
         .catch { e ->
             if (e is IOException) {
-                Log.w(TAG, "Lecture des réglages impossible, valeurs par défaut", e)
+                Log.w(TAG, "Could not read settings, using defaults", e)
                 emit(emptyPreferences())
             } else {
                 throw e
@@ -68,7 +68,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setOfflineWifiOnly(enabled: Boolean) = set(Keys.OFFLINE_WIFI_ONLY, enabled)
     override suspend fun setOfflineNotificationsAsked(asked: Boolean) = set(Keys.OFFLINE_NOTIFICATIONS_ASKED, asked)
     override suspend fun setOriginalsCacheMaxBytes(bytes: Long) {
-        require(bytes in ORIGINALS_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
+        require(bytes in ORIGINALS_CACHE_CHOICES) { "Cap not offered: $bytes" }
         set(Keys.ORIGINALS_CACHE_MAX_BYTES, bytes)
     }
     override suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = set(Keys.BACKGROUND_SYNC_INTERVAL, interval.name)
@@ -76,7 +76,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setOneDriveOnlyChosen(chosen: Boolean) = set(Keys.ONEDRIVE_ONLY_CHOSEN, chosen)
     override suspend fun setPrecacheKeepUpdated(enabled: Boolean) = set(Keys.PRECACHE_KEEP_UPDATED, enabled)
     override suspend fun setThumbnailCacheMaxBytes(bytes: Long) {
-        require(bytes in THUMBNAIL_CACHE_CHOICES) { "Plafond non proposé : $bytes" }
+        require(bytes in THUMBNAIL_CACHE_CHOICES) { "Cap not offered: $bytes" }
         set(Keys.THUMBNAIL_CACHE_MAX_BYTES, bytes)
     }
 

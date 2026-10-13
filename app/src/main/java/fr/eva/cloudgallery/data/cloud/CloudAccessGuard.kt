@@ -16,13 +16,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Règle unique d'accès au contenu OneDrive (miniatures, URL de lecture, originaux, copies hors
- * ligne) : fonction disponible dans ce build, compte connecté (jamais pendant une déconnexion),
- * et OneDrive connecté identique à celui des données de l'index. Les éléments d'un autre compte
- * ne sont ainsi jamais demandés avec ce jeton.
+ * Single access rule for OneDrive content (thumbnails, playback URLs, originals, offline
+ * copies): feature available in this build, account signed in (never during a sign-out), and
+ * the connected OneDrive is the same as the one the index data came from. Items from another
+ * account are thus never requested with this token.
  *
- * MSAL et la synchro sont injectés via dagger.Lazy : créés au premier contrôle, sur le
- * dispatcher d'E/S. N'utilise jamais le verrou de la synchro (pas d'interblocage pendant une purge).
+ * MSAL and the syncer are injected via dagger.Lazy: created on the first check, on the I/O
+ * dispatcher. Never uses the sync lock (no deadlock during a purge).
  */
 @Singleton
 class CloudAccessGuard @Inject constructor(
@@ -34,12 +34,12 @@ class CloudAccessGuard @Inject constructor(
 
     private val accountMutex = Mutex()
 
-    /** OneDrive est configuré dans ce build (sinon aucun accès n'est jamais possible). */
+    /** OneDrive is configured in this build (otherwise no access is ever possible). */
     val configured: Boolean get() = feature.enabled
 
     /**
-     * Lève [CloudException] ([CloudErrorCode.CONFIG]) si OneDrive n'est pas configuré, ou
-     * [CloudAuthRequiredException] sans compte connecté utilisable.
+     * Throws [CloudException] ([CloudErrorCode.CONFIG]) if OneDrive is not configured, or
+     * [CloudAuthRequiredException] without a usable signed-in account.
      */
     suspend fun ensureSignedIn() {
         if (!feature.enabled) throw CloudException(CloudErrorCode.CONFIG)
@@ -47,18 +47,18 @@ class CloudAccessGuard @Inject constructor(
             val service = auth.get()
             val state = service.state.value
             if (state is CloudAccountState.Loading || state is CloudAccountState.Error) {
-                // Démarrage du processus ou lecture précédente en échec : une seule relecture du
-                // compte MSAL pour tous les appelants simultanés.
+                // Process startup or previous read failed: a single re-read of the MSAL
+                // account for all concurrent callers.
                 accountMutex.withLock { service.refreshIfNeeded() }
             }
             val signedIn = service.state.value as? CloudAccountState.SignedIn ?: throw CloudAuthRequiredException()
-            // Autre lecteur détecté, ou compte pas encore vérifié par une synchro (état conservé :
-            // vrai dès le démarrage du processus, sans attendre le premier passage).
+            // Different drive detected, or account not yet verified by a sync (persisted state:
+            // true right from process startup, without waiting for the first pass).
             if (!syncer.get().accountAllowed(signedIn.account.id)) throw CloudAuthRequiredException()
         }
     }
 
-    /** Vrai si [ensureSignedIn] réussit maintenant. */
+    /** True if [ensureSignedIn] succeeds now. */
     suspend fun canAccess(): Boolean = try {
         ensureSignedIn()
         true

@@ -7,51 +7,51 @@ import fr.eva.cloudgallery.domain.model.OfflineItemState
 import fr.eva.cloudgallery.domain.model.OfflineStatus
 
 /*
- * Logique pure des copies hors ligne (testée en JVM).
+ * Pure logic for offline copies (tested on the JVM).
  */
 
-/** Marge d'espace libre gardée sur l'appareil en plus des copies demandées (200 Mio). */
+/** Free space margin kept on the device on top of the requested copies (200 MiB). */
 internal const val OFFLINE_SPACE_MARGIN_BYTES = 200L * 1024 * 1024
 
-/** Au-delà de ce nombre d'éléments, « Conserver hors ligne » demande confirmation. */
+/** Beyond this number of items, "Keep offline" asks for confirmation. */
 internal const val LARGE_BATCH_ITEMS = 200
 
-/** Au-delà de cette taille totale (1 Go), « Conserver hors ligne » demande confirmation. */
+/** Beyond this total size (1 GB), "Keep offline" asks for confirmation. */
 internal const val LARGE_BATCH_BYTES = 1_000_000_000L
 
-/** Tentatives d'une copie avant de la marquer en échec (erreurs passagères : réseau, limitation). */
+/** Attempts for a copy before marking it as failed (transient errors: network, throttling). */
 internal const val MAX_DOWNLOAD_ATTEMPTS = 5
 
-/** Taille totale à télécharger : tailles connues seulement (une taille ≤ 0 compte pour 0). */
+/** Total size to download: known sizes only (a size ≤ 0 counts as 0). */
 internal fun estimateBytes(sizes: Iterable<Long>): Long = sizes.sumOf { it.coerceAtLeast(0L) }
 
 /**
- * Octets manquants pour copier [requested] octets en gardant [margin] libres, d'après l'espace
- * allouable [allocatable] (StorageManager.getAllocatableBytes). 0 si l'espace suffit.
+ * Bytes missing to copy [requested] bytes while keeping [margin] free, based on the allocatable
+ * space [allocatable] (StorageManager.getAllocatableBytes). 0 if there is enough space.
  */
 internal fun missingSpace(allocatable: Long, requested: Long, margin: Long = OFFLINE_SPACE_MARGIN_BYTES): Long =
     (requested.coerceAtLeast(0L) + margin - allocatable.coerceAtLeast(0L)).coerceAtLeast(0L)
 
-/** Suite à donner à une demande d'espace disque. */
+/** What to do with a disk space request. */
 internal enum class SpaceAction {
-    /** L'espace libre suffit déjà. */
+    /** The free space is already enough. */
     ENOUGH,
 
     /**
-     * L'espace libre ne suffit pas, mais le système peut libérer du cache d'autres applis :
-     * `StorageManager.allocateBytes` doit être appelé (une écriture ordinaire ne le libère pas).
+     * The free space is not enough, but the system can free other apps' cache:
+     * `StorageManager.allocateBytes` must be called (an ordinary write does not free it).
      */
     ALLOCATE,
 
-    /** Même en libérant le cache des autres applis, l'espace manque. */
+    /** Even after freeing other apps' cache, there is not enough space. */
     NO_SPACE,
 }
 
 /**
- * Espace pour [needed] octets en gardant [margin] libres : [usable] = espace libre du volume
- * (File.getUsableSpace), [allocatable] = espace obtenable avec le cache que le système peut
- * libérer (StorageManager.getAllocatableBytes, en général plus grand). D'après la doc de
- * getAllocatableBytes, demander plus que cette valeur à allocateBytes échoue.
+ * Space for [needed] bytes while keeping [margin] free: [usable] = free space on the volume
+ * (File.getUsableSpace), [allocatable] = space obtainable with the cache the system can free
+ * (StorageManager.getAllocatableBytes, usually larger). According to the getAllocatableBytes docs,
+ * asking allocateBytes for more than this value fails.
  */
 internal fun spaceAction(usable: Long, allocatable: Long, needed: Long, margin: Long): SpaceAction = when {
     missingSpace(usable, needed, margin) == 0L -> SpaceAction.ENOUGH
@@ -59,61 +59,60 @@ internal fun spaceAction(usable: Long, allocatable: Long, needed: Long, margin: 
     else -> SpaceAction.NO_SPACE
 }
 
-/** Lot à confirmer avant téléchargement (taille totale et espace libre affichés). */
+/** Batch to confirm before downloading (total size and free space shown). */
 internal fun isLargeBatch(count: Int, bytes: Long): Boolean = count > LARGE_BATCH_ITEMS || bytes > LARGE_BATCH_BYTES
 
 /**
- * Contenu d'un élément conservé hors ligne modifié sur OneDrive (synchro) : nouveau
- * téléchargement de la copie. Une version inconnue d'un côté compte comme un changement
- * seulement si l'autre est connue (une copie sans version ne doit pas rester figée).
+ * Content of an item kept offline changed on OneDrive (sync): the copy is downloaded again. A
+ * version unknown on one side counts as a change only if the other one is known (a copy without
+ * a version must not stay frozen).
  */
 internal fun requeueOnCTagChange(hasOfflineCopy: Boolean, oldCTag: String?, newCTag: String?): Boolean =
     hasOfflineCopy && newCTag != null && oldCTag != newCTag
 
-/** Type de réseau exigé par le travail de téléchargement. */
+/** Network type required by the download job. */
 enum class JobNetwork { UNMETERED, ANY }
 
 /**
- * Réseau du travail : Wi-Fi seulement d'après le réglage, sauf si une tâche en attente fait partie
- * d'un lot « Télécharger maintenant » ([overrideNow]).
+ * Job network: Wi-Fi only according to the setting, unless a pending task belongs to a
+ * "Download now" batch ([overrideNow]).
  */
 internal fun jobNetworkFor(wifiOnly: Boolean, overrideNow: Boolean): JobNetwork =
     if (wifiOnly && !overrideNow) JobNetwork.UNMETERED else JobNetwork.ANY
 
 /**
- * Un travail en cours qui exige [active] prend aussi en charge des tâches qui exigent
- * [required] : un travail limité au Wi-Fi convient à tout ; un travail « tout réseau » ne
- * télécharge les tâches limitées au Wi-Fi que s'il se trouve sur un réseau non facturé (voir
- * [allowedOnNetwork]) : il ne suffit donc pas pour elles.
+ * A running job that requires [active] also handles tasks that require [required]: a Wi-Fi-only
+ * job suits everything; an "any network" job only downloads Wi-Fi-only tasks when it is on an
+ * unmetered network (see [allowedOnNetwork]): so it is not enough for them.
  */
 internal fun jobCovers(active: JobNetwork, required: JobNetwork): Boolean =
     active == JobNetwork.UNMETERED || required == JobNetwork.ANY
 
 /**
- * Tâches qu'un passage peut télécharger sur le réseau actuel : toutes (null) sans le réglage
- * « Wi-Fi uniquement » ou sur un réseau non facturé ; sinon seulement celles d'un lot
- * « Télécharger maintenant » ([overridden]). Les autres restent en attente du Wi-Fi.
+ * Tasks a pass may download on the current network: all of them (null) without the "Wi-Fi only"
+ * setting or on an unmetered network; otherwise only those from a "Download now" batch
+ * ([overridden]). The others keep waiting for Wi-Fi.
  */
 internal fun allowedOnNetwork(wifiOnly: Boolean, unmeteredNetwork: Boolean, overridden: Set<Long>): Set<Long>? =
     if (!wifiOnly || unmeteredNetwork) null else overridden
 
 /**
- * Une tâche hors lot « Télécharger maintenant » ([overridden] faux) attend le Wi-Fi : réglage
- * actif et réseau actuel absent ou facturé.
+ * A task outside a "Download now" batch ([overridden] false) waits for Wi-Fi: setting enabled
+ * and current network missing or metered.
  */
 internal fun waitsForUnmetered(wifiOnly: Boolean, overridden: Boolean, connected: Boolean, unmetered: Boolean): Boolean =
     wifiOnly && !overridden && (!connected || !unmetered)
 
 /**
- * Tâche couverte par « Télécharger maintenant » : identifiant et date de mise en file (SQLite
- * peut réattribuer l'identifiant d'une tâche supprimée à une nouvelle tâche).
+ * Task covered by "Download now": id and enqueue date (SQLite may reassign the id of a deleted
+ * task to a new task).
  */
 internal data class OverrideKey(val taskId: Long, val createdAt: Long)
 
-/** Etat d'une tâche de la file, tel que lu en base. */
+/** State of a queue task, as read from the database. */
 internal enum class TaskState { QUEUED, RUNNING, PAUSED, FAILED }
 
-/** Etat hors ligne affiché pour un média : tâche ouverte éventuelle et copie présente. */
+/** Offline state displayed for a media item: possible open task and copy present. */
 internal fun offlineStatus(
     taskState: TaskState?,
     taskError: DownloadError?,
@@ -133,8 +132,8 @@ internal fun offlineStatus(
         bytesTotal = bytesTotal,
         waitingForUnmetered = taskState == TaskState.QUEUED && waitingForUnmetered,
     )
-    // Copie présente : elle reste servie, mais la mise à jour arrêtée est signalée (reprise ou
-    // annulation possibles pour cet élément).
+    // Copy present: it keeps being served, but the stopped update is reported (resume or cancel
+    // possible for this item).
     TaskState.PAUSED -> if (hasOffline) {
         OfflineItemState(OfflineStatus.UPDATE_STOPPED, bytesDone = bytesDone, bytesTotal = bytesTotal)
     } else {
@@ -147,26 +146,26 @@ internal fun offlineStatus(
     }
 }
 
-/** Suite donnée à l'échec du téléchargement d'une copie. */
+/** What to do after a copy download fails. */
 internal enum class FailureAction {
-    /** Erreur passagère : la tâche reste en file, le travail est relancé plus tard (attente du système). */
+    /** Transient error: the task stays queued, the job is relaunched later (system backoff). */
     RETRY_LATER,
 
-    /** Erreur propre à cet élément : la tâche passe en échec, les suivantes continuent. */
+    /** Error specific to this item: the task is marked failed, the following ones continue. */
     FAIL,
 
-    /** Erreur qui touchera toutes les tâches (compte, espace) : toute la file passe en échec. */
+    /** Error that will affect every task (account, space): the whole queue is marked failed. */
     FAIL_ALL,
 
     /**
-     * Contenu plus récent sur OneDrive que dans l'index : la tâche reste en attente sans compter
-     * d'essai et laisse passer les suivantes ; elle repart quand la synchronisation a mis l'index
-     * à jour (voir la requête des tâches téléchargeables).
+     * Content newer on OneDrive than in the index: the task stays pending without counting an
+     * attempt and lets the following ones through; it restarts once sync has updated the index
+     * (see the downloadable tasks query).
      */
     WAIT_FOR_INDEX,
 }
 
-/** Décision après un échec avec [error], [attempts] essais comptés (1 pour le premier). */
+/** Decision after a failure with [error], [attempts] attempts counted (1 for the first one). */
 internal fun failureAction(error: DownloadError, attempts: Int): FailureAction = when (error) {
     DownloadError.AUTH_REQUIRED, DownloadError.NO_SPACE -> FailureAction.FAIL_ALL
     DownloadError.NOT_FOUND, DownloadError.CANCELLED -> FailureAction.FAIL
@@ -176,9 +175,9 @@ internal fun failureAction(error: DownloadError, attempts: Int): FailureAction =
 }
 
 /**
- * L'échec compte-t-il comme un essai ? Pas un contenu modifié (retard de l'index, pas un défaut
- * de l'élément), ni une coupure réseau après des octets reçus pendant cet essai (Wi-Fi perdu en
- * cours de route : le fichier partiel progresse, la copie n'est pas en cause).
+ * Does the failure count as an attempt? Not a changed content (index lagging behind, not a defect
+ * of the item), nor a network drop after bytes were received during this attempt (Wi-Fi lost
+ * midway: the partial file progresses, the copy is not at fault).
  */
 internal fun countsAsAttempt(error: DownloadError, progressed: Boolean): Boolean = when (error) {
     DownloadError.CONTENT_CHANGED -> false
@@ -186,37 +185,37 @@ internal fun countsAsAttempt(error: DownloadError, progressed: Boolean): Boolean
     else -> true
 }
 
-/** Remise en ordre de la file au premier retour au premier plan d'un processus. */
+/** Queue cleanup the first time a process comes back to the foreground. */
 internal enum class StartupRecovery {
-    /** Tâches « en cours » d'un processus disparu remises en attente. */
+    /** "Running" tasks of a dead process put back in the queue. */
     REQUEUE,
 
-    /** Processus arrêté par l'utilisateur pendant un téléchargement : toute la file en pause. */
+    /** Process stopped by the user during a download: the whole queue is paused. */
     PAUSE,
 }
 
 /**
- * [userRequestedExit] : dernier arrêt du processus demandé par l'utilisateur (arrêt forcé,
- * Gestionnaire de tâches, mais aussi simple balayage depuis les applis récentes). Seul un arrêt
- * pendant un téléchargement ([hadRunningTasks] : tâches restées « en cours ») met la file en
- * pause (décision D3) ; balayer l'appli sans téléchargement actif ne change rien.
+ * [userRequestedExit]: last process exit requested by the user (force stop, Task Manager, but
+ * also a simple swipe from recent apps). Only an exit during a download ([hadRunningTasks]: tasks
+ * left "running") pauses the queue (decision D3); swiping the app away with no active download
+ * changes nothing.
  */
 internal fun startupRecovery(firstStart: Boolean, userRequestedExit: Boolean, hadRunningTasks: Boolean): StartupRecovery =
     if (firstStart && userRequestedExit && hadRunningTasks) StartupRecovery.PAUSE else StartupRecovery.REQUEUE
 
-/** Lecture tolérante d'un code d'erreur enregistré. */
+/** Lenient parsing of a stored error code. */
 internal fun downloadErrorOrNull(name: String?): DownloadError? =
     name?.let { n -> DownloadError.entries.firstOrNull { it.name == n } }
 
-/** Suite donnée à l'arrêt du travail par le système ([JobParameters.getStopReason]). */
+/** What to do when the system stops the job ([JobParameters.getStopReason]). */
 internal enum class StopAction {
-    /** L'appli a annulé le travail (« Annuler », purge) : rien à reprendre. */
+    /** The app cancelled the job ("Cancel", purge): nothing to resume. */
     NONE,
 
-    /** L'utilisateur l'a arrêté (Gestionnaire de tâches) : file en pause jusqu'à sa reprise. */
+    /** The user stopped it (Task Manager): queue paused until resumed. */
     PAUSE,
 
-    /** Contrainte perdue (réseau, Wi-Fi), délai, système : reprise automatique plus tard. */
+    /** Constraint lost (network, Wi-Fi), timeout, system: automatic resume later. */
     RESCHEDULE,
 }
 
@@ -227,9 +226,9 @@ internal fun stopActionFor(stopReason: Int): StopAction = when (stopReason) {
 }
 
 /**
- * Fin du délai de grâce d'éléments supprimés de OneDrive (décision D1) : [purge] sont retirés
- * comme avant ; [awaitingDecision] ont une copie hors ligne et sont gardés (masqués) jusqu'à la
- * décision de l'utilisateur (« Supprimer les copies » ou « Les conserver »).
+ * End of the grace period for items deleted from OneDrive (decision D1): [purge] are removed as
+ * before; [awaitingDecision] have an offline copy and are kept (hidden) until the user decides
+ * ("Delete the copies" or "Keep them").
  */
 internal data class GraceExpiryPlan(val purge: List<CloudStamp>, val awaitingDecision: List<CloudStamp>)
 
@@ -239,10 +238,10 @@ internal fun planGraceExpiry(expired: List<CloudStamp>, mediaWithOfflineCopy: Se
 }
 
 /**
- * Le fichier téléchargé ([gotCTag], [gotSize], [gotETag]) est bien la version de l'élément dans
- * l'index au moment d'enregistrer. cTag connus des deux côtés : ils font foi. Sinon (P1-11 :
- * deux versions inconnues ne sont jamais « identiques » par défaut) la taille doit être égale,
- * ainsi que l'eTag s'il est connu des deux côtés.
+ * The downloaded file ([gotCTag], [gotSize], [gotETag]) really is the item's version in the index
+ * at save time. cTags known on both sides: they are authoritative. Otherwise (P1-11: two unknown
+ * versions are never "identical" by default) the size must be equal, and so must the eTag if it
+ * is known on both sides.
  */
 internal fun contentMatches(
     indexCTag: String?,
@@ -258,5 +257,5 @@ internal fun contentMatches(
     else -> true
 }
 
-/** Une copie hors ligne qui est la dernière copie de l'élément : « Libérer » demande confirmation. */
+/** An offline copy that is the item's last copy: "Free up" asks for confirmation. */
 internal fun releaseNeedsConfirmation(lastCopies: Int): Boolean = lastCopies > 0

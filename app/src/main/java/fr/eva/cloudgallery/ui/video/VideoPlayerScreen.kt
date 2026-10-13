@@ -44,12 +44,12 @@ import kotlinx.coroutines.delay
 private const val AUTO_HIDE_DELAY_MS = 3_000L
 private const val SEEK_FEEDBACK_DURATION_MS = 700L
 
-/** Retour visuel d'un double appui (côté -1 / +1, cumul en secondes). */
+/** Visual feedback of a double tap (side -1 / +1, accumulated seconds). */
 internal data class SeekFeedback(val side: Int, val seconds: Int, val key: Int)
 
 /**
- * Lecteur vidéo plein écran façon Samsung Galerie : fond noir, mode immersif, commandes
- * superposées masquées automatiquement après 3 s de lecture, double appui gauche/droite = -/+10 s.
+ * Samsung Gallery-style full-screen video player: black background, immersive mode, overlaid
+ * controls auto-hidden after 3 s of playback, double tap left/right = -/+10 s.
  */
 @Composable
 fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
@@ -75,8 +75,8 @@ fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
     val currentOnBack by rememberUpdatedState(onBack)
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
-    // Pendant la transition d'entrée l'écran n'est pas encore RESUMED et la navigation ignore le
-    // retour : on ne met pas en pause pour rien, et le retour système reste à la navigation.
+    // During the enter transition the screen is not RESUMED yet and navigation ignores back:
+    // don't pause for nothing, and leave system back to navigation.
     val exit: () -> Unit = {
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             viewModel.pause()
@@ -85,30 +85,30 @@ fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
     }
     BackHandler(enabled = lifecycleState.isAtLeast(Lifecycle.State.RESUMED), onBack = exit)
 
-    // L'appli passe en arrière-plan : pause (la position est sauvegardée par le ViewModel) et
-    // commandes visibles au retour.
+    // The app goes to the background: pause (the position is saved by the ViewModel) and show
+    // the controls on return.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         viewModel.pause()
         controlsVisible = true
     }
 
-    // Retour de l'écran Compte après « Se connecter » : nouvel essai si la connexion était demandée.
+    // Back from the Account screen after "Sign in": retry if sign-in was requested.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.retryIfSignInPending()
     }
 
-    // Pause non demandée depuis les commandes (perte du focus audio, fin de la vidéo, arrière-plan) :
-    // on réaffiche les commandes plutôt que de laisser une image figée sans bouton.
+    // Pause not requested from the controls (audio focus loss, end of video, background): show
+    // the controls again rather than leaving a frozen frame without any button.
     LaunchedEffect(state.loading, state.playWhenReady, state.ended) {
         if (!state.loading && (!state.playWhenReady || state.ended)) controlsVisible = true
     }
 
-    // Commandes masquées ou erreur : aucun glissement de la barre de progression ne peut être en cours.
+    // Controls hidden or error: no progress bar drag can be in progress.
     LaunchedEffect(hasError, barsVisible) {
         if (hasError || !barsVisible) scrubbing = false
     }
 
-    // Masquage automatique des commandes pendant la lecture.
+    // Auto-hide the controls during playback.
     LaunchedEffect(controlsVisible, state.isPlaying, scrubbing, menuExpanded, speedDialogVisible, hasError, interactionTick) {
         if (controlsVisible && state.isPlaying && !scrubbing && !menuExpanded && !speedDialogVisible && !hasError) {
             delay(AUTO_HIDE_DELAY_MS)
@@ -117,22 +117,22 @@ fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
         }
     }
 
-    // Mode immersif : barres système masquées avec les commandes. Leur apparence (icônes claires)
-    // et leur restauration en quittant sont gérées par la navigation (SystemBarsAppearance).
+    // Immersive mode: system bars hidden along with the controls. Their appearance (light icons)
+    // and their restoration on exit are handled by navigation (SystemBarsAppearance).
     ImmersiveSystemBars(visible = barsVisible)
 
-    // Ecran allumé uniquement pendant la lecture.
+    // Keep the screen on only during playback.
     DisposableEffect(view, state.isPlaying) {
         view.keepScreenOn = state.isPlaying
         onDispose { view.keepScreenOn = false }
     }
 
-    // Orientation forcée par le bouton « Pivoter » : rendue au système en quittant.
+    // Orientation forced by the "Rotate" button: handed back to the system on exit.
     DisposableEffect(activity) {
         onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     }
 
-    // Disparition du retour visuel de double appui.
+    // Hide the double-tap visual feedback.
     LaunchedEffect(seekFeedback?.key) {
         if (seekFeedback != null) {
             delay(SEEK_FEEDBACK_DURATION_MS)
@@ -147,7 +147,7 @@ fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
     ) {
         VideoSurface(player = viewModel.player)
 
-        // Couche de gestes : appui = afficher/masquer, double appui sur les tiers = -/+10 s.
+        // Gesture layer: tap = show/hide, double tap on the side thirds = -/+10 s.
         Box(
             modifier = Modifier
                 .fillMaxSize()

@@ -24,40 +24,39 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Suivi d'une synchronisation en cours (une instance par passage).
+ * Tracking of a sync in progress (one instance per pass).
  *
- * En énumération complète, les éléments et dossiers reçus sont mémorisés : ceux de l'index qui
- * n'ont pas été vus sont masqués en fin de passage. Les dossiers supprimés ne sont traités qu'en
- * fin de passage (un dossier peut réapparaître plus loin dans le flux delta).
+ * During a full enumeration, received items and folders are remembered: those of the index that
+ * were not seen are hidden at the end of the pass. Deleted folders are only processed at the end
+ * of the pass (a folder may reappear further along in the delta feed).
  */
 internal class CloudSyncRun(full: Boolean) {
     var full: Boolean = full
         private set
 
-    /** Identifiants des médias reçus (énumération complète uniquement). */
+    /** Identifiers of received media (full enumeration only). */
     var seen: MutableSet<String>? = if (full) HashSet() else null
         private set
 
-    /** Identifiants des dossiers reçus (énumération complète uniquement). */
+    /** Identifiers of received folders (full enumeration only). */
     var seenFolders: MutableSet<String>? = if (full) HashSet() else null
         private set
 
-    /** Dossiers connus de l'index signalés supprimés et non réapparus depuis. */
+    /** Folders known to the index reported deleted and not reappeared since. */
     val removedFolders: MutableSet<String> = HashSet()
 
     /**
-     * Un dossier marqué supprimé qui contient des éléments masqués, directement ou dans ses
-     * sous-dossiers (ou, pour des données d'avant la v5, un nouveau dossier alors que des éléments
-     * masqués n'ont plus de dossier connu), est réapparu (restauré depuis la corbeille) : ses
-     * éléments ne sont pas forcément renvoyés un par
-     * un, une énumération complète s'impose. Le deltaLink enregistré est effacé dans la même
-     * transaction que la page : même interrompu, le passage suivant sera une énumération complète.
+     * A folder marked deleted that contains hidden items, directly or in its subfolders (or, for
+     * data from before v5, a new folder while hidden items no longer have a known folder), has
+     * reappeared (restored from the recycle bin): its items are not necessarily returned one by
+     * one, so a full enumeration is required. The saved deltaLink is cleared in the same
+     * transaction as the page: even if interrupted, the next pass will be a full enumeration.
      */
     var restoredFolderWithHiddenItems: Boolean = false
 
     /**
-     * Opérations sur [seen] / [seenFolders] de la page en cours (énumération complète), pour le
-     * journal de reprise : relevées par [drainPageOps] après la transaction de la page.
+     * Operations on [seen] / [seenFolders] for the current page (full enumeration), for the
+     * resume journal: collected by [drainPageOps] after the page's transaction.
      */
     private val pageOps = ArrayList<SeenEntry>()
 
@@ -73,7 +72,7 @@ internal class CloudSyncRun(full: Boolean) {
         pageOps += SeenEntry(SeenOp.FOLDER, itemId)
     }
 
-    /** Elément signalé supprimé : retiré des éléments et dossiers vus. */
+    /** Item reported deleted: removed from the seen items and folders. */
     fun markRemoved(itemId: String) {
         if (seen == null && seenFolders == null) return
         seen?.remove(itemId)
@@ -81,10 +80,10 @@ internal class CloudSyncRun(full: Boolean) {
         pageOps += SeenEntry(SeenOp.REMOVE, itemId)
     }
 
-    /** Opérations de la page appliquée (vidées). */
+    /** Operations of the applied page (drained). */
     fun drainPageOps(): List<SeenEntry> = pageOps.toList().also { pageOps.clear() }
 
-    /** Bascule en énumération complète (jeton expiré, dossier restauré). */
+    /** Switches to a full enumeration (expired token, restored folder). */
     fun restartFull() {
         full = true
         seen = HashSet()
@@ -94,7 +93,7 @@ internal class CloudSyncRun(full: Boolean) {
     }
 
     companion object {
-        /** Enumération complète reprise : éléments et dossiers vus rejoués depuis le journal. */
+        /** Resumed full enumeration: seen items and folders replayed from the journal. */
         fun resumed(seen: Set<String>, seenFolders: Set<String>): CloudSyncRun = CloudSyncRun(full = true).apply {
             this.seen = HashSet(seen)
             this.seenFolders = HashSet(seenFolders)
@@ -102,23 +101,22 @@ internal class CloudSyncRun(full: Boolean) {
     }
 }
 
-/** Libellés des albums OneDrive (résolus par l'appelant dans la langue courante). */
+/** Labels of OneDrive albums (resolved by the caller in the current language). */
 internal data class CloudFolderLabels(val root: String, val unnamed: String)
 
 /**
- * Ecriture de la synchronisation OneDrive dans l'index (base Room uniquement, aucun accès
- * réseau ni fichier). Chaque page est appliquée en une transaction : média, source et
- * indicateurs dénormalisés sont toujours cohérents (le nettoyage des orphelins de l'indexation
- * locale est global). Un nouvel élément OneDrive crée son propre média ; le rattachement à un
- * fichier local identique (même QuickXorHash et même taille, jamais par le nom) est fait en fin
- * de passage par [MediaMerger]. Un média fusionné garde les métadonnées de son fichier local.
- * Rien n'est supprimé directement : une source disparue est masquée, puis purgée après le délai
- * de grâce.
+ * Writes the OneDrive sync into the index (Room database only, no network or file access).
+ * Each page is applied in one transaction: media, source and denormalized flags are always
+ * consistent (orphan cleanup by the local indexing is global). A new OneDrive item creates its
+ * own media; attaching it to an identical local file (same QuickXorHash and same size, never by
+ * name) is done at the end of the pass by [MediaMerger]. A merged media keeps the metadata of
+ * its local file. Nothing is deleted directly: a vanished source is hidden, then purged after
+ * the grace period.
  *
- * Copies hors ligne (OFFLINE_COPY) : masquées et réaffichées avec leur élément OneDrive ; un
- * élément supprimé qui a une copie n'est pas purgé au bout du délai (décision de l'utilisateur
- * attendue) ; un contenu modifié met en file le téléchargement de la nouvelle version (lancé au
- * prochain passage de l'appli au premier plan). Aucun fichier n'est touché ici.
+ * Offline copies (OFFLINE_COPY): hidden and shown again along with their OneDrive item; a
+ * deleted item that has a copy is not purged at the end of the grace period (awaiting the user's
+ * decision); modified content queues the download of the new version (started the next time the
+ * app comes to the foreground). No file is touched here.
  */
 @Singleton
 class CloudSyncWriter @Inject constructor(
@@ -136,18 +134,18 @@ class CloudSyncWriter @Inject constructor(
     private val cachedFileDao = db.cachedFileDao()
 
     /**
-     * Vrai si l'index contient des données OneDrive visibles par l'utilisateur ou rattachées à
-     * ses favoris et albums : sources (même masquées) ou albums OneDrive. Les seules lignes de
-     * dossiers ne comptent pas (elles sont recalculées par une énumération complète).
+     * True if the index contains OneDrive data visible to the user or attached to their
+     * favorites and albums: sources (even hidden) or OneDrive albums. Folder rows alone don't
+     * count (they are recomputed by a full enumeration).
      */
     suspend fun hasIndexedData(): Boolean = withContext(io) {
         sourceDao.existsAny(SourceKind.ONEDRIVE) || albumDao.existsByType(AlbumType.CLOUD_FOLDER)
     }
 
-    /** Eléments OneDrive visibles. */
+    /** Visible OneDrive items. */
     suspend fun visibleCount(): Int = withContext(io) { sourceDao.count(SourceKind.ONEDRIVE) }
 
-    /** Applique une page de la requête delta. */
+    /** Applies one page of the delta query. */
     internal suspend fun applyPage(items: List<DriveItemDto>, run: CloudSyncRun, now: Long) = withContext(io) {
         if (items.isEmpty()) return@withContext
         val actions = lastOccurrenceById(items).map(::classifyDeltaItem)
@@ -161,8 +159,8 @@ class CloudSyncWriter @Inject constructor(
     }
 
     /**
-     * Copies hors ligne alignées sur la visibilité de leur élément OneDrive (masquées avec lui,
-     * visibles s'il revient), puis indicateurs dénormalisés recalculés.
+     * Offline copies aligned with the visibility of their OneDrive item (hidden with it, visible
+     * if it comes back), then denormalized flags recomputed.
      */
     private suspend fun refreshTouched(touched: Collection<Long>) {
         for (chunk in touched.chunked(CHUNK)) {
@@ -176,11 +174,11 @@ class CloudSyncWriter @Inject constructor(
         for (chunk in folders.chunked(CHUNK)) {
             val ids = chunk.map { it.itemId }
             if (!run.full && !run.restoredFolderWithHiddenItems) {
-                // Dossier marqué supprimé qui réapparaît (restauré depuis la corbeille) avec des
-                // éléments masqués dans son sous-arbre : ses éléments ne sont pas forcément
-                // renvoyés un par un. Un dossier réellement nouveau (sans marqueur) ne déclenche
-                // rien, sauf s'il reste des éléments masqués sans dossier connu (dossiers supprimés
-                // avant la v5, sans marqueur : test large, comme avant).
+                // Folder marked deleted that reappears (restored from the recycle bin) with hidden
+                // items in its subtree: its items are not necessarily returned one by one. A truly
+                // new folder (no marker) triggers nothing, unless hidden items without a known
+                // folder remain (folders deleted before v5, without marker: broad test, as
+                // before).
                 val markers = folderDao.markedIds(ids).toSet()
                 val restoredWithHidden = markers.isNotEmpty() &&
                     subtreeHasHiddenItems(markers, folderDao.getAll().map { it.toFields() }, hiddenFolderIds())
@@ -188,11 +186,11 @@ class CloudSyncWriter @Inject constructor(
                 val newKeys = ids.filter { it !in known }.mapNotNull { cloudBucketKey(it) }
                 if (restoredWithHidden || (newKeys.isNotEmpty() && sourceDao.existsHiddenCloudInBucketsOrOrphaned(newKeys))) {
                     run.restoredFolderWithHiddenItems = true
-                    // Décision durable : enregistrée avec le dossier, dans la transaction de la page.
+                    // Durable decision: saved with the folder, in the page's transaction.
                     cursorDao.clearLink(ONEDRIVE_PROVIDER)
                 }
             }
-            // deletedAt null : un dossier marqué qui revient est de nouveau présent.
+            // deletedAt null: a marked folder that comes back is present again.
             folderDao.upsertAll(
                 chunk.map { CloudFolderEntity(itemId = it.itemId, parentId = it.parentId, name = it.name, isRoot = it.isRoot, updatedAt = now) },
             )
@@ -206,7 +204,7 @@ class CloudSyncWriter @Inject constructor(
     private suspend fun applyRemovals(ids: List<String>, run: CloudSyncRun, now: Long, touched: MutableSet<Long>) {
         if (ids.isEmpty()) return
         for (chunk in ids.chunked(CHUNK)) {
-            // Dossier ou fichier : d'après l'index (un élément supprimé n'a pas toujours la facette folder).
+            // Folder or file: according to the index (a deleted item doesn't always have the folder facet).
             val folders = folderDao.knownIds(chunk).toSet()
             run.removedFolders += folders
             val sources = sourceDao.findAll(SourceKind.ONEDRIVE, chunk.filter { it !in folders })
@@ -223,12 +221,12 @@ class CloudSyncWriter @Inject constructor(
         for (chunk in items.chunked(CHUNK)) {
             val itemIds = chunk.map { it.itemId }
             val sources = sourceDao.findAll(SourceKind.ONEDRIVE, itemIds).associateBy { it.externalId }
-            // Copies hors ligne de ces éléments (même identifiant OneDrive).
+            // Offline copies of these items (same OneDrive identifier).
             val offline = sourceDao.findAll(SourceKind.OFFLINE_COPY, itemIds).associateBy { it.externalId }
             val medias = mediaDao.getByIds((sources.values.map { it.mediaId } + offline.values.map { it.mediaId }).distinct())
                 .associateBy { it.id }
-            // Médias fusionnés avec un fichier local : leurs métadonnées (date EXIF, dimensions,
-            // nom) restent celles du fichier local, jamais remplacées par celles de Graph.
+            // Media merged with a local file: their metadata (EXIF date, dimensions, name) stay
+            // those of the local file, never replaced by Graph's.
             val merged = if (medias.isEmpty()) emptySet() else dedupDao.withLocalSource(medias.keys.toList()).toSet()
             val redownload = ArrayList<DownloadTaskEntity>()
             for (fields in chunk) {
@@ -244,23 +242,23 @@ class CloudSyncWriter @Inject constructor(
                         touched += media.id
                     }
                     if (source.cTag != fields.cTag) {
-                        // Contenu modifié : l'original temporaire est périmé (son fichier, sans
-                        // ligne, part au prochain nettoyage).
+                        // Content modified: the temporary original is stale (its file, without a
+                        // row, goes away at the next cleanup).
                         cachedFileDao.deleteForMedia(listOf(media.id), CacheKind.ORIGINAL)
                     }
                     val hasCopy = copy != null && copy.mediaId == media.id
                     if (requeueOnCTagChange(hasCopy, copy?.cTag, fields.cTag)) {
-                        // Copie hors ligne périmée : nouveau téléchargement (l'ancienne reste
-                        // servie jusqu'à ce que la nouvelle la remplace).
+                        // Stale offline copy: new download (the old one keeps being served until
+                        // the new one replaces it).
                         redownload += redownloadTask(media.id, fields, now)
                     }
                 } else {
-                    // Source orpheline impossible (clé étrangère en cascade) ; par prudence elle est remplacée.
+                    // Orphan source impossible (cascading foreign key); replaced as a precaution.
                     if (source != null) sourceDao.deleteByIds(listOf(source.id))
                     val copyMedia = copy?.let { medias[it.mediaId] }
                     val mediaId = if (copy != null && copyMedia != null) {
-                        // Elément revenu sur OneDrive alors que sa copie hors ligne a été conservée :
-                        // rattaché au même média (favoris, albums), jamais dupliqué.
+                        // Item came back on OneDrive while its offline copy was kept: attached to
+                        // the same media (favorites, albums), never duplicated.
                         val updatedMedia = fields.applyTo(copyMedia)
                         if (copyMedia.id !in merged && updatedMedia != copyMedia) mediaDao.update(updatedMedia)
                         if (requeueOnCTagChange(true, copy.cTag, fields.cTag)) {
@@ -280,20 +278,19 @@ class CloudSyncWriter @Inject constructor(
     }
 
     /**
-     * Fin de passage (après la dernière page) : masquage des éléments absents d'une énumération
-     * complète et du contenu des dossiers supprimés, purge après délai de grâce, puis albums
-     * OneDrive.
+     * End of pass (after the last page): hides items missing from a full enumeration and the
+     * content of deleted folders, purges after the grace period, then OneDrive albums.
      */
     internal suspend fun finishSync(run: CloudSyncRun, now: Long, labels: CloudFolderLabels) = withContext(io) {
         applyFinish(run, now, labels)
-        // Fusion des éléments OneDrive avec les fichiers locaux identiques (et défusion de ceux
-        // dont le contenu a changé) : hors de la transaction du passage, qui reste valide si elle échoue.
+        // Merges OneDrive items with identical local files (and unmerges those whose content
+        // changed): outside the pass's transaction, which stays valid if this fails.
         try {
             merger.reconcile()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Dédoublonnage après la synchronisation OneDrive impossible", e)
+            Log.w(TAG, "Deduplication after OneDrive sync failed", e)
         }
     }
 
@@ -301,11 +298,11 @@ class CloudSyncWriter @Inject constructor(
         db.withTransaction {
             val touched = HashSet<Long>()
 
-            // 1. Eléments : masqués s'ils manquent à une énumération complète, purgés après le délai de grâce.
+            // 1. Items: hidden if missing from a full enumeration, purged after the grace period.
             val stamps = sourceDao.stamps(SourceKind.ONEDRIVE).map { CloudStamp(it.id, it.mediaId, it.externalId, it.missingSince) }
             val plan = planCloudRemovals(stamps, run.seen, now)
-            // Décision D1 : un élément conservé hors ligne n'est jamais purgé sans l'avis de
-            // l'utilisateur ; il reste masqué, en attente de sa décision (écran Compte).
+            // Decision D1: an item kept offline is never purged without the user's say; it stays
+            // hidden, awaiting their decision (Account screen).
             val expiry = planGraceExpiry(plan.purge, sourceDao.mediaIdsByKind(SourceKind.OFFLINE_COPY).toSet())
             for (chunk in plan.hide.chunked(CHUNK)) sourceDao.markMissing(chunk.map { it.sourceId }, now)
             for (chunk in expiry.purge.chunked(CHUNK)) {
@@ -315,13 +312,13 @@ class CloudSyncWriter @Inject constructor(
             plan.hide.mapTo(touched) { it.mediaId }
             expiry.purge.mapTo(touched) { it.mediaId }
 
-            // 2. Dossiers supprimés (toujours absents en fin de passage) : leur contenu est masqué.
+            // 2. Deleted folders (still missing at the end of the pass): their content is hidden.
             val folderRows = folderDao.getAll()
             val folders = folderRows.map { it.toFields() }
             val knownIds = folders.mapTo(HashSet()) { it.itemId }
             val seenFolders = run.seenFolders
             val goneFolders: Set<String> = if (seenFolders != null) {
-                // Enumération complète : les éléments non vus sont déjà masqués à l'étape 1.
+                // Full enumeration: unseen items are already hidden in step 1.
                 knownIds - seenFolders
             } else {
                 descendantFolderIds(run.removedFolders.filterTo(HashSet()) { it in knownIds }, folders)
@@ -337,9 +334,9 @@ class CloudSyncWriter @Inject constructor(
             mediaDao.deleteOrphans()
             albumDao.clearDanglingCovers()
 
-            // 3. Marqueurs de suppression : un dossier supprimé (ou déjà marqué) reste marqué tant
-            // que son sous-arbre a des éléments masqués, sinon sa ligne est retirée. Un dossier non
-            // vu qui garde des éléments visibles (cas limite) conserve sa ligne telle quelle.
+            // 3. Deletion markers: a deleted (or already marked) folder stays marked as long as
+            // its subtree has hidden items, otherwise its row is removed. An unseen folder that
+            // still has visible items (edge case) keeps its row as is.
             val keepVisible = goneFolders.filterTo(HashSet()) { id ->
                 cloudBucketKey(id)?.let { sourceDao.existsVisibleCloudInBucket(it) } ?: false
             }
@@ -357,14 +354,14 @@ class CloudSyncWriter @Inject constructor(
         }
     }
 
-    /** Identifiants des dossiers qui contiennent des sources OneDrive masquées. */
+    /** Identifiers of folders containing hidden OneDrive sources. */
     private suspend fun hiddenFolderIds(): Set<String> =
         sourceDao.hiddenCloudBuckets().mapNotNullTo(HashSet()) { folderIdOfCloudBucket(it) }
 
     /**
-     * Albums OneDrive : un par dossier contenant des éléments visibles (un dossier marqué
-     * supprimé n'en a pas : il n'est donc jamais montré). Nom et chemin suivent les
-     * renommages ; un album sans personnalisation de l'utilisateur disparaît avec son dossier.
+     * OneDrive albums: one per folder containing visible items (a folder marked deleted has none,
+     * so it is never shown). Name and path follow renames; an album without user customization
+     * disappears with its folder.
      */
     private suspend fun syncCloudFolderAlbums(labels: CloudFolderLabels, now: Long) {
         val buckets = sourceDao.visibleBuckets(SourceKind.ONEDRIVE)
@@ -382,7 +379,7 @@ class CloudSyncWriter @Inject constructor(
             sourceDao.updateCloudBucketInfo(key, name, path)
             val album = byKey[key]
             if (album == null) {
-                // Un album d'un autre type peut déjà porter cette clé unique.
+                // An album of another type may already hold this unique key.
                 if (albumDao.getBySourceKey(key) != null) continue
                 albumDao.insert(
                     AlbumEntity(
@@ -417,7 +414,7 @@ class CloudSyncWriter @Inject constructor(
             height = height,
             durationMs = durationMs,
             sizeBytes = sizeBytes,
-            // Les miniatures Graph sont déjà orientées.
+            // Graph thumbnails are already oriented.
             orientation = 0,
             primaryUri = null,
             hasLocal = false,
@@ -446,7 +443,7 @@ class CloudSyncWriter @Inject constructor(
             externalId = itemId,
             uri = null,
             bucketKey = bucketKey,
-            // Nom et chemin du dossier renseignés en fin de passage (albums OneDrive).
+            // Folder name and path filled in at the end of the pass (OneDrive albums).
             bucketName = null,
             relativePath = null,
             sizeBytes = sizeBytes,
@@ -458,7 +455,7 @@ class CloudSyncWriter @Inject constructor(
             missingSince = null,
         )
 
-        /** Téléchargement d'une nouvelle version d'une copie hors ligne. */
+        /** Download of a new version of an offline copy. */
         fun redownloadTask(mediaId: Long, fields: CloudMediaFields, now: Long) = DownloadTaskEntity(
             mediaId = mediaId,
             sourceId = null,
@@ -472,7 +469,7 @@ class CloudSyncWriter @Inject constructor(
             cTag = fields.cTag,
         )
 
-        /** Mise à jour d'une source existante ; un élément revenu (restauré) redevient visible. */
+        /** Update of an existing source; an item that came back (restored) becomes visible again. */
         fun CloudMediaFields.applyTo(source: MediaSourceEntity): MediaSourceEntity {
             val sameBucket = source.bucketKey == bucketKey
             return source.copy(

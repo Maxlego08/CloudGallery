@@ -72,7 +72,7 @@ class MediaDaoTest {
         generation = storeId,
     )
 
-    /** Insère 3 médias : a (bucket 1), b (bucket 1, même date que a), c (bucket 2, plus récent). */
+    /** Inserts 3 media: a (bucket 1), b (bucket 1, same date as a), c (bucket 2, more recent). */
     private suspend fun seed(): Triple<Long, Long, Long> {
         val mediaDao = db.mediaDao()
         val sourceDao = db.mediaSourceDao()
@@ -88,7 +88,7 @@ class MediaDaoTest {
 
     private suspend fun loadAll(source: PagingSource<Int, MediaRow>): List<MediaRow> {
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 100, placeholdersEnabled = false))
-        assertTrue("Chargement en échec : $result", result is PagingSource.LoadResult.Page)
+        assertTrue("Load failed: $result", result is PagingSource.LoadResult.Page)
         return (result as PagingSource.LoadResult.Page).data
     }
 
@@ -149,7 +149,7 @@ class MediaDaoTest {
 
         assertNull(db.mediaDao().getById(c))
         assertEquals(listOf(b, a), db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
-        // La référence de l'album virtuel disparaît en cascade, l'album reste.
+        // The virtual album's reference is removed by cascade, the album remains.
         assertEquals(0, db.mediaDao().observeAlbumCount(virtual).first())
         assertNotNull(db.albumDao().getById(virtual))
     }
@@ -215,16 +215,16 @@ class MediaDaoTest {
         assertFalse(a in db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
         assertEquals(0, db.mediaDao().observeFavoriteCount().first())
         assertEquals(0, db.mediaDao().observeAlbumCount(virtual).first())
-        // Données de l'utilisateur conservées.
+        // User data kept.
         assertTrue(db.favoriteDao().isFavorite(a))
         assertNotNull(db.mediaDao().getById(a))
-        // Le compteur d'éléments indexés ignore les sources masquées.
+        // The indexed item counter ignores hidden sources.
         assertEquals(2, db.mediaSourceDao().count(SourceKind.LOCAL))
-        // markMissing n'écrase pas un horodatage existant.
+        // markMissing does not overwrite an existing timestamp.
         db.mediaSourceDao().markMissing(listOf(source.id), now = 999)
         assertEquals(123L, db.mediaSourceDao().getById(source.id)!!.missingSince)
 
-        // Source revenue : média de nouveau visible avec son favori.
+        // Source back: media visible again with its favorite.
         db.mediaSourceDao().update(source.copy(missingSince = null))
         db.mediaDao().refreshSourceFlags(listOf(a))
         assertTrue(a in db.mediaDao().observeTimelineIds(includeCloudOnly = true).first())
@@ -369,7 +369,7 @@ class MediaDaoTest {
         assertEquals(2, mediaDao.observeVideoCount(includeCloudOnly = true).first())
         assertEquals(listOf(cloudImage), mediaDao.timelineIdsInPeriod(true, 8_000, 9_100))
         assertTrue(mediaDao.timelineIdsInPeriod(false, 8_000, 9_100).isEmpty())
-        // Favoris et albums montrent tout ce qui est visible.
+        // Favorites and albums show everything that is visible.
         assertEquals(1, mediaDao.observeFavoriteCount().first())
         assertEquals(2, mediaDao.observeAlbumCount(virtual).first())
     }

@@ -59,16 +59,16 @@ import fr.eva.cloudgallery.ui.viewer.MediaBoundsRegistry
 import fr.eva.cloudgallery.ui.viewer.ViewerScreen
 import fr.eva.cloudgallery.ui.viewer.rememberViewerTransition
 
-/** Courbe « emphasized » : apparition et fermeture de la visionneuse. */
+/** "Emphasized" curve: viewer appearance and dismissal. */
 private val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 private const val PUSH_MS = 300
 private const val MEDIA_MS = 250
 
 /*
- * Passage d'un écran à l'autre, mesuré sur Samsung Galerie (One UI 8, Android 16, 60 i/s) :
- * l'écran du dessus entre / sort entièrement par la droite ; celui du dessous glisse de 30 % vers
- * la gauche et s'assombrit presque jusqu'au noir (fond noir de la NavHost visible par transparence).
- * Même courbe pour les deux écrans : départ lent, milieu rapide, longue décélération (~340 ms).
+ * Screen-to-screen transition, measured on Samsung Gallery (One UI 8, Android 16, 60 fps):
+ * the top screen enters / exits entirely from the right; the one below slides 30% to the
+ * left and darkens almost to black (black NavHost background visible through transparency).
+ * Same curve for both screens: slow start, fast middle, long deceleration (~340 ms).
  */
 private val OneUiSlide = CubicBezierEasing(0.9f, 0f, 0.3f, 1f)
 private const val SLIDE_MS = 340
@@ -76,7 +76,7 @@ private const val UNDER_OFFSET = 0.3f
 private const val SHADE_MS = 130
 private const val SHADE_ALPHA = 0.1f
 
-/** Visionneuse : elle anime elle-même son ouverture et son retour (ViewerTransition.kt). */
+/** Viewer: it animates its own opening and return (ViewerTransition.kt). */
 private fun NavBackStackEntry.isViewer(): Boolean = destination.hasRoute(ViewerRoute::class)
 
 private fun NavBackStackEntry.isFullscreenMedia(): Boolean =
@@ -94,7 +94,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.enter(): EnterTran
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.exit(): ExitTransition =
     if (targetState.isFullscreenMedia()) {
-        // L'écran d'origine reste (atténué) sous la visionneuse pendant son apparition.
+        // The originating screen stays (dimmed) under the viewer while it appears.
         fadeOut(tween(PUSH_MS), targetAlpha = 0.4f)
     } else {
         slideOutHorizontally(tween(SLIDE_MS, easing = OneUiSlide)) { -(it * UNDER_OFFSET).toInt() } +
@@ -102,10 +102,10 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.exit(): ExitTransi
     }
 
 /*
- * Retour : à la touche, courbe One UI ; au geste de retour prédictif, la transition est
- * positionnée sur l'avancée du geste (seekTo) puis terminée au lâcher, d'où une courbe linéaire
- * pour que l'écran suive le doigt. Sans transitions « predictive » explicites, Navigation applique
- * les siennes (écran réduit à 70 %, fondu) au lieu du glissement.
+ * Back: on the button, One UI curve; on the predictive back gesture, the transition is
+ * positioned on the gesture progress (seekTo) then finished on release, hence a linear curve
+ * so that the screen follows the finger. Without explicit "predictive" transitions, Navigation
+ * applies its own (screen scaled to 70%, fade) instead of the slide.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(easing: Easing = OneUiSlide): EnterTransition =
     if (initialState.isFullscreenMedia()) {
@@ -117,17 +117,17 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(easing: E
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit(easing: Easing = OneUiSlide): ExitTransition =
     if (initialState.isViewer()) {
-        // Gardée à l'écran le temps que la photo regagne sa vignette.
+        // Kept on screen while the photo returns to its thumbnail.
         ExitTransition.KeepUntilTransitionsFinished
     } else if (initialState.isFullscreenMedia()) {
         val mediaEasing = if (easing == LinearEasing) LinearEasing else Emphasized
         fadeOut(tween(MEDIA_MS, easing = mediaEasing)) + scaleOut(tween(PUSH_MS, easing = mediaEasing), targetScale = 0.92f)
     } else {
-        // L'écran sort entièrement vers la droite, sans fondu.
+        // The screen exits entirely to the right, without fading.
         slideOutHorizontally(tween(SLIDE_MS, easing = easing)) { it }
     }
 
-/** Graphe de navigation de l'appli (routes typées de Routes.kt). */
+/** The app's navigation graph (typed routes from Routes.kt). */
 @Composable
 fun AppNavHost(
     mainViewModel: MainViewModel,
@@ -139,7 +139,7 @@ fun AppNavHost(
     val activity = LocalActivity.current
     val permissions = rememberMediaPermissionController()
 
-    // Apparence des barres système : un seul propriétaire, d'après la destination courante.
+    // System bar appearance: a single owner, based on the current destination.
     val currentEntry by navController.currentBackStackEntryAsState()
     SystemBarsAppearance(fullscreenMedia = currentEntry?.isFullscreenMedia() == true, darkTheme = darkTheme)
 
@@ -147,14 +147,14 @@ fun AppNavHost(
         mainViewModel.onMediaAccessChanged(permissions.access)
     }
     LaunchedEffect(permissions.grantedResults) {
-        // Nouvelle sélection en accès partiel : l'état d'accès ne change pas, on réindexe quand même.
+        // New selection under partial access: the access state does not change, reindex anyway.
         if (permissions.grantedResults > 0) mainViewModel.onMediaAccessRegranted()
     }
     LaunchedEffect(mainViewModel, navController) {
         mainViewModel.events.collect { event ->
             when (event) {
-                // Pas de launchSingleTop : une visionneuse déjà au sommet garderait son ViewModel (et
-                // donc l'ancien média). popUpTo remplace toute visionneuse / lecteur par une entrée neuve.
+                // No launchSingleTop: a viewer already on top would keep its ViewModel (and
+                // hence the old media). popUpTo replaces any viewer / player with a fresh entry.
                 is MainEvent.OpenViewer -> navController.navigate(
                     ViewerRoute.of(MediaContext.Single(event.mediaId), event.mediaId, exitOnBack = event.exitOnBack),
                 ) { popUpTo<MainRoute>() }
@@ -175,7 +175,7 @@ fun AppNavHost(
                 }
                 is MainEvent.CannotOpen -> {
                     Toast.makeText(context, R.string.shell_open_failed, Toast.LENGTH_LONG).show()
-                    // Lancée uniquement pour ouvrir ce fichier : rendre la main à l'appelant.
+                    // Launched only to open this file: hand control back to the caller.
                     if (event.finish && navController.previousBackStackEntry == null) activity?.finish()
                 }
             }
@@ -195,7 +195,7 @@ fun AppNavHost(
             startDestination = MainRoute,
             modifier = modifier
                 .fillMaxSize()
-                // Noir : l'écran du dessous s'assombrit par transparence pendant les passages (One UI).
+                // Black: the screen below darkens through transparency during transitions (One UI).
                 .background(Color.Black),
             enterTransition = { enter() },
             exitTransition = { exit() },
@@ -253,9 +253,12 @@ fun AppNavHost(
             }
             composable<ViewerRoute> { entry ->
                 val route = entry.toRoute<ViewerRoute>()
-                // Lecteur vidéo posé par-dessus : la visionneuse sort sans regagner la grille.
-                val backStack by navController.currentBackStack.collectAsStateWithLifecycle()
-                val covered = backStack.lastOrNull()?.id != entry.id && backStack.any { it.id == entry.id }
+                // Video player on top: the viewer exits without returning to the grid.
+                val current by navController.currentBackStackEntryAsState()
+                val covered = remember(current, entry) {
+                    current?.id != entry.id &&
+                        runCatching { navController.getBackStackEntry<ViewerRoute>() }.getOrNull()?.id == entry.id
+                }
                 ViewerScreen(
                     onBack = rememberBackAction(navController, route.exitOnBack),
                     onPlayVideo = { mediaId -> navController.navigate(VideoPlayerRoute(mediaId)) },
@@ -306,14 +309,14 @@ fun AppNavHost(
 }
 
 /**
- * Action « retour » d'un écran plein écran. Ouvert pour une autre appli ([exitOnBack]), le retour (bouton ou geste système) termine l'activité pour
- * rendre la main à l'appelant au lieu d'afficher la galerie. Sinon : dépilement habituel.
+ * "Back" action of a full-screen screen. When opened for another app ([exitOnBack]), back (button or system gesture) finishes the activity to
+ * hand control back to the caller instead of showing the gallery. Otherwise: the usual pop.
  */
 @Composable
 private fun rememberBackAction(navController: NavHostController, exitOnBack: Boolean): () -> Unit {
     val activity = LocalActivity.current
     val pop = dropUnlessResumed { navController.popBackStack() }
-    // Les ouvertures externes sont toujours posées directement sur MainRoute (popUpTo).
+    // External openings are always placed directly on top of MainRoute (popUpTo).
     if (!exitOnBack || activity == null) return pop
     BackHandler { activity.finish() }
     return { activity.finish() }

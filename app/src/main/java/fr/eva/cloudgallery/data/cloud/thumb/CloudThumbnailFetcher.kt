@@ -33,10 +33,10 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Pas de miniature pour cet élément (Graph n'en génère pas, ou introuvable récemment). */
-class CloudThumbnailUnavailableException : IOException("Miniature OneDrive indisponible")
+/** No thumbnail for this item (Graph does not generate one, or not found recently). */
+class CloudThumbnailUnavailableException : IOException("OneDrive thumbnail unavailable")
 
-/** Palier de taille d'une requête Coil (plus grand côté demandé). */
+/** Size bucket of a Coil request (longest requested side). */
 private fun bucketOf(options: Options): Int {
     val w = options.size.width.pxOrElse { DEFAULT_CLOUD_THUMB_PX }
     val h = options.size.height.pxOrElse { DEFAULT_CLOUD_THUMB_PX }
@@ -44,8 +44,8 @@ private fun bucketOf(options: Options): Int {
 }
 
 /**
- * Clé de cache mémoire : élément + cTag + palier (ou palier d'aperçu effectivement demandé, après
- * repli éventuel : même clé que celle du cache disque).
+ * Memory cache key: item + cTag + bucket (or preview bucket actually requested, after a
+ * possible fallback: same key as the disk cache).
  */
 class CloudThumbnailKeyer internal constructor(private val env: CloudThumbnailFetcher.Factory) : Keyer<CloudThumbnail> {
     override fun key(data: CloudThumbnail, options: Options): String =
@@ -53,14 +53,14 @@ class CloudThumbnailKeyer internal constructor(private val env: CloudThumbnailFe
 }
 
 /**
- * Charge une miniature Microsoft Graph (`/thumbnails/0/{size}/content`) :
- * 1. cache disque de l'ImageLoader (clé = élément + cTag + palier : fonctionne hors connexion) ;
- * 2. mise en cache de tout OneDrive ([CloudPrecacheStore]) à une taille égale ou supérieure ;
- * 3. sinon, uniquement pour un compte connecté et si la requête autorise le réseau
- *    (`networkCachePolicy`), téléchargement (4 au plus en parallèle, pause globale de Graph
- *    respectée) puis écriture dans le cache disque ; en échec, taille inférieure de la mise en
- *    cache de tout OneDrive s'il y en a une.
- * Tout le travail (disque, réseau, MSAL) se fait sur le dispatcher d'E/S.
+ * Loads a Microsoft Graph thumbnail (`/thumbnails/0/{size}/content`):
+ * 1. ImageLoader disk cache (key = item + cTag + bucket: works offline);
+ * 2. caching of all of OneDrive ([CloudPrecacheStore]) at an equal or larger size;
+ * 3. otherwise, only for a signed-in account and if the request allows the network
+ *    (`networkCachePolicy`), download (at most 4 in parallel, global Graph pause honored)
+ *    then write to the disk cache; on failure, a smaller size from the caching of all of
+ *    OneDrive if there is one.
+ * All work (disk, network, MSAL) happens on the I/O dispatcher.
  */
 class CloudThumbnailFetcher private constructor(
     private val data: CloudThumbnail,
@@ -70,7 +70,7 @@ class CloudThumbnailFetcher private constructor(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult = withContext(env.io) {
-        // Lu sur le dispatcher d'E/S : la première lecture crée le cache disque (répertoire).
+        // Read on the I/O dispatcher: the first read creates the disk cache (directory).
         val diskCache = imageLoader.diskCache
         val bucket = bucketOf(options)
         val previewSide = env.effectivePreviewSide(data.previewSide)
@@ -78,20 +78,20 @@ class CloudThumbnailFetcher private constructor(
         if (options.diskCachePolicy.readEnabled && diskCache != null) {
             diskCache.openSnapshot(key)?.let { return@withContext it.toResult(diskCache, key, null, DataSource.DISK) }
         }
-        // Mise en cache de tout OneDrive : taille égale ou supérieure d'abord (aucune perte de netteté).
+        // Caching of all of OneDrive: equal or larger size first (no loss of sharpness).
         precached(bucket, previewSide, allowLower = false)?.let { return@withContext it }
         try {
             fetchFromNetwork(diskCache, bucket, previewSide, key)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Hors connexion, compte indisponible, miniature introuvable : une taille inférieure
-            // mise en cache vaut mieux qu'une case vide.
+            // Offline, account unavailable, thumbnail not found: a smaller cached size is
+            // better than an empty cell.
             precached(bucket, previewSide, allowLower = true) ?: throw e
         }
     }
 
-    /** Fichier de la mise en cache de tout OneDrive pour cette demande, null s'il n'y en a pas. */
+    /** File from the caching of all of OneDrive for this request, null if there is none. */
     private fun precached(bucket: Int, previewSide: Int?, allowLower: Boolean): FetchResult? {
         val kind = if (previewSide != null) PrecacheKind.PREVIEW else PrecacheKind.GRID
         val file = env.precache.find(data.ref, kind, previewSide ?: bucket, allowLower) ?: return null
@@ -99,7 +99,7 @@ class CloudThumbnailFetcher private constructor(
     }
 
     private suspend fun fetchFromNetwork(diskCache: DiskCache?, bucket: Int, previewSide: Int?, key: String): FetchResult {
-        // Requête limitée au cache (copie hors ligne affichée) : jamais de téléchargement.
+        // Request limited to the cache (offline copy displayed): never a download.
         if (!options.networkCachePolicy.readEnabled) throw CloudThumbnailUnavailableException()
         val generation = env.generation.value
         if (env.isUnavailable(key, generation)) throw CloudThumbnailUnavailableException()
@@ -118,11 +118,11 @@ class CloudThumbnailFetcher private constructor(
                 try {
                     download(fallback, key, generation, diskCache).also {
                         if (previewSide != null && previewSide > CLOUD_PREVIEW_PX) {
-                            // Grand palier d'aperçu refusé, palier inférieur accepté : abandonné
-                            // jusqu'au redémarrage (les clés suivent le palier effectif).
+                            // Large preview bucket refused, lower bucket accepted: dropped
+                            // until restart (keys follow the effective bucket).
                             env.maxPreviewSide = CLOUD_PREVIEW_PX
                         } else if (e.status == HTTP_BAD_REQUEST) {
-                            // Taille personnalisée refusée mais taille standard acceptée : plus de double requête.
+                            // Custom size refused but standard size accepted: no more double request.
                             env.customSizesRejected = true
                         }
                     }
@@ -141,7 +141,7 @@ class CloudThumbnailFetcher private constructor(
             if (cache != null && editor != null) {
                 writeToCache(cache, editor, body, key, mimeType, generation)
             } else {
-                // Ecriture déjà en cours pour cette clé (ou cache désactivé) : lecture en mémoire.
+                // Write already in progress for this key (or cache disabled): read in memory.
                 val buffer = Buffer().apply { writeAll(body) }
                 checkGeneration(generation)
                 SourceFetchResult(ImageSource(buffer, options.fileSystem), mimeType, DataSource.NETWORK)
@@ -159,19 +159,19 @@ class CloudThumbnailFetcher private constructor(
         try {
             cache.fileSystem.write(editor.data) { writeAll(body) }
             checkGeneration(generation)
-            val snapshot = editor.commitAndOpenSnapshot() ?: throw IOException("Miniature absente du cache disque")
+            val snapshot = editor.commitAndOpenSnapshot() ?: throw IOException("Thumbnail missing from the disk cache")
             return snapshot.toResult(cache, key, mimeType, DataSource.NETWORK)
         } catch (e: Throwable) {
             try {
                 editor.abort()
             } catch (_: Exception) {
-                // Editeur déjà validé ou fermé.
+                // Editor already committed or closed.
             }
             throw e
         }
     }
 
-    /** Données OneDrive retirées pendant le téléchargement (déconnexion) : rien n'est conservé. */
+    /** OneDrive data removed during the download (sign-out): nothing is kept. */
     private fun checkGeneration(generation: Long) {
         if (env.generation.value != generation) throw CloudAuthRequiredException()
     }
@@ -180,9 +180,9 @@ class CloudThumbnailFetcher private constructor(
         SourceFetchResult(ImageSource(data, cache.fileSystem, key, this), mimeType, source)
 
     /**
-     * Fabrique unique (Hilt). Construite au démarrage de l'application : ses dépendances lourdes
-     * (client Graph, OkHttp, MSAL) sont injectées via dagger.Lazy et ne sont créées qu'au premier
-     * téléchargement, sur le dispatcher d'E/S.
+     * Single factory (Hilt). Built at application startup: its heavy dependencies (Graph
+     * client, OkHttp, MSAL) are injected via dagger.Lazy and only created on the first
+     * download, on the I/O dispatcher.
      */
     @Singleton
     class Factory @Inject constructor(
@@ -193,29 +193,29 @@ class CloudThumbnailFetcher private constructor(
         @param:IoDispatcher internal val io: CoroutineDispatcher,
     ) : Fetcher.Factory<CloudThumbnail> {
 
-        /** Téléchargements simultanés (défilement rapide : Coil annule les cellules sorties de l'écran). */
+        /** Concurrent downloads (fast scrolling: Coil cancels cells that left the screen). */
         internal val permits = Semaphore(MAX_PARALLEL_DOWNLOADS)
 
         /**
-         * Miniatures introuvables (404) : pas de nouvelle requête pendant 10 minutes. Oubliées dès
-         * que les données OneDrive sont vidées (déconnexion, purge, changement de compte) : les
-         * clés ne contiennent rien qui soit propre au compte.
+         * Thumbnails not found (404): no new request for 10 minutes. Forgotten as soon as the
+         * OneDrive data is wiped (sign-out, purge, account change): the keys contain nothing
+         * specific to the account.
          */
         private val unavailable = ExpiringKeySet(UNAVAILABLE_TTL_MS, System::currentTimeMillis)
 
-        /** Numéro de vidage du cache auquel correspondent les clés de [unavailable]. */
+        /** Cache wipe counter that the keys of [unavailable] correspond to. */
         @Volatile
         private var unavailableGeneration = 0L
 
-        /** Graph a refusé une taille personnalisée : tailles standard uniquement (jusqu'au redémarrage). */
+        /** Graph refused a custom size: standard sizes only (until restart). */
         @Volatile
         internal var customSizesRejected = false
 
-        /** Plus grand palier d'aperçu accepté par Graph (abaissé après un refus, jusqu'au redémarrage). */
+        /** Largest preview bucket accepted by Graph (lowered after a refusal, until restart). */
         @Volatile
         internal var maxPreviewSide = CLOUD_PREVIEW_TIERS.last()
 
-        /** Palier d'aperçu réellement demandé pour [requested] (null : vignette de grille). */
+        /** Preview bucket actually requested for [requested] (null: grid thumbnail). */
         internal fun effectivePreviewSide(requested: Int?): Int? = requested?.let {
             cappedPreviewSide(it, if (customSizesRejected) CLOUD_PREVIEW_PX else maxPreviewSide)
         }
@@ -223,7 +223,7 @@ class CloudThumbnailFetcher private constructor(
         override fun create(data: CloudThumbnail, options: Options, imageLoader: ImageLoader): Fetcher =
             CloudThumbnailFetcher(data, options, imageLoader, this)
 
-        /** Enregistre le Keyer et cette fabrique dans les composants de l'ImageLoader. */
+        /** Registers the Keyer and this factory in the ImageLoader components. */
         fun register(components: ComponentRegistry.Builder) {
             components.add(CloudThumbnailKeyer(this), CloudThumbnail::class)
             components.add(this, CloudThumbnail::class)
@@ -234,7 +234,7 @@ class CloudThumbnailFetcher private constructor(
             return key in unavailable
         }
 
-        /** Mémorisé seulement si les données n'ont pas été vidées depuis le début du chargement. */
+        /** Remembered only if the data was not wiped since the start of the load. */
         internal fun markUnavailable(key: String, generation: Long) {
             if (this.generation.value == generation) unavailable.add(key)
         }
@@ -248,10 +248,10 @@ class CloudThumbnailFetcher private constructor(
         }
 
         /**
-         * Téléchargement autorisé uniquement pour un compte connecté, jamais pendant une
-         * déconnexion ni quand le OneDrive connecté n'est pas celui des données de l'index
-         * (règle commune [CloudAccessGuard]) : seules les miniatures déjà en cache disque des
-         * éléments d'un autre compte restent affichées.
+         * Download allowed only for a signed-in account, never during a sign-out nor when the
+         * connected OneDrive is not the one the index data came from (common rule
+         * [CloudAccessGuard]): only already disk-cached thumbnails of another account's items
+         * remain displayed.
          */
         internal suspend fun ensureSignedIn() = guard.ensureSignedIn()
     }

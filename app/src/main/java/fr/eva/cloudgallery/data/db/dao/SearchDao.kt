@@ -7,12 +7,12 @@ import androidx.room.Transaction
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import kotlinx.coroutines.flow.Flow
 
-/** Date de prise de vue en heure locale de l'appareil (`dateTaken` est en millisecondes). */
+/** Capture date in the device's local time (`dateTaken` is in milliseconds). */
 private const val LOCAL_DATE = "m.dateTaken / 1000, 'unixepoch', 'localtime'"
 
 /**
- * Noms des dossiers d'un média pour l'index : dossiers de ses sources visibles, albums virtuels
- * qui le contiennent, noms personnalisés des albums-dossiers. Chaque sous-requête suit un index
+ * Folder names of a media item for the index: folders of its visible sources, virtual albums
+ * containing it, custom names of folder albums. Each subquery follows an index
  * (`media_source.mediaId`, `album_media.mediaId`, `album.sourceKey`).
  */
 internal const val FTS_FOLDERS_SQL = """trim(
@@ -25,9 +25,9 @@ internal const val FTS_FOLDERS_SQL = """trim(
         WHERE s2.mediaId = m.id AND s2.missingSince IS NULL AND a2.customName IS NOT NULL), ''))"""
 
 /**
- * Libellés de date et de type d'un média : année, mois (français et anglais), jour du mois, jour
- * de la semaine, puis « vidéo video » ou « photo image ». Même ordre que MONTH_LABELS et
- * WEEKDAY_LABELS (SearchLogic.kt, vérifié par SearchLogicTest). Date inconnue : type seul.
+ * Date and type labels of a media item: year, month (French and English), day of month, day of
+ * week, then "vidéo video" or "photo image". Same order as MONTH_LABELS and WEEKDAY_LABELS
+ * (SearchLogic.kt, checked by SearchLogicTest). Unknown date: type only.
  */
 internal const val FTS_DATES_SQL = """trim(CASE WHEN m.dateTaken > 0 THEN
     strftime('%Y', $LOCAL_DATE) || ' ' ||
@@ -45,20 +45,19 @@ internal const val FTS_DATES_SQL = """trim(CASE WHEN m.dateTaken > 0 THEN
     ELSE '' END || ' ' ||
     CASE m.mediaType WHEN 'VIDEO' THEN 'vidéo video' ELSE 'photo image' END)"""
 
-/** Médias dont l'entrée d'index correspond à l'expression FTS [match] (voir ftsMatchExpression). */
+/** Media whose index entry matches the FTS expression [match] (see ftsMatchExpression). */
 private const val MATCHES = "m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH :match)"
 
 /**
- * Recherche plein texte sur `media_fts` et tenue à jour de cet index depuis la base.
+ * Full-text search over `media_fts` and upkeep of that index from the database.
  *
- * Résultats : médias visibles ([VISIBLE] : au moins une source présente), éléments uniquement sur
- * OneDrive compris quel que soit le réglage de Photos (ils sont aussi visibles dans leurs albums),
- * dans l'ordre des grilles.
+ * Results: visible media ([VISIBLE]: at least one source present), OneDrive-only items included
+ * whatever the Photos setting (they are also visible in their albums), in grid order.
  */
 @Dao
 interface SearchDao {
 
-    // --- Résultats (grille, visionneuse, sélection) ---------------------------------------
+    // --- Results (grid, viewer, selection) ------------------------------------------------
 
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE $VISIBLE AND $MATCHES $ORDER")
     fun pagingSearch(match: String): PagingSource<Int, MediaRow>
@@ -69,7 +68,7 @@ interface SearchDao {
     @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE AND $MATCHES")
     fun observeSearchCount(match: String): Flow<Int>
 
-    /** Dates des résultats dans l'ordre de la grille (défilement rapide). */
+    /** Result dates in grid order (fast scrolling). */
     @Query("SELECT m.dateTaken FROM media m WHERE $VISIBLE AND $MATCHES $ORDER")
     fun observeSearchDates(match: String): Flow<List<Long>>
 
@@ -79,13 +78,13 @@ interface SearchDao {
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND $MATCHES AND $BETWEEN $ORDER")
     suspend fun searchIdsBetween(match: String, newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
 
-    // --- Tenue à jour de l'index ------------------------------------------------------------
+    // --- Index upkeep ----------------------------------------------------------------------
 
-    /** Entrées de médias supprimés. */
+    /** Entries of deleted media. */
     @Query("DELETE FROM media_fts WHERE rowid NOT IN (SELECT id FROM media)")
     suspend fun deleteOrphanEntries(): Int
 
-    /** Entrées dont le nom, les dossiers ou les libellés de date ne sont plus à jour. */
+    /** Entries whose name, folders or date labels are out of date. */
     @Query(
         """DELETE FROM media_fts WHERE rowid IN (
             SELECT m.id FROM media m JOIN media_fts f ON f.rowid = m.id
@@ -93,7 +92,7 @@ interface SearchDao {
     )
     suspend fun deleteStaleEntries(): Int
 
-    /** Entrées des médias absents de l'index (nouveaux, ou retirés juste avant comme périmés). */
+    /** Entries of media missing from the index (new, or just removed as stale). */
     @Query(
         """INSERT INTO media_fts (rowid, name, folders, dates)
             SELECT m.id, m.displayName, $FTS_FOLDERS_SQL, $FTS_DATES_SQL FROM media m
@@ -105,8 +104,8 @@ interface SearchDao {
     suspend fun entryCount(): Int
 
     /**
-     * Mise à jour incrémentale, en une transaction : seules les entrées nouvelles, supprimées ou
-     * modifiées sont réécrites. Renvoie le nombre d'entrées retirées (supprimées ou périmées).
+     * Incremental update, in one transaction: only new, deleted or modified entries are
+     * rewritten. Returns the number of removed entries (deleted or stale).
      */
     @Transaction
     suspend fun refreshIndex(): Int {

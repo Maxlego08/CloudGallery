@@ -52,9 +52,9 @@ import androidx.compose.ui.window.DialogProperties
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Boîte de dialogue One UI : carte arrondie flottant en bas de l'écran, boutons texte séparés
- * par un trait vertical. [destructive] colore le bouton de confirmation en rouge.
- * [confirmEnabled] faux : confirmation impossible pour l'instant (information en cours de lecture).
+ * One UI dialog: rounded card floating at the bottom of the screen, text buttons separated
+ * by a vertical divider. [destructive] colours the confirm button red.
+ * [confirmEnabled] false: confirmation not possible yet (information still being read).
  */
 @Composable
 fun OneUiDialog(
@@ -99,7 +99,7 @@ internal fun OneUiDialogImpl(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        // Zone plein écran : un toucher hors de la carte ferme la boîte de dialogue.
+        // Full-screen area: a touch outside the card dismisses the dialog.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -114,7 +114,7 @@ internal fun OneUiDialogImpl(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(dimens.dialogRadius))
                     .background(if (colors.isDark) colors.sheet else colors.card)
-                    // Absorbe les clics pour ne pas fermer la boîte en touchant la carte.
+                    // Swallows clicks so that touching the card does not dismiss the dialog.
                     .clickable(interactionSource = null, indication = null, onClick = {})
                     .padding(top = 24.dp, bottom = 8.dp),
             ) {
@@ -210,9 +210,9 @@ private fun DialogTextButton(
 }
 
 /**
- * Boîte de saisie de texte One UI (création / renommage d'album…). Le texte initial est
- * entièrement sélectionné ; la confirmation est désactivée tant que la saisie est vide.
- * [message] : texte facultatif affiché au-dessus du champ.
+ * One UI text input dialog (album creation / renaming…). The initial text is
+ * fully selected; confirmation is disabled while the input is empty.
+ * [message]: optional text shown above the field.
  */
 @Composable
 fun OneUiTextInputDialog(
@@ -278,7 +278,7 @@ fun OneUiTextInputDialog(
                         .background(colors.accent),
                 )
                 LaunchedEffect(Unit) {
-                    // Le champ vit dans la fenêtre du Dialog : ignorer si le nœud n'est pas encore attaché.
+                    // The field lives in the Dialog's window: ignore if the node is not attached yet.
                     runCatching { focusRequester.requestFocus() }
                 }
             }

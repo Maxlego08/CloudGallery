@@ -43,7 +43,7 @@ interface SyncCursorDao {
     @Query("DELETE FROM sync_cursor WHERE provider = :provider")
     suspend fun delete(provider: String)
 
-    /** Efface le lien de reprise (deltaLink) : la prochaine synchro repartira de zéro. */
+    /** Clears the resume link (deltaLink): the next sync will start from scratch. */
     @Query("UPDATE sync_cursor SET cursor = NULL WHERE provider = :provider")
     suspend fun clearLink(provider: String)
 }
@@ -70,8 +70,8 @@ interface UserSettingDao {
 }
 
 /**
- * Fichiers OneDrive copiés sur l'appareil (originaux temporaires, copies hors ligne). Une seule
- * ligne par (média, type) : [replace] met à jour la ligne existante au lieu d'en créer une.
+ * OneDrive files copied to the device (temporary originals, offline copies). A single row per
+ * (media, kind): [replace] updates the existing row instead of creating a new one.
  */
 @Dao
 interface CachedFileDao {
@@ -91,17 +91,16 @@ interface CachedFileDao {
     fun observeCount(kind: CacheKind): Flow<Int>
 
     /**
-     * Insertion brute. Ne pas l'utiliser pour remplacer une ligne : avec un identifiant 0 et une
-     * ligne (média, type) déjà présente, l'upsert de Room se rabat sur une mise à jour par clé
-     * primaire qui ne touche aucune ligne (voir [replace]).
+     * Raw insert. Do not use it to replace a row: with id 0 and an existing (media, kind) row,
+     * Room's upsert falls back to an update by primary key that touches no row (see [replace]).
      */
     @Upsert
     suspend fun upsert(file: CachedFileEntity)
 
     /**
-     * Enregistre [file] comme LA copie (média, type) : la ligne existante est mise à jour (même
-     * identifiant), sinon une ligne est créée. Renvoie l'ancienne ligne (son fichier, s'il diffère,
-     * reste à supprimer par l'appelant après la transaction).
+     * Stores [file] as THE (media, kind) copy: the existing row is updated (same id), otherwise a
+     * row is created. Returns the previous row (its file, if different, is left for the caller to
+     * delete after the transaction).
      */
     @Transaction
     suspend fun replace(file: CachedFileEntity): CachedFileEntity? {
@@ -117,9 +116,9 @@ interface CachedFileDao {
     suspend fun deleteByIds(ids: List<Long>)
 
     /**
-     * Supprime la ligne [id] seulement si elle est restée telle qu'elle a été lue (même fichier,
-     * aucun accès depuis) : un nettoyage ne retire jamais une ligne réutilisée ou remplacée entre
-     * sa lecture et sa suppression. Renvoie 1 si la ligne a été supprimée.
+     * Deletes row [id] only if it is unchanged since it was read (same file, no access since):
+     * a cleanup never removes a row that was reused or replaced between its read and its
+     * deletion. Returns 1 if the row was deleted.
      */
     @Query("DELETE FROM cached_file WHERE id = :id AND path = :path AND lastAccessAt = :seenAccessAt")
     suspend fun deleteIfUnchanged(id: Long, path: String, seenAccessAt: Long): Int
@@ -141,10 +140,10 @@ interface CachedFileDao {
 }
 
 /**
- * File des copies hors ligne à télécharger. Une seule tâche ouverte (en attente, en cours, en
- * pause ou en échec) par média : garanti par [enqueueIfAbsent] (pas d'index unique partiel, que
- * Room ne sait pas déclarer). Une tâche réussie est supprimée (la copie est alors dans
- * `cached_file` et `media_source`). Aucune URL ni texte libre : `error` = nom d'un DownloadError.
+ * Queue of offline copies to download. A single open task (queued, running, paused or failed) per
+ * media item: guaranteed by [enqueueIfAbsent] (no partial unique index, which Room cannot
+ * declare). A successful task is deleted (the copy is then in `cached_file` and `media_source`).
+ * No URL or free text: `error` = name of a DownloadError.
  */
 @Dao
 interface DownloadTaskDao {
@@ -152,39 +151,39 @@ interface DownloadTaskDao {
     @Query("SELECT * FROM download_task WHERE id = :id")
     suspend fun getById(id: Long): DownloadTaskEntity?
 
-    /** Tâches ouvertes, dans l'ordre de la file. */
+    /** Open tasks, in queue order. */
     @Query("SELECT * FROM download_task WHERE state IN ($OPEN_STATES) ORDER BY createdAt, id")
     fun observeOpen(): Flow<List<DownloadTaskEntity>>
 
     @Query("SELECT * FROM download_task WHERE state IN ($OPEN_STATES) ORDER BY createdAt, id")
     suspend fun listOpen(): List<DownloadTaskEntity>
 
-    /** Tâche ouverte d'un média (null s'il n'en a pas). */
+    /** Open task of a media item (null if it has none). */
     @Query("SELECT * FROM download_task WHERE mediaId = :mediaId AND state IN ($OPEN_STATES) ORDER BY id DESC LIMIT 1")
     fun observeOpenForMedia(mediaId: Long): Flow<DownloadTaskEntity?>
 
     @Query("SELECT * FROM download_task WHERE mediaId IN (:mediaIds) AND state IN ($OPEN_STATES)")
     suspend fun openForMedia(mediaIds: List<Long>): List<DownloadTaskEntity>
 
-    /** Prochaine tâche à télécharger (la plus ancienne en attente). */
+    /** Next task to download (the oldest queued one). */
     @Query("SELECT * FROM download_task WHERE state = 'QUEUED' ORDER BY createdAt, id LIMIT 1")
     suspend fun nextQueued(): DownloadTaskEntity?
 
     /**
-     * Prochaine tâche téléchargeable : la plus ancienne en attente, hors tâches qui attendent que
-     * l'index rattrape OneDrive ([RUNNABLE_QUEUED]) et hors [skip] (déjà écartées par le passage).
+     * Next downloadable task: the oldest queued one, excluding tasks waiting for the index to
+     * catch up with OneDrive ([RUNNABLE_QUEUED]) and [skip] (already set aside by this pass).
      */
     @Query("SELECT * FROM download_task t WHERE $RUNNABLE_QUEUED AND t.id NOT IN (:skip) ORDER BY t.createdAt, t.id LIMIT 1")
     suspend fun nextRunnable(skip: List<Long>): DownloadTaskEntity?
 
-    /** Comme [nextRunnable], parmi les tâches [ids] seulement (« Télécharger maintenant » sur réseau mobile). */
+    /** Like [nextRunnable], among tasks [ids] only ("Download now" on a mobile network). */
     @Query(
         "SELECT * FROM download_task t WHERE $RUNNABLE_QUEUED AND t.id IN (:ids) AND t.id NOT IN (:skip) " +
             "ORDER BY t.createdAt, t.id LIMIT 1",
     )
     suspend fun nextRunnableAmong(ids: List<Long>, skip: List<Long>): DownloadTaskEntity?
 
-    /** Vrai s'il reste une tâche téléchargeable (voir [nextRunnable]). */
+    /** True if a downloadable task remains (see [nextRunnable]). */
     @Query("SELECT EXISTS(SELECT 1 FROM download_task t WHERE $RUNNABLE_QUEUED)")
     suspend fun existsRunnable(): Boolean
 
@@ -194,7 +193,7 @@ interface DownloadTaskDao {
     @Query("SELECT * FROM download_task WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<DownloadTaskEntity>
 
-    /** Tâches en attente ou en cours (lot concerné par « Télécharger maintenant »). */
+    /** Queued or running tasks (the batch affected by "Download now"). */
     @Query("SELECT * FROM download_task WHERE state IN ('QUEUED', 'RUNNING')")
     suspend fun listPending(): List<DownloadTaskEntity>
 
@@ -210,7 +209,7 @@ interface DownloadTaskDao {
     @Query("SELECT COUNT(*) FROM download_task WHERE state = 'QUEUED'")
     suspend fun countQueued(): Int
 
-    /** Version et taille du contenu que la tâche en cours télécharge. */
+    /** Version and size of the content the running task is downloading. */
     @Query("UPDATE download_task SET cTag = :cTag, bytesTotal = :total WHERE id = :id")
     suspend fun setVersion(id: Long, cTag: String?, total: Long)
 
@@ -224,10 +223,10 @@ interface DownloadTaskDao {
     suspend fun update(task: DownloadTaskEntity)
 
     /**
-     * Met en file un téléchargement par élément de [tasks] sans créer de doublon : une tâche
-     * ouverte du même média est réutilisée (même identifiant, P0-1) et remise en attente avec la
-     * nouvelle version ; une tâche en cours garde son état (le moteur détecte le changement de
-     * version au moment d'enregistrer). Renvoie le nombre de tâches créées ou remises en attente.
+     * Enqueues one download per item of [tasks] without creating duplicates: an open task of the
+     * same media is reused (same id, P0-1) and requeued with the new version; a running task
+     * keeps its state (the engine detects the version change when saving). Returns the number
+     * of tasks created or requeued.
      */
     @Transaction
     suspend fun enqueueIfAbsent(tasks: List<DownloadTaskEntity>): Int {
@@ -249,7 +248,7 @@ interface DownloadTaskDao {
                     existing.state == DownloadState.QUEUED &&
                         existing.cTag == task.cTag && existing.cloudItemId == task.cloudItemId -> Unit
                     else -> {
-                        // En pause, en échec, ou en attente d'une version précédente : remise en attente.
+                        // Paused, failed, or queued for a previous version: requeue.
                         val sameVersion = existing.cTag == task.cTag && existing.cloudItemId == task.cloudItemId
                         update(
                             existing.copy(
@@ -274,11 +273,11 @@ interface DownloadTaskDao {
     @Query("UPDATE download_task SET state = 'RUNNING', error = NULL, updatedAt = :now WHERE id = :id AND state = 'QUEUED'")
     suspend fun markRunning(id: Long, now: Long): Int
 
-    /** Progression d'une tâche en cours ; 0 si elle n'existe plus (libérée, annulée) ou n'est plus en cours. */
+    /** Progress of a running task; 0 if it no longer exists (freed, cancelled) or is no longer running. */
     @Query("UPDATE download_task SET bytesDownloaded = :bytes, bytesTotal = :total, updatedAt = :now WHERE id = :id AND state = 'RUNNING'")
     suspend fun updateProgress(id: Long, bytes: Long, total: Long, now: Long): Int
 
-    /** Remet une tâche en cours en attente (arrêt du travail, nouvel essai plus tard). */
+    /** Puts a running task back in the queue (work stopped, retry later). */
     @Query(
         "UPDATE download_task SET state = 'QUEUED', error = :error, attempts = :attempts, updatedAt = :now " +
             "WHERE id = :id AND state = 'RUNNING'",
@@ -288,19 +287,19 @@ interface DownloadTaskDao {
     @Query("UPDATE download_task SET state = 'FAILED', error = :error, attempts = :attempts, updatedAt = :now WHERE id = :id")
     suspend fun markFailed(id: Long, error: String, attempts: Int, now: Long)
 
-    /** Toutes les tâches en attente échouent avec [error] (compte déconnecté, plus d'espace). */
+    /** All queued tasks fail with [error] (account signed out, out of space). */
     @Query("UPDATE download_task SET state = 'FAILED', error = :error, updatedAt = :now WHERE state = 'QUEUED'")
     suspend fun failAllQueued(error: String, now: Long)
 
-    /** Tâches en cours d'un processus disparu (ou d'un travail arrêté) : de nouveau en attente. */
+    /** Running tasks of a dead process (or of stopped work): queued again. */
     @Query("UPDATE download_task SET state = 'QUEUED', updatedAt = :now WHERE state = 'RUNNING'")
     suspend fun resetRunningToQueued(now: Long): Int
 
-    /** Arrêt demandé par l'utilisateur : en pause jusqu'à sa reprise explicite. */
+    /** Stop requested by the user: paused until explicitly resumed. */
     @Query("UPDATE download_task SET state = 'PAUSED', updatedAt = :now WHERE state IN ('QUEUED', 'RUNNING')")
     suspend fun pauseActive(now: Long): Int
 
-    /** Reprise explicite : tâches en pause ou en échec de nouveau en attente. */
+    /** Explicit resume: paused or failed tasks queued again. */
     @Query("UPDATE download_task SET state = 'QUEUED', error = NULL, attempts = 0, updatedAt = :now WHERE state IN ('PAUSED', 'FAILED')")
     suspend fun resumeStopped(now: Long): Int
 
@@ -313,7 +312,7 @@ interface DownloadTaskDao {
     @Query("DELETE FROM download_task WHERE state IN ($OPEN_STATES)")
     suspend fun deleteOpen()
 
-    /** Lignes terminées (annulées, réussies d'une version précédente) plus anciennes que [before]. */
+    /** Finished rows (cancelled, or succeeded for a previous version) older than [before]. */
     @Query("DELETE FROM download_task WHERE state IN ('DONE', 'CANCELLED') AND updatedAt < :before")
     suspend fun deleteFinishedBefore(before: Long)
 
@@ -323,14 +322,14 @@ interface DownloadTaskDao {
 
 private const val CHUNK = 500
 
-/** Etats d'une tâche encore à traiter ou à reprendre (liste SQL). */
+/** States of a task still to process or resume (SQL list). */
 private const val OPEN_STATES = "'QUEUED', 'RUNNING', 'PAUSED', 'FAILED'"
 
 /**
- * Tâche `t` en attente et téléchargeable : pas une tâche refusée pour contenu modifié sur
- * OneDrive (CONTENT_CHANGED) tant que l'index n'a pas changé depuis (même version et même
- * taille de l'élément OneDrive) ; elle repart dès que la synchronisation a rattrapé OneDrive.
- * `IS` (et non `=`) : une erreur NULL ne doit pas exclure la tâche.
+ * Task `t` queued and downloadable: not a task rejected because the content changed on OneDrive
+ * (CONTENT_CHANGED) as long as the index has not changed since (same version and same size of
+ * the OneDrive item); it restarts as soon as the sync has caught up with OneDrive.
+ * `IS` (not `=`): a NULL error must not exclude the task.
  */
 private const val RUNNABLE_QUEUED = "t.state = 'QUEUED' AND NOT (t.error IS 'CONTENT_CHANGED' AND EXISTS(" +
     "SELECT 1 FROM media_source s WHERE s.kind = 'ONEDRIVE' AND s.externalId = t.cloudItemId " +

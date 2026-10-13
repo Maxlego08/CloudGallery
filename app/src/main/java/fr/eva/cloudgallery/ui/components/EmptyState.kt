@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Ecran vide One UI : grande icône grise, titre, message et action facultative, centrés. */
+/** One UI empty screen: large grey icon, title, message and optional action, centred. */
 @Composable
 fun EmptyState(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

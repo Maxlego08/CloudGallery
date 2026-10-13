@@ -10,20 +10,20 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Miniatures OneDrive en cache (disque et mémoire), vidées avec les données OneDrive. Une
- * miniature en cours de téléchargement pendant une purge n'est pas enregistrée : voir
- * [fr.eva.cloudgallery.data.cloud.CloudDataGeneration], incrémenté avant la purge.
+ * Cached OneDrive thumbnails (disk and memory), cleared along with the OneDrive data. A
+ * thumbnail being downloaded during a purge is not saved: see
+ * [fr.eva.cloudgallery.data.cloud.CloudDataGeneration], incremented before the purge.
  */
 interface CloudThumbnailCache {
-    /** Vide les miniatures OneDrive (disque et mémoire). Thread d'E/S. */
+    /** Clears OneDrive thumbnails (disk and memory). I/O thread. */
     suspend fun clear()
 }
 
 /**
- * Les miniatures OneDrive sont écrites dans le cache disque de l'ImageLoader Coil unique
- * (`cacheDir/coil`, plafond réglable : [ThumbnailCacheLimit]) : c'est son seul contenu (miniatures locales chargées par MediaStore,
- * images plein écran locales sans cache disque), il est donc vidé entièrement. En mémoire, seules
- * les entrées OneDrive sont retirées.
+ * OneDrive thumbnails are written to the disk cache of the single Coil ImageLoader
+ * (`cacheDir/coil`, adjustable cap: [ThumbnailCacheLimit]): that is its only content (local thumbnails loaded by MediaStore,
+ * local full-screen images without disk cache), so it is cleared entirely. In memory, only
+ * OneDrive entries are removed.
  */
 @Singleton
 class CoilCloudThumbnailCache @Inject constructor(

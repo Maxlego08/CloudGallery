@@ -4,24 +4,24 @@ import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
 
 /*
- * Logique pure de la synchronisation OneDrive en arrière-plan (testée en JVM).
+ * Pure logic of background OneDrive sync (tested on the JVM).
  */
 
-/** Travail périodique à planifier, annuler, ou laisser tel quel. */
+/** Periodic work to schedule, cancel, or leave as is. */
 internal sealed interface BackgroundSyncPlan {
-    /** Etat du compte pas encore connu (démarrage, lecture en échec, déconnexion en cours). */
+    /** Account state not known yet (startup, failed read, sign-out in progress). */
     data object Unchanged : BackgroundSyncPlan
 
     data object Cancel : BackgroundSyncPlan
 
-    /** Toutes les [intervalHours] heures, sur un réseau non facturé seulement si [unmeteredOnly]. */
+    /** Every [intervalHours] hours, on an unmetered network only if [unmeteredOnly]. */
     data class Schedule(val intervalHours: Long, val unmeteredOnly: Boolean) : BackgroundSyncPlan
 }
 
 /**
- * Travail périodique voulu : rien sans OneDrive dans ce build, réglage désactivé ou compte
- * déconnecté ; planifié pour un compte connecté (ou à reconnecter : le passage ne fait alors
- * rien et reprendra après la reconnexion). Un état transitoire ne change rien.
+ * Desired periodic work: none without OneDrive in this build, with the setting disabled or a
+ * signed-out account; scheduled for a signed-in account (or one needing sign-in again: the pass
+ * then does nothing and resumes after signing in again). A transient state changes nothing.
  */
 internal fun backgroundSyncPlan(
     configured: Boolean,

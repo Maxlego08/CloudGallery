@@ -36,15 +36,15 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import okio.Path.Companion.toOkioPath
 
 /**
- * ImageLoader unique de l'application (fourni par CloudGalleryApp via SingletonImageLoader.Factory).
- * - cache mémoire ≈ 25 % de la mémoire de l'appli ;
- * - cache disque borné à [diskCacheMaxBytes] (réglage lu à l'ouverture du cache, sur le
- *   dispatcher d'E/S de Coil) : miniatures et aperçus OneDrive uniquement (les miniatures locales
- *   et les images plein écran locales ne passent pas par lui) ;
- * - miniatures MediaStore via [LocalThumbnailFetcher] ; images complètes des vidéos via VideoFrameDecoder ;
- * - [extraComponents] : composants fournis par la couche données (miniatures OneDrive, modèle
- *   [CloudThumbnail]).
- * La construction est paresseuse : aucun cache n'est ouvert avant le premier chargement.
+ * The application's single ImageLoader (provided by CloudGalleryApp via SingletonImageLoader.Factory).
+ * - memory cache ≈ 25% of the app's memory;
+ * - disk cache bounded to [diskCacheMaxBytes] (setting read when the cache is opened, on
+ *   Coil's I/O dispatcher): OneDrive thumbnails and previews only (local thumbnails
+ *   and local full-screen images do not go through it);
+ * - MediaStore thumbnails via [LocalThumbnailFetcher]; full video frames via VideoFrameDecoder;
+ * - [extraComponents]: components provided by the data layer (OneDrive thumbnails, the
+ *   [CloudThumbnail] model).
+ * Construction is lazy: no cache is opened before the first load.
  */
 fun buildAppImageLoader(
     context: Context,
@@ -72,13 +72,13 @@ fun buildAppImageLoader(
         .build()
 
 /**
- * Miniature carrée pour les grilles et couvertures d'album. Dessine la couleur
- * `OneUiTheme.colors.placeholder` (si [placeholder]) en cas d'erreur ou sans source, animée
- * pendant le chargement ([LoadingSkeleton]).
- * Fichier local ([uri], toujours prioritaire) via MediaStore, sinon miniature OneDrive ([cloud]),
- * sinon (ou si la miniature OneDrive est indisponible, hors connexion par exemple) image tirée de
- * la copie hors ligne ([offline]). [version] (dateModified) invalide le cache local après une
- * modification ; la miniature OneDrive est versionnée par son cTag.
+ * Square thumbnail for grids and album covers. Draws the
+ * `OneUiTheme.colors.placeholder` color (if [placeholder]) on error or without a source, animated
+ * while loading ([LoadingSkeleton]).
+ * Local file ([uri], always preferred) via MediaStore, otherwise OneDrive thumbnail ([cloud]),
+ * otherwise (or if the OneDrive thumbnail is unavailable, offline for instance) an image taken from
+ * the offline copy ([offline]). [version] (dateModified) invalidates the local cache after a
+ * modification; the OneDrive thumbnail is versioned by its cTag.
  */
 @Composable
 fun ThumbnailImage(
@@ -89,11 +89,11 @@ fun ThumbnailImage(
     contentScale: ContentScale = ContentScale.Crop,
     cloud: CloudThumbRef? = null,
     offline: OfflineThumbnail? = null,
-    /** Faux dans la visionneuse : fond noir (transparent) au lieu de la couleur d'attente. */
+    /** False in the viewer: black (transparent) background instead of the placeholder color. */
     placeholder: Boolean = true,
 ) {
     Box(if (placeholder) modifier.background(OneUiTheme.colors.placeholder) else modifier) {
-        // Miniature OneDrive en échec : repli sur la copie hors ligne (si elle existe).
+        // OneDrive thumbnail failed: fall back to the offline copy (if there is one).
         var cloudFailed by remember(cloud) { mutableStateOf(false) }
         val model: Any? = remember(uri, isVideo, version, cloud, offline, cloudFailed) {
             when {
@@ -104,7 +104,7 @@ fun ThumbnailImage(
             }
         }
         if (model != null) {
-            // Chargement en cours : fond animé (LoadingSkeleton) ; chargée ou en échec : fond fixe.
+            // Loading: animated background (LoadingSkeleton); loaded or failed: static background.
             var settled by remember(model) { mutableStateOf(false) }
             if (placeholder && !settled) LoadingSkeleton(Modifier.matchParentSize())
             AsyncImage(
@@ -123,12 +123,12 @@ fun ThumbnailImage(
 }
 
 /**
- * Requête d'image plein écran pour la visionneuse, bornée à [maxSidePx] (côté le plus long).
- * La clé de cache mémoire inclut [version] pour refléter les modifications du fichier
- * (dateModified d'un fichier local, cTag d'un original OneDrive téléchargé).
+ * Full-screen image request for the viewer, bounded to [maxSidePx] (longest side).
+ * The memory cache key includes [version] to reflect file modifications
+ * (dateModified of a local file, cTag of a downloaded OneDrive original).
  *
- * Coil plafonne tout décodage à 4096 x 4096 par défaut (maxBitmapSize) : au-delà, le plafond est
- * relevé à [maxSidePx], sans quoi le rechargement haute résolution n'apporterait aucun détail.
+ * Coil caps every decode at 4096 x 4096 by default (maxBitmapSize): beyond that, the cap is
+ * raised to [maxSidePx], otherwise the high-resolution reload would bring no extra detail.
  */
 fun fullImageRequest(context: Context, uri: Uri, version: String, maxSidePx: Int): ImageRequest =
     ImageRequest.Builder(context)
@@ -137,20 +137,20 @@ fun fullImageRequest(context: Context, uri: Uri, version: String, maxSidePx: Int
         .apply { if (maxSidePx > COIL_DEFAULT_MAX_BITMAP_SIDE) maxBitmapSize(CoilSize(maxSidePx, maxSidePx)) }
         .precision(Precision.INEXACT)
         .memoryCacheKey("full:$uri:$version:$maxSidePx")
-        // Fichiers déjà sur l'appareil (content:// ou original téléchargé) : inutile de les
-        // dupliquer dans le cache disque.
+        // Files already on the device (content:// or downloaded original): no need to
+        // duplicate them in the disk cache.
         .diskCachePolicy(CachePolicy.DISABLED)
         .build()
 
-/** Côté par défaut des grands aperçus OneDrive (voir CloudThumbnailLogic). */
+/** Default side of large OneDrive previews (see CloudThumbnailLogic). */
 const val DEFAULT_CLOUD_PREVIEW_SIDE = 1600
 
 /**
- * Grand aperçu d'un élément présent uniquement sur OneDrive (visionneuse), aux proportions
- * d'origine, tenant dans un carré de [side] px. [onError] : vrai si l'aperçu n'a pas pu être
- * chargé (hors connexion sans cache, session expirée, pas de miniature). [onLoaded] : taille de
- * l'image chargée (px). [cacheOnly] : seulement depuis le cache (mémoire ou disque), jamais de
- * requête Microsoft Graph.
+ * Large preview of an item present only on OneDrive (viewer), with its original
+ * proportions, fitting in a square of [side] px. [onError]: true if the preview could not be
+ * loaded (offline without cache, expired session, no thumbnail). [onLoaded]: size of
+ * the loaded image (px). [cacheOnly]: only from the cache (memory or disk), never a
+ * Microsoft Graph request.
  */
 @Composable
 fun CloudPreviewImage(
@@ -186,13 +186,13 @@ fun CloudPreviewImage(
     )
 }
 
-/** Plafond par défaut de Coil pour la taille d'un bitmap décodé (Extras maxBitmapSize). */
+/** Coil's default cap on the size of a decoded bitmap (Extras maxBitmapSize). */
 private const val COIL_DEFAULT_MAX_BITMAP_SIDE = 4096
 
-/** Miniature de repli tirée de la copie hors ligne d'un élément conservé hors ligne, sinon null. */
+/** Fallback thumbnail taken from the offline copy of an item kept offline, otherwise null. */
 fun MediaSummary.offlineThumbnail(): OfflineThumbnail? =
     if (hasOffline) OfflineThumbnail(id, cloudThumb?.version ?: "m$dateModified", mimeType) else null
 
-/** Comme [MediaSummary.offlineThumbnail], pour la visionneuse (version = celle de la copie). */
+/** Like [MediaSummary.offlineThumbnail], for the viewer (version = that of the copy). */
 fun MediaDetails.offlineThumbnail(): OfflineThumbnail? =
     offlineCopy?.let { OfflineThumbnail(id, it.version ?: "m$dateModified", mimeType) }

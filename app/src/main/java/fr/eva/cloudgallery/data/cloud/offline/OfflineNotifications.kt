@@ -13,13 +13,13 @@ import fr.eva.cloudgallery.MainActivity
 import fr.eva.cloudgallery.R
 
 /**
- * Notifications des copies hors ligne : progression du travail (obligatoire pour une tâche
- * lancée par l'utilisateur, avec un bouton « Annuler ») et bilan en fin de passage. Canal de
- * faible importance (aucun son). Aucun nom de fichier n'est journalisé.
+ * Offline copy notifications: job progress (mandatory for a user-initiated job, with a "Cancel"
+ * button) and a summary at the end of a pass. Low-importance channel (no sound). No file name is
+ * logged.
  *
- * Les mises à jour et le bilan ne sont publiés que si les notifications sont autorisées ; la
- * notification exigée par JobScheduler (setNotification) est fournie dans tous les cas (le
- * système la montre au moins dans le Gestionnaire de tâches).
+ * Updates and the summary are only posted if notifications are allowed; the notification
+ * required by JobScheduler (setNotification) is provided in every case (the system shows it at
+ * least in the Task Manager).
  */
 internal object OfflineNotifications {
 
@@ -28,7 +28,7 @@ internal object OfflineNotifications {
     private const val SUMMARY_ID = 4002
     private const val TAG = "OfflineNotifications"
 
-    /** Crée (ou renomme, après un changement de langue) le canal. Appel Binder court. */
+    /** Creates (or renames, after a language change) the channel. Short Binder call. */
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channel = NotificationChannel(
@@ -42,7 +42,7 @@ internal object OfflineNotifications {
         manager.createNotificationChannel(channel)
     }
 
-    /** Notification de progression ([progress] null : démarrage, avant le premier relevé). */
+    /** Progress notification ([progress] null: starting, before the first reading). */
     fun progress(context: Context, progress: OfflineProgress?): Notification {
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -85,12 +85,12 @@ internal object OfflineNotifications {
         return builder.build()
     }
 
-    /** Met à jour la progression affichée (si les notifications sont autorisées). */
+    /** Updates the displayed progress (if notifications are allowed). */
     fun update(context: Context, progress: OfflineProgress) {
         notifyIfAllowed(context, PROGRESS_ID, progress(context, progress))
     }
 
-    /** Bilan d'un passage : copies terminées et échecs (rien si aucun des deux). */
+    /** Summary of a pass: completed copies and failures (nothing if neither). */
     fun showSummary(context: Context, summary: DrainSummary) {
         if (summary.completed == 0 && summary.failed == 0) return
         val title = if (summary.failed > 0) {
@@ -120,7 +120,7 @@ internal object OfflineNotifications {
         try {
             manager.notify(id, notification)
         } catch (e: SecurityException) {
-            Log.w(TAG, "Notification refusée", e)
+            Log.w(TAG, "Notification refused", e)
         }
     }
 

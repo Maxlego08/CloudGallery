@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Accès actuel aux médias de l'appareil, d'après les autorisations accordées (sans E/S). */
+/** Current access to the device's media, based on the granted permissions (no I/O). */
 fun readMediaAccess(context: Context): MediaAccess = mediaAccessOf(
     images = context.isGranted(Manifest.permission.READ_MEDIA_IMAGES),
     videos = context.isGranted(Manifest.permission.READ_MEDIA_VIDEO),
@@ -24,9 +24,9 @@ private fun Context.isGranted(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
 /**
- * Accès aux médias vu par la couche données (sans Context dans les DAO) : lu au démarrage du
- * processus, puis tenu à jour par l'UI à chaque changement constaté (retour au premier plan,
- * réponse à la demande d'autorisation). Sert à montrer OneDrive dans Photos sans accès local.
+ * Media access as seen by the data layer (no Context in the DAOs): read at process start, then
+ * kept up to date by the UI on every observed change (return to foreground, answer to the
+ * permission request). Used to show OneDrive in Photos without local access.
  */
 @Singleton
 class MediaAccessState @Inject constructor(

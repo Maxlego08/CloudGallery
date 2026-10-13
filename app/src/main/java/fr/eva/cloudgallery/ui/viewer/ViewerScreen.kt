@@ -124,9 +124,9 @@ import kotlin.math.abs
 private val ScrimColor = Color(0x99000000)
 
 /**
- * Visionneuse plein écran façon Samsung Galerie : pager d'images/vidéos du contexte, chrome (barres,
- * bande de miniatures) masquable d'un tap, panneau Détails, rotation, recadrage en copie, suppression.
- * Le ViewModel lit [fr.eva.cloudgallery.ui.navigation.ViewerRoute] via SavedStateHandle.
+ * Samsung Gallery-style fullscreen viewer: pager of the context's images/videos, chrome (bars,
+ * thumbnail strip) hidden with a tap, Details sheet, rotation, crop to a copy, deletion.
+ * The ViewModel reads [fr.eva.cloudgallery.ui.navigation.ViewerRoute] via SavedStateHandle.
  */
 @Composable
 fun ViewerScreen(
@@ -149,7 +149,7 @@ fun ViewerScreen(
     val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
     val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
     val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
-    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    // Notification permission requested on the first "Keep offline" (optional).
     val withNotificationPermission = rememberNotificationPermissionGate(
         alreadyAsked = settings.offlineNotificationsAsked,
         onAsked = viewModel::markNotificationsAsked,
@@ -192,7 +192,7 @@ fun ViewerScreen(
         }
     }
 
-    // Liste vide (dernier élément supprimé, album vidé…) : on ferme la visionneuse.
+    // Empty list (last item deleted, album emptied…): close the viewer.
     val idList = ids
     LaunchedEffect(idList) {
         if (idList != null && idList.isEmpty()) currentOnBack()
@@ -200,50 +200,50 @@ fun ViewerScreen(
 
     val current = media
     val isLocal = current != null && current.hasLocal && current.uri != null
-    // Sans fichier local (OneDrive ou copie hors ligne) : les actions d'écriture (modifier,
-    // supprimer, rogner, pivoter, copier) restent réservées aux fichiers de l'appareil ; partager
-    // et « Ouvrir avec » utilisent la copie hors ligne ou téléchargent l'original (lecture seule).
+    // Without a local file (OneDrive or offline copy): write actions (edit, delete, crop, rotate,
+    // copy) remain reserved for on-device files; share and "Open with" use the offline copy or
+    // download the original (read-only).
     val cloudOnly = current != null && !isLocal
     val canRead = isLocal || current?.hasCloud == true || current?.hasOffline == true
     val isImage = current?.type == MediaType.IMAGE
     val chromeShown = chromeVisible && dismissProgress < 0.02f && !showCropEditor
     ImmersiveSystemBars(visible = chromeShown || showCropEditor)
 
-    // Transition grille ↔ visionneuse (ViewerTransition.kt) : la photo part de sa vignette et y
-    // revient quand la grille l'affiche ; sinon (ouverture depuis une autre appli, vignette hors
-    // écran) fondu et léger zoom.
+    // Grid ↔ viewer transition (ViewerTransition.kt): the photo starts from its thumbnail and
+    // returns to it when the grid shows it; otherwise (opened from another app, thumbnail
+    // off-screen) a fade and slight zoom.
     val registry = LocalMediaBounds.current
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
     var rootSize by remember { mutableStateOf(Size.Zero) }
     val entry = registry?.entryOf(currentId)
     val cell = entry?.rect?.translate(-rootOffset)
-    // Dimensions : détails chargés, sinon média de la grille (connu dès la première image).
+    // Dimensions: loaded details, otherwise the grid media (known from the first frame).
     val dims = current?.takeIf { it.id == currentId }?.let { Triple(it.width, it.height, it.orientation) }
         ?: entry?.media?.let { Triple(it.width, it.height, it.orientation) }
     val fitted = dims?.let { (w, h, orientation) ->
         val swap = orientation % 180 != 0
         ViewerZoomGeometry.fittedRect(rootSize, if (swap) h else w, if (swap) w else h)
     }
-    /** Vignette et rectangle ajusté de la photo courante (repère de la visionneuse), si connus. */
+    /** Thumbnail and fitted rectangle of the current photo (viewer coordinate space), if known. */
     val zoomRects: Pair<Rect, Rect>? = if (cell != null && fitted != null) cell to fitted else null
     val shared = zoomRects != null
     val closing = transition.closing
-    // Barres : masquées aussitôt au retour, affichées en fondu passée la moitié de l'ouverture.
+    // Bars: hidden immediately on return, faded in past the middle of the open animation.
     val opening by remember(transition) { derivedStateOf { !transition.closing && transition.progress < 0.6f } }
     val chromeOnScreen = chromeShown && !closing && !opening
     SideEffect { registry?.hiddenId = if (closing && shared) currentId else null }
     DisposableEffect(registry) { onDispose { registry?.hiddenId = null } }
 
-    // Miniature de la grille (déjà en cache mémoire) sous les pages : la photo est visible dès la
-    // première image de l'ouverture, sans attendre les identifiants ni l'image de la visionneuse.
-    // Retirée au premier geste (page suivante, zoom, glisser) et au retour.
+    // Grid thumbnail (already in the memory cache) under the pages: the photo is visible from the
+    // first frame of the open animation, without waiting for the ids or the viewer's image.
+    // Removed on the first gesture (next page, zoom, drag) and on return.
     val openedId = remember { currentId }
     val openedEntry = remember { registry?.entryOf(currentId) }
     var pagerMoved by remember { mutableStateOf(false) }
     val showGridThumb = openedEntry != null && fitted != null && currentId == openedId &&
         !closing && !pagerMoved && !currentZoomed && dismissProgress == 0f
-    // Pages (identifiants, images pleine taille) composées une fois l'ouverture terminée : leur
-    // construction pendant l'animation la faisait saccader. La miniature tient lieu de photo.
+    // Pages (ids, full-size images) composed once the open animation is done: building them
+    // during the animation made it stutter. The thumbnail stands in for the photo.
     val openingDone by remember(transition) { derivedStateOf { transition.closing || transition.progress >= 1f } }
     val pagerReady = openedEntry == null || openingDone
 
@@ -263,8 +263,9 @@ fun ViewerScreen(
                 }
             }
             .drawBehind {
-                // Fond noir dès l'ouverture, transparent dès le retour : la grille est visible tout
-                // de suite (y compris la première image, avant que la grille ne donne ses positions).
+                // Black background from the start of the open, transparent from the start of the
+                // return: the grid is visible right away (including the first frame, before the
+                // grid reports its positions).
                 if (!closing) drawRect(ViewerColors.background)
             },
     ) {
@@ -399,7 +400,7 @@ fun ViewerScreen(
                 menuItems = buildList {
                     add(OneUiMenuItem(stringResource(R.string.common_details)) { showDetails = true })
                     if (isImage && !cloudOnly) {
-                        // Rotation sans perte : seulement pour les formats dont l'orientation EXIF est modifiable.
+                        // Lossless rotation: only for formats whose EXIF orientation can be modified.
                         if (viewModel.canRotate(current)) {
                             add(OneUiMenuItem(stringResource(R.string.viewer_rotate_left), enabled = isLocal && !busy) { viewModel.requestRotate(270) })
                             add(OneUiMenuItem(stringResource(R.string.viewer_rotate_right), enabled = isLocal && !busy) { viewModel.requestRotate(90) })
@@ -410,7 +411,7 @@ fun ViewerScreen(
                     if (!cloudOnly) {
                         add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
                     }
-                    // Fichier du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                    // On-device file only, Samsung Secure Folder app installed.
                     if (secureFolderActionVisible(secureFolderAvailable, if (isLocal) 1 else 0)) {
                         add(
                             OneUiMenuItem(stringResource(R.string.secure_folder_move), enabled = !busy) {
@@ -423,7 +424,7 @@ fun ViewerScreen(
                             viewModel.openCurrentWith()
                         },
                     )
-                    // Copie hors ligne (éléments OneDrive, ou copie conservée d'un élément supprimé de OneDrive).
+                    // Offline copy (OneDrive items, or a kept copy of an item deleted from OneDrive).
                     if (current != null && (current.hasCloud || current.hasOffline)) {
                         when {
                             offlineState.active -> add(
@@ -475,7 +476,7 @@ fun ViewerScreen(
         }
     }
 
-    // --- Panneaux et dialogues ---------------------------------------------------------------
+    // --- Sheets and dialogs ------------------------------------------------------------------
 
     if (showDetails && current != null) {
         LaunchedEffect(current.id, current.dateModified) { viewModel.loadExif(current) }
@@ -654,9 +655,9 @@ private fun ViewerTopBar(
 }
 
 /**
- * Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager,
- * Supprimer. Elément uniquement sur OneDrive ([cloudOnly]) : Favori et Partager (original
- * téléchargé) ; modifier et supprimer restent réservés aux fichiers de l'appareil.
+ * Viewer action bar (icons only, like One UI): Favorite, Edit, Share, Delete. Item only on
+ * OneDrive ([cloudOnly]): Favorite and Share (downloaded original); edit and delete remain
+ * reserved for on-device files.
  */
 @Composable
 private fun ViewerActionBar(
@@ -707,7 +708,7 @@ private fun ViewerActionBar(
                 icon = Icons.Outlined.Edit,
                 contentDescription = stringResource(R.string.common_edit),
                 onClick = onEdit,
-                // TODO(viewer): édition vidéo (découpe) non prise en charge pour l'instant.
+                // TODO(viewer): video editing (trimming) is not supported yet.
                 enabled = isLocal && isImage,
                 tint = ViewerColors.content,
             )
@@ -739,8 +740,8 @@ private fun androidx.compose.foundation.layout.RowScope.ActionSlot(content: @Com
 }
 
 /**
- * Téléchargement d'un original OneDrive avant un partage ou un « Ouvrir avec » : progression et
- * annulation (aussi par retour ou toucher hors de la boîte).
+ * Download of a OneDrive original before a share or an "Open with": progress and cancellation
+ * (also via back or tapping outside the dialog).
  */
 @Composable
 private fun SharePreparationDialog(preparation: SharePreparation, onCancel: () -> Unit) {
@@ -764,8 +765,8 @@ private fun SharePreparationDialog(preparation: SharePreparation, onCancel: () -
 }
 
 /**
- * Pendant la transition grille ↔ visionneuse : contenu agrandi depuis la vignette (repère du
- * conteneur, centre de [rects].second pour pivot) et découpé de la vignette au rectangle ajusté.
+ * During the grid ↔ viewer transition: content enlarged from the thumbnail (container space,
+ * center of [rects].second as pivot) and clipped from the thumbnail to the fitted rectangle.
  */
 private fun Modifier.zoomFromCell(rects: Pair<Rect, Rect>?, progress: () -> Float): Modifier {
     val (cellRect, fittedRect) = rects ?: return this
@@ -789,8 +790,8 @@ private fun Modifier.zoomFromCell(rects: Pair<Rect, Rect>?, progress: () -> Floa
 }
 
 /**
- * Miniature de la grille dans le rectangle ajusté [fitted] : demandée à la taille des vignettes
- * ([requestSide] px pour le grand côté, même palier de cache Coil que la grille) puis agrandie.
+ * Grid thumbnail in the fitted rectangle [fitted]: requested at the grid cell size
+ * ([requestSide] px for the long side, same Coil cache tier as the grid) then scaled up.
  */
 @Composable
 private fun GridThumbnailLayer(media: MediaSummary, fitted: Rect, requestSide: Float, modifier: Modifier = Modifier) {

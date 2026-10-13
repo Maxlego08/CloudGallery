@@ -2,223 +2,223 @@ package fr.eva.cloudgallery.domain.model
 
 import java.io.IOException
 
-/** Compte Microsoft connecté (mode compte unique). Le nom d'utilisateur n'est jamais journalisé. */
+/** Signed-in Microsoft account (single-account mode). The username is never logged. */
 /**
- * Compte Microsoft connecté. [id] : identifiant MSAL opaque (jamais affiché ni journalisé :
- * [toString] ne le contient pas), qui sert à vérifier que l'index appartient à ce compte.
+ * Signed-in Microsoft account. [id]: opaque MSAL identifier (never displayed or logged:
+ * [toString] does not include it), used to check that the index belongs to this account.
  */
 data class CloudAccount(val username: String?, val id: String? = null) {
     override fun toString(): String = "CloudAccount"
 }
 
 /**
- * Cause d'un échec cloud, indépendante de la langue : le texte affiché est résolu par l'UI
- * (une erreur persistée reste ainsi juste après un changement de langue).
+ * Cause of a cloud failure, language-independent: the displayed text is resolved by the UI
+ * (so a persisted error stays correct right after a language change).
  */
 enum class CloudErrorCode {
-    /** Pas de réseau ou délai dépassé : réessayer plus tard, la session reste valide. */
+    /** No network or timeout: retry later, the session remains valid. */
     NETWORK,
 
-    /** Session expirée ou révoquée : une reconnexion interactive est nécessaire. */
+    /** Session expired or revoked: an interactive sign-in is required. */
     AUTH_REQUIRED,
 
-    /** Trop de requêtes : Microsoft Graph demande de patienter. */
+    /** Too many requests: Microsoft Graph asks to wait. */
     THROTTLED,
 
-    /** Erreur côté service Microsoft. */
+    /** Error on the Microsoft service side. */
     SERVER,
 
-    /** Configuration MSAL invalide (identifiant, URI de redirection, manifeste). */
+    /** Invalid MSAL configuration (client ID, redirect URI, manifest). */
     CONFIG,
 
-    /** Autorisations refusées par l'utilisateur. */
+    /** Permissions declined by the user. */
     DECLINED,
 
-    /** Aucun navigateur compatible pour la page de connexion Microsoft. */
+    /** No compatible browser for the Microsoft sign-in page. */
     NO_BROWSER,
 
     UNKNOWN,
 }
 
-/** Etat du compte OneDrive. */
+/** State of the OneDrive account. */
 sealed interface CloudAccountState {
-    /** Build sans identifiant MSAL : la fonction est masquée. */
+    /** Build without an MSAL client ID: the feature is hidden. */
     data object NotConfigured : CloudAccountState
 
-    /** Etat pas encore lu (au démarrage du processus). */
+    /** State not read yet (at process start). */
     data object Loading : CloudAccountState
 
     /**
-     * Aucun compte. [hasLeftoverData] : des données OneDrive d'une session précédente restent
-     * dans l'index local (jamais supprimées sans confirmation explicite de l'utilisateur).
+     * No account. [hasLeftoverData]: OneDrive data from a previous session remains in the
+     * local index (never deleted without explicit confirmation from the user).
      */
     data class SignedOut(val hasLeftoverData: Boolean) : CloudAccountState
 
     data class SignedIn(val account: CloudAccount) : CloudAccountState
 
-    /** Compte connu mais session expirée : les données en cache sont conservées. */
+    /** Known account but expired session: cached data is kept. */
     data class NeedsReauth(val account: CloudAccount) : CloudAccountState
 
-    /** Déconnexion en cours (aucune synchronisation ne doit démarrer pendant ce temps). */
+    /** Sign-out in progress (no sync may start in the meantime). */
     data object SigningOut : CloudAccountState
 
     data class Error(val code: CloudErrorCode) : CloudAccountState
 }
 
-/** Issue d'une connexion interactive. */
+/** Outcome of an interactive sign-in. */
 sealed interface SignInOutcome {
     data object Success : SignInOutcome
     data object Cancelled : SignInOutcome
     data class Failed(val code: CloudErrorCode) : SignInOutcome
 }
 
-/** Echec cloud typé (le message affiché est résolu par l'UI à partir de [code]). */
+/** Typed cloud failure (the displayed message is resolved by the UI from [code]). */
 open class CloudException(
     val code: CloudErrorCode,
     cause: Throwable? = null,
-) : Exception("Echec OneDrive : $code", cause)
+) : Exception("OneDrive failure: $code", cause)
 
-/** Aucun jeton utilisable sans interaction : reconnexion nécessaire (ou compte absent). */
+/** No token usable without interaction: sign-in required (or no account). */
 class CloudAuthRequiredException(cause: Throwable? = null) : CloudException(CloudErrorCode.AUTH_REQUIRED, cause)
 
-/** Requêtes Microsoft Graph limitées : ne pas réessayer avant [retryAfterMs] (ms, 0 si inconnu). */
+/** Microsoft Graph requests throttled: do not retry before [retryAfterMs] (ms, 0 if unknown). */
 class CloudThrottledException(val retryAfterMs: Long, cause: Throwable? = null) :
     CloudException(CloudErrorCode.THROTTLED, cause)
 
-/** Profil Microsoft Graph du compte connecté (chargé à la demande, jamais journalisé). */
+/** Microsoft Graph profile of the signed-in account (loaded on demand, never logged). */
 data class CloudProfile(
     val displayName: String?,
     val email: String?,
-    /** Espace utilisé / total en octets (quota unifié du compte Microsoft), null si inconnu. */
+    /** Used / total space in bytes (unified Microsoft account quota), null if unknown. */
     val quotaUsed: Long?,
     val quotaTotal: Long?,
 )
 
-/** Origine d'une demande de synchronisation OneDrive. */
+/** Origin of a OneDrive sync request. */
 enum class CloudSyncReason {
-    /** Retour de l'appli au premier plan : ignorée si la dernière synchro est récente. */
+    /** App back in the foreground: skipped if the last sync is recent. */
     FOREGROUND,
 
-    /** « Synchroniser maintenant ». */
+    /** "Sync now". */
     MANUAL,
 
-    /** Connexion (ou reconnexion) réussie. */
+    /** Successful sign-in (or re-sign-in). */
     SIGN_IN,
 
-    /** Synchro périodique en arrière-plan (WorkManager) : ignorée si la dernière est récente. */
+    /** Periodic background sync (WorkManager): skipped if the last one is recent. */
     BACKGROUND,
 }
 
-/** Etat de la synchronisation OneDrive -> index local. */
+/** State of the OneDrive -> local index sync. */
 data class CloudSyncState(
     val running: Boolean = false,
-    /** Eléments reçus de Microsoft Graph pendant la synchro en cours. */
+    /** Items received from Microsoft Graph during the current sync. */
     val processedItems: Int = 0,
-    /** Eléments OneDrive visibles dans l'index. */
+    /** OneDrive items visible in the index. */
     val itemCount: Int = 0,
     val lastSyncAt: Long = 0L,
     val lastFullSyncAt: Long = 0L,
-    /** Cause du dernier échec (texte résolu par l'UI), null si la dernière synchro a réussi. */
+    /** Cause of the last failure (text resolved by the UI), null if the last sync succeeded. */
     val lastError: CloudErrorCode? = null,
-    /** Limitation Graph : aucune requête avant cet instant (ms). */
+    /** Graph throttling: no request before this instant (ms). */
     val retryNotBefore: Long = 0L,
     /**
-     * Le OneDrive connecté n'est pas celui des données présentes dans l'index : la synchro est
-     * suspendue jusqu'à ce que l'utilisateur confirme le remplacement (jamais automatique).
+     * The signed-in OneDrive is not the one the index data belongs to: sync is suspended
+     * until the user confirms the replacement (never automatic).
      */
     val accountMismatch: Boolean = false,
 )
 
 /**
- * Référence de la miniature Microsoft Graph d'un élément OneDrive : identifiant d'élément et
- * version du contenu (cTag, qui ne change pas pour un simple renommage). Sert de clé de cache.
+ * Reference to the Microsoft Graph thumbnail of a OneDrive item: item ID and content version
+ * (cTag, which does not change on a mere rename). Used as a cache key.
  */
 data class CloudThumbRef(val itemId: String, val version: String)
 
 /**
- * Modèle d'image (Coil) d'une miniature OneDrive. [previewSide] : grand aperçu aux proportions
- * d'origine (visionneuse) tenant dans un carré de ce côté (px), au lieu d'une vignette carrée
- * dimensionnée selon la cellule (null).
+ * Image model (Coil) for a OneDrive thumbnail. [previewSide]: large preview with the original
+ * proportions (viewer) fitting in a square of this side (px), instead of a square thumbnail
+ * sized to the cell (null).
  */
 data class CloudThumbnail(val ref: CloudThumbRef, val previewSide: Int? = null)
 
 /**
- * Accès temporaire au contenu d'un élément OneDrive (`@microsoft.graph.downloadUrl`). [url] est
- * une URL pré-authentifiée qui vaut un jeton : jamais persistée, jamais journalisée, jamais
- * envoyée avec un en-tête Authorization. Classe ordinaire (pas une data class) : [toString] ne
- * la contient pas.
+ * Temporary access to the content of a OneDrive item (`@microsoft.graph.downloadUrl`). [url] is
+ * a pre-authenticated URL that is as good as a token: never persisted, never logged, never
+ * sent with an Authorization header. Plain class (not a data class): [toString] does not
+ * include it.
  */
 class CloudDownloadInfo(
     val itemId: String,
     val sizeBytes: Long,
-    /** Version du contenu (cTag), null si Graph ne l'a pas renvoyée. */
+    /** Content version (cTag), null if Graph did not return it. */
     val cTag: String?,
     val eTag: String?,
-    /** Lecteur OneDrive de l'élément (comparé au lecteur de l'index avant tout téléchargement persistant). */
+    /** OneDrive drive of the item (compared with the index drive before any persistent download). */
     val driveId: String?,
     val url: String,
 ) {
     override fun toString(): String = "CloudDownloadInfo(itemId=$itemId, sizeBytes=$sizeBytes)"
 }
 
-/** Cause d'un échec de lecture en streaming d'un élément OneDrive, indépendante de la langue. */
+/** Cause of a streaming playback failure for a OneDrive item, language-independent. */
 enum class CloudStreamFailure {
-    /** Compte déconnecté, session expirée ou OneDrive différent de celui de l'index. */
+    /** Account signed out, session expired, or a OneDrive different from the index one. */
     AUTH_REQUIRED,
 
-    /** Microsoft Graph demande de patienter. */
+    /** Microsoft Graph asks to wait. */
     THROTTLED,
 
-    /** Elément introuvable sur OneDrive (supprimé ou déplacé hors du lecteur). */
+    /** Item not found on OneDrive (deleted or moved out of the drive). */
     NOT_FOUND,
 
-    /** Pas de réseau ou délai dépassé. */
+    /** No network or timeout. */
     NETWORK,
 
-    /** Autre échec côté Microsoft. */
+    /** Other failure on the Microsoft side. */
     SERVER,
 }
 
 /**
- * Echec d'obtention de l'URL de lecture d'un élément OneDrive, remonté à Media3 sous forme
- * d'[IOException]. Le message ne contient jamais d'URL ni de jeton (seulement [failure]).
+ * Failure to obtain the playback URL of a OneDrive item, reported to Media3 as an
+ * [IOException]. The message never contains a URL or token (only [failure]).
  */
 class CloudStreamException(val failure: CloudStreamFailure, cause: Throwable? = null) :
-    IOException("Lecture OneDrive impossible : $failure", cause)
+    IOException("OneDrive playback failed: $failure", cause)
 
 /**
- * Cause d'échec d'un téléchargement de fichier OneDrive (original, partage, copie hors ligne),
- * indépendante de la langue. Persistable par son nom (jamais de texte libre ni d'URL).
+ * Cause of a OneDrive file download failure (original, share, offline copy),
+ * language-independent. Persistable by its name (never free text or URL).
  */
 enum class DownloadError {
-    /** Pas de réseau, délai dépassé ou connexion coupée. */
+    /** No network, timeout or connection dropped. */
     NETWORK,
 
-    /** Compte déconnecté, session expirée, autre compte, ou données OneDrive vidées entre-temps. */
+    /** Account signed out, session expired, another account, or OneDrive data cleared meanwhile. */
     AUTH_REQUIRED,
 
-    /** Microsoft Graph ou l'hôte de téléchargement demande de patienter. */
+    /** Microsoft Graph or the download host asks to wait. */
     THROTTLED,
 
-    /** Elément introuvable sur OneDrive. */
+    /** Item not found on OneDrive. */
     NOT_FOUND,
 
-    /** Le contenu a changé sur OneDrive pendant le téléchargement. */
+    /** The content changed on OneDrive during the download. */
     CONTENT_CHANGED,
 
-    /** Espace de stockage insuffisant sur l'appareil. */
+    /** Not enough storage space on the device. */
     NO_SPACE,
 
-    /** Taille reçue différente de la taille annoncée. */
+    /** Received size differs from the announced size. */
     SIZE_MISMATCH,
 
-    /** Autre échec côté service (réponse inattendue). */
+    /** Other service-side failure (unexpected response). */
     SERVER,
 
-    /** Annulé par l'utilisateur. */
+    /** Cancelled by the user. */
     CANCELLED,
 }
 
-/** Echec typé d'un téléchargement OneDrive. Le message ne contient jamais d'URL ni de jeton. */
+/** Typed OneDrive download failure. The message never contains a URL or token. */
 class CloudDownloadException(val error: DownloadError, cause: Throwable? = null) :
-    IOException("Téléchargement OneDrive impossible : $error", cause)
+    IOException("OneDrive download failed: $error", cause)

@@ -20,7 +20,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Fichiers OneDrive copiés (`cached_file`) et nombre d'éléments partageables. */
+/** Copied OneDrive files (`cached_file`) and number of shareable items. */
 @RunWith(AndroidJUnit4::class)
 class CachedFileDaoTest {
 
@@ -49,9 +49,9 @@ class CachedFileDaoTest {
     )
 
     /**
-     * Remplacer la copie (média, type) met à jour LA ligne existante : un upsert brut avec un
-     * identifiant 0 ne toucherait aucune ligne (index unique (mediaId, kind)) et laisserait
-     * l'ancien chemin et l'ancienne version.
+     * Replacing the (media, kind) copy updates THE existing row: a raw upsert with an
+     * id of 0 would touch no row (unique index (mediaId, kind)) and would leave
+     * the old path and the old version.
      */
     @Test
     fun replace_updatesTheExistingRow_andReturnsThePreviousOne() = runTest {
@@ -100,7 +100,7 @@ class CachedFileDaoTest {
         val a = db.mediaDao().insert(media("a"))
         dao.replace(original(a, "a.jpg", "c1"))
         db.mediaDao().deleteByIds(listOf(a))
-        // Clé étrangère en cascade : le fichier lui-même est retiré par le nettoyage au démarrage.
+        // Cascading foreign key: the file itself is removed by the startup cleanup.
         assertFalse(dao.existsAny())
     }
 
@@ -134,14 +134,14 @@ class CachedFileDaoTest {
         mediaDao.refreshSourceFlags(listOf(local, cloud, hidden))
 
         assertEquals(1, mediaDao.countWithLocalFile(listOf(local, cloud, hidden)))
-        // OneDrive visible : partageable (original téléchargé) ; masqué : non.
+        // Visible OneDrive item: shareable (original downloaded); hidden: not.
         assertEquals(2, mediaDao.countShareable(listOf(local, cloud, hidden)))
         assertEquals(0, mediaDao.countShareable(listOf(hidden)))
     }
 
     /**
-     * Nettoyage : une ligne n'est supprimée que si elle n'a pas changé depuis sa lecture (même
-     * fichier, aucun accès depuis). Une ligne rouverte ou remplacée entre-temps est gardée.
+     * Cleanup: a row is only deleted if it has not changed since it was read (same
+     * file, no access since). A row reopened or replaced in the meantime is kept.
      */
     @Test
     fun deleteIfUnchanged_keepsTouchedOrReplacedRows() = runTest {
@@ -155,9 +155,9 @@ class CachedFileDaoTest {
         val rowA = dao.get(a, CacheKind.ORIGINAL)!!
         val rowB = dao.get(b, CacheKind.ORIGINAL)!!
         val rowC = dao.get(c, CacheKind.ORIGINAL)!!
-        // B rouvert (visionneuse, partage) après la lecture du nettoyage.
+        // B reopened (viewer, share) after the cleanup read it.
         dao.touch(rowB.id, 50)
-        // C remplacé par une nouvelle version (même ligne, autre fichier).
+        // C replaced by a new version (same row, different file).
         dao.replace(original(c, "c2.jpg", "c2", lastAccessAt = 1))
 
         assertEquals(1, dao.deleteIfUnchanged(rowA.id, rowA.path, rowA.lastAccessAt))

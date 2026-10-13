@@ -24,10 +24,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Issue d'un vidage du cache ou d'une estimation, affichée en Toast. */
+/** Outcome of a cache clear or an estimate, shown as a Toast. */
 enum class StorageEvent { CLEARED, CLEAR_FAILED, ESTIMATE_FAILED }
 
-/** Boîtes de la mise en cache de tout OneDrive. */
+/** Dialogs for caching all of OneDrive. */
 sealed interface PrecacheDialog {
     data object Estimating : PrecacheDialog
     data class Confirm(val estimate: PrecacheEstimate) : PrecacheDialog
@@ -41,13 +41,13 @@ class StorageViewModel @Inject constructor(
     private val precache: OneDrivePrecacheRepository,
 ) : ViewModel() {
 
-    /** null tant que les réglages ne sont pas chargés. */
+    /** null until the settings are loaded. */
     val settings: StateFlow<AppSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _usage = MutableStateFlow<StorageUsage?>(null)
 
-    /** Dernière mesure, null avant la première. */
+    /** Latest measurement, null before the first one. */
     val usage: StateFlow<StorageUsage?> = _usage.asStateFlow()
 
     private val _clearing = MutableStateFlow(false)
@@ -56,7 +56,7 @@ class StorageViewModel @Inject constructor(
     private val eventChannel = Channel<StorageEvent>(Channel.BUFFERED)
     val events: Flow<StorageEvent> = eventChannel.receiveAsFlow()
 
-    /** Nouvelle mesure (ouverture et retour sur la page, après une action). */
+    /** New measurement (on opening and returning to the page, after an action). */
     fun refresh() {
         viewModelScope.launch { measure() }
     }
@@ -69,8 +69,8 @@ class StorageViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Plafond appliqué au prochain nettoyage (démarrage ou téléchargement).
-                Log.w(TAG, "Plafond des originaux non appliqué aussitôt", e)
+                // Limit applied at the next cleanup (launch or download).
+                Log.w(TAG, "Originals cache limit not applied immediately", e)
             }
             measure()
         }
@@ -90,7 +90,7 @@ class StorageViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Vidage du cache incomplet", e)
+                Log.w(TAG, "Cache clear incomplete", e)
                 StorageEvent.CLEAR_FAILED
             } finally {
                 _clearing.value = false
@@ -100,18 +100,18 @@ class StorageViewModel @Inject constructor(
         }
     }
 
-    /** Mise en cache de tout OneDrive : passage en cours ou dernier bilan. */
+    /** Caching all of OneDrive: pass in progress or latest summary. */
     val precacheState: StateFlow<PrecacheState> = precache.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PrecacheState.Idle)
 
     private val _precacheDialog = MutableStateFlow<PrecacheDialog?>(null)
 
-    /** Boîte de la mise en cache affichée (estimation, confirmation, arrêt), null sinon. */
+    /** Caching dialog shown (estimate, confirmation, stop), null otherwise. */
     val precacheDialog: StateFlow<PrecacheDialog?> = _precacheDialog.asStateFlow()
 
     private var estimateJob: Job? = null
 
-    /** « Mettre en cache tout OneDrive » : estimation puis confirmation ; passage en cours : proposer l'arrêt. */
+    /** "Cache all of OneDrive": estimate then confirmation; pass in progress: offer to stop it. */
     fun onPrecacheClick() {
         if (_precacheDialog.value != null) return
         when (precacheState.value) {
@@ -128,7 +128,7 @@ class StorageViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Estimation de la mise en cache impossible", e)
+                Log.w(TAG, "Unable to estimate caching", e)
                 eventChannel.trySend(StorageEvent.ESTIMATE_FAILED)
                 null
             }
@@ -154,7 +154,7 @@ class StorageViewModel @Inject constructor(
     fun setPrecacheKeepUpdated(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setPrecacheKeepUpdated(enabled)
-            // Activé : un passage tout de suite (il ne télécharge que ce qui manque).
+            // Enabled: one pass right away (it only downloads what is missing).
             if (enabled) precache.start()
         }
     }
@@ -165,7 +165,7 @@ class StorageViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Mesure de l'espace impossible", e)
+            Log.w(TAG, "Unable to measure space", e)
         }
     }
 

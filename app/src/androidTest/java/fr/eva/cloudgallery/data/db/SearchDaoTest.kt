@@ -21,8 +21,8 @@ import org.junit.runner.RunWith
 import java.util.Calendar
 
 /**
- * Index de recherche `media_fts` sur une base en mémoire : remplissage, mise à jour incrémentale
- * (renommage, dossier, album, suppression), libellés de date, visibilité des résultats.
+ * `media_fts` search index on an in-memory database: population, incremental update
+ * (rename, folder, album, deletion), date labels, result visibility.
  */
 @RunWith(AndroidJUnit4::class)
 class SearchDaoTest {
@@ -40,7 +40,7 @@ class SearchDaoTest {
         db.close()
     }
 
-    /** 12 août 2026 à midi, heure locale de l'appareil (un mercredi). */
+    /** August 12, 2026 at noon, device local time (a Wednesday). */
     private val august12 = Calendar.getInstance().apply { set(2026, Calendar.AUGUST, 12, 12, 0, 0) }.timeInMillis
 
     private suspend fun insertMedia(
@@ -104,7 +104,7 @@ class SearchDaoTest {
         assertEquals(setOf(beach, clip), search("AUGUST 12").toSet())
         assertEquals(setOf(beach, clip), search("mercredi").toSet())
         assertEquals(listOf(clip), search("vidéo"))
-        // Accents ignorés (unicode61) et préfixe.
+        // Accents ignored (unicode61) and prefix match.
         assertEquals(listOf(clip), search("video cam"))
         assertEquals(emptyList<Long>(), search("hiver"))
     }
@@ -116,18 +116,18 @@ class SearchDaoTest {
         val other = insertMedia("b.jpg")
         db.searchDao().refreshIndex()
 
-        // Renommage : seule l'entrée du média change.
+        // Rename: only the media's entry changes.
         db.mediaDao().update(db.mediaDao().getById(id)!!.copy(displayName = "plage.jpg"))
         assertEquals(1, db.searchDao().refreshIndex())
         assertEquals(listOf(id), search("plage"))
 
-        // Album virtuel : son nom devient cherchable.
+        // Virtual album: its name becomes searchable.
         val albumId = db.albumDao().insert(AlbumEntity(name = "Anniversaire", type = AlbumType.VIRTUAL, sourceKey = null, relativePath = null, createdAt = 0, updatedAt = 0))
         db.albumDao().insertMembers(listOf(AlbumMediaEntity(albumId, other, 0)))
         db.searchDao().refreshIndex()
         assertEquals(listOf(other), search("anniv"))
 
-        // Média supprimé : entrée retirée ; rien d'autre ne change ensuite.
+        // Deleted media: entry removed; nothing else changes afterwards.
         db.mediaDao().deleteByIds(listOf(other))
         db.searchDao().refreshIndex()
         assertEquals(1, db.searchDao().entryCount())
@@ -145,7 +145,7 @@ class SearchDaoTest {
         assertEquals(listOf(cloudOnly), search("nuage"))
         assertEquals(1, db.searchDao().observeSearchCount(ftsMatchExpression("photos")!!).first())
         assertEquals(1, db.searchDao().observeSearchDates(ftsMatchExpression("photos")!!).first().size)
-        // Média sans source visible : absent des résultats ; dossier masqué : non indexé.
+        // Media without a visible source: absent from results; hidden folder: not indexed.
         assertEquals(emptyList<Long>(), search("cache"))
         assertEquals(emptyList<Long>(), search("corbeille"))
     }

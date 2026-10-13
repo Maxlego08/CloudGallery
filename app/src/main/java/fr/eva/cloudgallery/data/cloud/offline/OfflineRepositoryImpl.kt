@@ -46,14 +46,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Copies hors ligne : file de téléchargement ([OfflineDownloadEngine] + [OfflineJobScheduler]),
- * libération, et décision sur les copies d'éléments supprimés de OneDrive (D1). Tout le travail
- * sur la base et les fichiers passe par le dispatcher d'E/S.
+ * Offline copies: download queue ([OfflineDownloadEngine] + [OfflineJobScheduler]), freeing up,
+ * and the decision on copies of items deleted from OneDrive (D1). All database and file work goes
+ * through the I/O dispatcher.
  *
- * Réseau (décision D2) : avec « Wi-Fi uniquement », une tâche n'est téléchargée que sur un
- * réseau non facturé, sauf si elle faisait partie de la file au moment d'un « Télécharger
- * maintenant » (dérogation propre à ces tâches : les tâches ajoutées ensuite, dont les
- * nouvelles versions trouvées par la synchronisation, suivent de nouveau le réglage).
+ * Network (decision D2): with "Wi-Fi only", a task is only downloaded on an unmetered network,
+ * unless it was in the queue at the time of a "Download now" (an exemption specific to those
+ * tasks: tasks added afterwards, including new versions found by sync, follow the setting
+ * again).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -75,14 +75,14 @@ class OfflineRepositoryImpl @Inject constructor(
     private val mediaDao = db.mediaDao()
     private val cachedFiles = db.cachedFileDao()
 
-    /** Tâches d'un lot « Télécharger maintenant » (oubliées au redémarrage du processus). */
+    /** Tasks of a "Download now" batch (forgotten when the process restarts). */
     private val overrides = MutableStateFlow<Set<OverrideKey>>(emptySet())
 
     private val startupDone = AtomicBoolean(false)
 
     private val wifiOnly: Flow<Boolean> = settings.settings.map { it.offlineWifiOnly }.distinctUntilChanged()
 
-    /** Règle réseau en vigueur et réseau actuel, pour l'affichage de l'attente du Wi-Fi. */
+    /** Network rule in force and current network, to display the wait for Wi-Fi. */
     private class Policy(val wifiOnly: Boolean, val overrides: Set<OverrideKey>, val net: NetworkState) {
         fun waits(task: DownloadTaskEntity): Boolean =
             task.state == DownloadState.QUEUED &&
@@ -129,17 +129,17 @@ class OfflineRepositoryImpl @Inject constructor(
         )
     }.distinctUntilChanged().flowOn(io)
 
-    // --- Conserver hors ligne ------------------------------------------------------------------
+    // --- Keep offline ---------------------------------------------------------------------------
 
     override suspend fun keepOffline(mediaIds: Collection<Long>, confirmedLargeBatch: Boolean): KeepOfflineResult = withContext(io) {
         if (mediaIds.isEmpty()) return@withContext KeepOfflineResult.NothingToDo
         if (!guard.canAccess()) return@withContext KeepOfflineResult.NotSignedIn
         val ids = mediaIds.distinct()
-        // Eléments sans copie, et éléments dont la mise à jour (nouvelle version) est arrêtée.
+        // Items without a copy, and items whose update (new version) is stopped.
         val candidates = ids.chunked(CHUNK).flatMap { sources.keepOfflineCandidates(it) + sources.stoppedUpdateCandidates(it) }
             .distinctBy { it.mediaId }
         val open = ids.chunked(CHUNK).flatMap { tasks.openForMedia(it) }.associateBy { it.mediaId }
-        // Déjà en file et en attente ou en cours, même version : rien à refaire.
+        // Already in the queue and pending or running, same version: nothing to redo.
         val todo = candidates.filter { c ->
             val task = open[c.mediaId]
             task == null || task.state == DownloadState.PAUSED || task.state == DownloadState.FAILED ||
@@ -170,31 +170,31 @@ class OfflineRepositoryImpl @Inject constructor(
         }
         engine.withQueue { tasks.enqueueIfAbsent(entities) }
         if (ensureScheduled() != ScheduleResult.SCHEDULED) return@withContext KeepOfflineResult.SchedulingRefused(todo.size)
-        // Etat du réseau lu directement (le flux partagé commence par un état inconnu). Un
-        // nouveau lot ne bénéficie jamais d'un « Télécharger maintenant » antérieur.
+        // Network state read directly (the shared flow starts with an unknown state). A new
+        // batch never benefits from an earlier "Download now".
         val net = network.current()
         val waiting = waitsForUnmetered(wifiOnly.first(), overridden = false, connected = net.connected, unmetered = net.unmetered)
         KeepOfflineResult.Enqueued(todo.size, bytes, waiting)
     }
 
-    // --- Planification ---------------------------------------------------------------------------
+    // --- Scheduling ------------------------------------------------------------------------------
 
-    /** Tâches de « Télécharger maintenant » encore ouvertes (identifiants réattribués écartés). */
+    /** "Download now" tasks still open (reassigned ids ruled out). */
     private suspend fun overriddenTaskIds(): Set<Long> {
         val keys = overrides.value
         if (keys.isEmpty()) return emptySet()
         val live = keys.map { it.taskId }.chunked(CHUNK).flatMap { tasks.getByIds(it) }
             .filter { (it.state == DownloadState.QUEUED || it.state == DownloadState.RUNNING) && OverrideKey(it.id, it.createdAt) in keys }
         val ids = live.mapTo(HashSet()) { it.id }
-        // Tâches terminées, supprimées ou remplacées : oubliées.
+        // Finished, deleted or replaced tasks: forgotten.
         if (ids.size != keys.size) overrides.update { current -> current.filterTo(HashSet()) { it.taskId in ids } }
         return ids
     }
 
     /**
-     * Réseau exigé par les tâches en attente : tout réseau tant qu'une tâche de « Télécharger
-     * maintenant » est en attente ou en cours (son téléchargement n'est jamais interrompu pour
-     * attendre le Wi-Fi), sinon d'après le réglage.
+     * Network required by the pending tasks: any network as long as a "Download now" task is
+     * pending or running (its download is never interrupted to wait for Wi-Fi), otherwise
+     * according to the setting.
      */
     private suspend fun requiredNetwork(): JobNetwork {
         if (!wifiOnly.first()) return JobNetwork.ANY
@@ -202,8 +202,8 @@ class OfflineRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Tâches qu'un passage du travail peut télécharger sur [jobNetwork] (null : toutes), relu
-     * avant chaque tâche : le réglage « Wi-Fi uniquement » s'applique aussitôt.
+     * Tasks a job pass may download on [jobNetwork] (null: all of them), re-read before each
+     * task: the "Wi-Fi only" setting applies immediately.
      */
     internal suspend fun allowedTaskIds(jobNetwork: Network?): Set<Long>? = withContext(io) {
         val onlyWifi = wifiOnly.first()
@@ -212,7 +212,7 @@ class OfflineRepositoryImpl @Inject constructor(
         allowedOnNetwork(onlyWifi, unmetered, if (unmetered) emptySet() else overriddenTaskIds())
     }
 
-    /** Reste-t-il une tâche que le travail actuel ([jobNetwork]) peut télécharger ? */
+    /** Is there still a task the current job ([jobNetwork]) can download? */
     private suspend fun hasAllowedWork(jobNetwork: Network?): Boolean {
         val allowed = allowedTaskIds(jobNetwork)
         return when {
@@ -223,10 +223,9 @@ class OfflineRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Planifie le travail si les tâches en attente ne sont pas déjà prises en charge par le
-     * travail en cours (qui revérifie la file avant de se terminer) ou par un travail planifié
-     * avec le bon réseau. Replanifier remplace le travail existant (qui s'arrête, fichier partiel
-     * gardé).
+     * Schedules the job if the pending tasks are not already handled by the running job (which
+     * rechecks the queue before finishing) or by a job scheduled with the right network.
+     * Rescheduling replaces the existing job (which stops, partial file kept).
      */
     private suspend fun ensureScheduled(): ScheduleResult = jobs.lock.withLock {
         val required = requiredNetwork()
@@ -238,22 +237,22 @@ class OfflineRepositoryImpl @Inject constructor(
         if (result == ScheduleResult.SCHEDULED) {
             jobs.onScheduled()
         } else {
-            Log.i(TAG, "Travail des copies hors ligne non planifié pour l'instant")
+            Log.i(TAG, "Offline copy job not scheduled for now")
         }
         result
     }
 
-    /** Démarrage du travail : renvoie son numéro (voir [OfflineJobTracker]). */
+    /** Job start: returns its sequence number (see [OfflineJobTracker]). */
     internal suspend fun jobStarted(): Long = withContext(io) {
-        // Le travail en cours est encore renvoyé par JobScheduler : sa contrainte de réseau.
+        // The running job is still returned by JobScheduler: its network constraint.
         val constraint = scheduler.pendingNetwork() ?: JobNetwork.ANY
         jobs.lock.withLock { jobs.onJobStarted(constraint) }
     }
 
     /**
-     * Passage terminé : vrai s'il reste du travail téléchargeable sur ce réseau (le travail
-     * repasse), sinon le travail est marqué terminé, de façon atomique pour [ensureScheduled] :
-     * une tâche ajoutée juste après est confiée à un nouveau travail.
+     * Pass finished: true if there is still downloadable work on this network (the job runs
+     * another pass), otherwise the job is marked finished, atomically with respect to
+     * [ensureScheduled]: a task added right after is handed to a new job.
      */
     internal suspend fun continueOrEndJob(seq: Long, jobNetwork: Network?): Boolean = withContext(io) {
         jobs.lock.withLock {
@@ -266,33 +265,33 @@ class OfflineRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Fin du travail [seq] ([rescheduled] : il reste planifié). */
+    /** End of job [seq] ([rescheduled]: it stays scheduled). */
     internal suspend fun jobEnded(seq: Long, rescheduled: Boolean): Unit = withContext(io) {
         jobs.lock.withLock { jobs.onJobEnded(seq, rescheduled) }
     }
 
-    /** Après la fin normale d'un travail : tâches restées en attente (Wi-Fi) confiées à un nouveau travail. */
+    /** After a job ends normally: tasks still waiting (Wi-Fi) are handed to a new job. */
     internal suspend fun relaunchIfQueued(): Unit = withContext(io) {
         try {
             if (tasks.existsRunnable() && guard.canAccess()) ensureScheduled()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Relance des copies hors ligne impossible", e)
+            Log.w(TAG, "Could not relaunch offline copies", e)
         }
     }
 
-    // --- Libérer / annuler ----------------------------------------------------------------------
+    // --- Free up / cancel ------------------------------------------------------------------------
 
     override suspend fun lastCopiesAmong(mediaIds: Collection<Long>): Int = withContext(io) {
-        // Même règle que release() : copies visibles et masquées.
+        // Same rule as release(): visible and hidden copies.
         mediaIds.distinct().chunked(CHUNK).sumOf { sources.countOfflineLastCopiesAmong(it) }
     }
 
     override suspend fun release(mediaIds: Collection<Long>): Int = withContext(io) {
         val ids = mediaIds.distinct()
         if (ids.isEmpty()) return@withContext 0
-        // Téléchargement en cours de l'un d'eux arrêté (fichier fermé) ; les autres continuent.
+        // Running download of one of them stopped (file closed); the others continue.
         engine.withItemsStopped(ids) {
             val names = ArrayList<String>()
             val parts = ArrayList<String>()
@@ -308,7 +307,7 @@ class OfflineRepositoryImpl @Inject constructor(
                     sources.deleteForMedia(SourceKind.OFFLINE_COPY, chunk)
                     mediaDao.refreshSourceFlags(chunk)
                 }
-                // Copie conservée seule (élément supprimé de OneDrive) : l'élément disparaît avec elle.
+                // Copy kept on its own (item deleted from OneDrive): the item disappears with it.
                 mediaDao.deleteOrphans()
                 db.albumDao().clearDanglingCovers()
             }
@@ -344,7 +343,7 @@ class OfflineRepositoryImpl @Inject constructor(
         store.deleteParts(parts)
     }
 
-    /** Noms des fichiers partiels des tâches (même nom que la copie finale, plus « .part »). */
+    /** Names of the tasks' partial files (same name as the final copy, plus ".part"). */
     private suspend fun partNames(open: List<DownloadTaskEntity>): List<String> {
         if (open.isEmpty()) return emptyList()
         val medias = open.map { it.mediaId }.distinct().chunked(CHUNK).flatMap { mediaDao.getByIds(it) }.associateBy { it.id }
@@ -355,7 +354,7 @@ class OfflineRepositoryImpl @Inject constructor(
         }
     }
 
-    // --- Reprise --------------------------------------------------------------------------------
+    // --- Resume ---------------------------------------------------------------------------------
 
     override suspend fun resume(): Unit = withContext(io) {
         tasks.resumeStopped(System.currentTimeMillis())
@@ -363,22 +362,22 @@ class OfflineRepositoryImpl @Inject constructor(
     }
 
     override suspend fun downloadNow(): Unit = withContext(io) {
-        // Dérogation limitée aux tâches présentes maintenant (en attente ou en cours).
+        // Exemption limited to the tasks present now (pending or running).
         val batch = tasks.listPending().map { OverrideKey(it.id, it.createdAt) }
         overrides.update { it + batch }
         if (guard.canAccess() && tasks.existsRunnable()) ensureScheduled()
     }
 
     override suspend fun onNetworkPolicyChanged(): Unit = withContext(io) {
-        // Nouveau réglage : plus de dérogation ; le travail en cours ou planifié est remplacé s'il
-        // n'exige plus le bon réseau (un passage « tout réseau » qui doit attendre le Wi-Fi s'arrête).
+        // New setting: no more exemption; the running or scheduled job is replaced if it no longer
+        // requires the right network (an "any network" pass that must wait for Wi-Fi stops).
         overrides.value = emptySet()
         try {
             if (guard.canAccess() && (tasks.existsRunnable() || jobs.active != null)) ensureScheduled()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Replanification des copies hors ligne impossible", e)
+            Log.w(TAG, "Could not reschedule offline copies", e)
         }
     }
 
@@ -386,28 +385,28 @@ class OfflineRepositoryImpl @Inject constructor(
         if (!guard.configured) return@withContext
         try {
             val firstTime = startupDone.compareAndSet(false, true)
-            // Processus arrêté par l'utilisateur pendant un téléchargement (arrêt forcé,
-            // Gestionnaire de tâches) : la file reste en pause jusqu'à sa reprise. Un simple
-            // balayage depuis les applis récentes, sans téléchargement en cours, ne change rien.
+            // Process stopped by the user during a download (force stop, Task Manager): the
+            // queue stays paused until resumed. A simple swipe from recent apps, with no download
+            // in progress, changes nothing.
             engine.recoverIfIdle(firstStart = firstTime, userRequestedExit = firstTime && lastExitRequestedByUser())
             if (firstTime) cleanUp()
             if (tasks.existsRunnable() && guard.canAccess()) ensureScheduled()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Reprise des copies hors ligne impossible", e)
+            Log.w(TAG, "Could not resume offline copies", e)
         }
     }
 
-    /** Arrêt par le Gestionnaire de tâches pendant un passage : file en pause (décision D3). */
+    /** Stopped from the Task Manager during a pass: queue paused (decision D3). */
     internal suspend fun pauseAfterUserStop(): Unit = withContext(io) {
         tasks.pauseActive(System.currentTimeMillis())
         overrides.value = emptySet()
     }
 
     /**
-     * Arrête le moteur et retire le travail planifié, puis exécute [block] (déconnexion, purge)
-     * sans qu'aucun téléchargement ne puisse démarrer pendant ce temps.
+     * Stops the engine and removes the scheduled job, then runs [block] (sign-out, purge) without
+     * any download being able to start in the meantime.
      */
     internal suspend fun <T> whileStoppedForPurge(block: suspend () -> T): T {
         scheduler.cancel()
@@ -423,20 +422,20 @@ class OfflineRepositoryImpl @Inject constructor(
         false
     }
 
-    /** Nettoyage au premier passage au premier plan : lignes terminées et fichiers sans ligne. */
+    /** Cleanup the first time the app comes to the foreground: finished rows and files without a row. */
     private suspend fun cleanUp() {
         val now = System.currentTimeMillis()
         tasks.deleteFinishedBefore(now - FINISHED_RETENTION_MS)
         val known = cachedFiles.listByKind(CacheKind.OFFLINE).map { it.path }.toSet()
         val busy = partNames(tasks.listOpen()).toSet() + listOfNotNull(engine.currentName.value)
         val removed = store.sweepOrphans(known, busy)
-        if (removed > 0) Log.i(TAG, "Fichiers hors ligne orphelins supprimés : $removed")
+        if (removed > 0) Log.i(TAG, "Orphan offline files deleted: $removed")
     }
 
-    // --- Eléments supprimés de OneDrive (D1) ------------------------------------------------------
+    // --- Items deleted from OneDrive (D1) ---------------------------------------------------------
 
     override val deletedOnOneDrive: Flow<List<DeletedOnOneDriveCopy>> =
-        // Echéance calculée à chaque abonnement (un élément peut atteindre les 30 jours entre-temps).
+        // Deadline computed on each subscription (an item may reach the 30 days in the meantime).
         flow { emitAll(sources.observeAwaitingDecisionMediaIds(System.currentTimeMillis() - MISSING_GRACE_MS)) }
             .distinctUntilChanged()
             .mapLatest { ids ->
@@ -452,8 +451,8 @@ class OfflineRepositoryImpl @Inject constructor(
         val names = ArrayList<String>()
         var deleted = 0
         db.withTransaction {
-            // Uniquement les éléments confirmés par l'utilisateur, et toujours en attente de
-            // décision dans cette transaction (un élément revenu sur OneDrive n'est pas touché).
+            // Only the items confirmed by the user, and still awaiting a decision in this
+            // transaction (an item that came back on OneDrive is not touched).
             val expiredBefore = System.currentTimeMillis() - MISSING_GRACE_MS
             for (chunk in requested.chunked(CHUNK)) {
                 val ids = sources.awaitingDecisionAmong(chunk, expiredBefore)
@@ -463,8 +462,8 @@ class OfflineRepositoryImpl @Inject constructor(
                 tasks.deleteForMedia(ids)
                 cachedFiles.deleteForMedia(ids, CacheKind.OFFLINE)
                 sources.deleteForMedia(SourceKind.OFFLINE_COPY, ids)
-                // Elément OneDrive masqué depuis plus de 30 jours : retiré comme la purge l'aurait
-                // fait (jamais une source OneDrive visible).
+                // OneDrive item hidden for more than 30 days: removed as the purge would have done
+                // (never a visible OneDrive source).
                 sources.deleteHiddenForMedia(SourceKind.ONEDRIVE, ids)
                 mediaDao.refreshSourceFlags(ids)
             }
@@ -485,7 +484,7 @@ class OfflineRepositoryImpl @Inject constructor(
                 val ids = sources.awaitingDecisionAmong(chunk, expiredBefore)
                 if (ids.isEmpty()) continue
                 kept += ids.size
-                // Plus de source OneDrive masquée : la copie redevient visible, seule (« supprimé de OneDrive »).
+                // No more hidden OneDrive source: the copy becomes visible again, on its own ("deleted from OneDrive").
                 sources.deleteHiddenForMedia(SourceKind.ONEDRIVE, ids)
                 sources.syncOfflineCopyVisibility(ids)
                 mediaDao.refreshSourceFlags(ids)

@@ -70,7 +70,7 @@ Available features (phases 1 and 2 for local media, phase 3 for OneDrive):
   OneDrive), theme (system / light / dark), video duration display, autoplay,
   Android trash, confirmation before deleting, indexing status, full
   re-index.
-- UI in **French** (default) and **English** (`values-en`).
+- UI in **English** (default) and **French** (`values-fr`).
 
 **File safety.** The app never deletes or modifies any file without a system
 confirmation. Deletion always goes through `MediaStore.createTrashRequest` (Android trash,

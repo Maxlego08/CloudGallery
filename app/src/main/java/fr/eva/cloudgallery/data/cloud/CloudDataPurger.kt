@@ -25,13 +25,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Données OneDrive de l'index local (base Room) et copies de fichiers OneDrive faites par l'appli
- * (miniatures, originaux téléchargés, copies hors ligne). Ne touche jamais MediaStore, les
- * fichiers de l'appareil ni OneDrive : seules les lignes issues de OneDrive et les fichiers
- * privés de l'appli sont retirés.
+ * OneDrive data in the local index (Room database) and copies of OneDrive files made by the app
+ * (thumbnails, downloaded originals, offline copies). Never touches MediaStore, the device's
+ * files or OneDrive: only rows that came from OneDrive and the app's private files are removed.
  *
- * L'appelant arrête d'abord le moteur des copies hors ligne et retire son travail planifié
- * (CloudSessionCoordinator, sous l'exclusion de la synchro).
+ * The caller first stops the offline copy engine and removes its scheduled work
+ * (CloudSessionCoordinator, under the sync exclusion).
  */
 @Singleton
 class CloudDataPurger @Inject constructor(
@@ -54,10 +53,9 @@ class CloudDataPurger @Inject constructor(
 ) {
 
     /**
-     * Vrai s'il reste des données OneDrive dans l'index, y compris des sources masquées
-     * (éléments supprimés en délai de grâce), des albums ou dossiers OneDrive, un curseur de synchro,
-     * des fichiers OneDrive copiés sur l'appareil (copies hors ligne comprises) ou des
-     * téléchargements en file.
+     * True if OneDrive data remains in the index, including hidden sources (deleted items in
+     * their grace period), OneDrive albums or folders, a sync cursor, OneDrive files copied to
+     * the device (offline copies included) or queued downloads.
      */
     suspend fun hasData(): Boolean = withContext(io) {
         sourceDao.existsAny(SourceKind.ONEDRIVE) ||
@@ -70,18 +68,17 @@ class CloudDataPurger @Inject constructor(
     }
 
     /**
-     * Retire toutes les données OneDrive en une transaction : sources OneDrive et copies hors
-     * ligne, médias devenus orphelins (avec, par cascade, leurs favoris, ajouts aux albums et
-     * positions de lecture), albums OneDrive, dossiers OneDrive, curseur, lignes des fichiers
-     * OneDrive copiés et file de téléchargement. Un média qui a aussi une source locale est
-     * conservé. Les copies hors ligne, les originaux téléchargés, les miniatures OneDrive en
-     * cache (disque et mémoire) et la mise en cache de tout OneDrive (passages arrêtés) sont
-     * ensuite supprimés, ainsi que la pause de synchronisation
-     * demandée par Graph pour ce compte.
+     * Removes all OneDrive data in one transaction: OneDrive sources and offline copies, media
+     * that became orphaned (with, by cascade, their favorites, album memberships and playback
+     * positions), OneDrive albums, OneDrive folders, cursor, rows of copied OneDrive files and
+     * the download queue. A media item that also has a local source is kept. Offline copies,
+     * downloaded originals, cached OneDrive thumbnails (disk and memory) and the caching of all
+     * of OneDrive (passes stopped) are then deleted, as well as the sync pause requested by
+     * Graph for this account.
      *
-     * Avant tout, le numéro de vidage est incrémenté (un téléchargement en cours n'enregistre plus
-     * rien) et les URL de téléchargement temporaires gardées en mémoire sont oubliées (une lecture
-     * en cours n'en obtient plus pour l'ancien compte).
+     * First of all, the wipe counter is incremented (a download in progress no longer saves
+     * anything) and the temporary download URLs kept in memory are forgotten (a playback in
+     * progress no longer obtains any for the old account).
      */
     suspend fun purgeAll() = withContext(io) {
         generation.bump()

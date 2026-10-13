@@ -7,7 +7,7 @@ import com.microsoft.identity.client.exception.MsalServiceException
 import com.microsoft.identity.client.exception.MsalUiRequiredException
 import com.microsoft.identity.client.exception.MsalUserCancelException
 
-/** Réduit une exception MSAL à sa famille (voir [classifyMsalError]). */
+/** Reduces an MSAL exception to its family (see [classifyMsalError]). */
 internal fun Throwable.msalKind(): MsalExceptionKind = when (this) {
     is MsalUserCancelException -> MsalExceptionKind.USER_CANCEL
     is MsalUiRequiredException -> MsalExceptionKind.UI_REQUIRED
@@ -17,6 +17,6 @@ internal fun Throwable.msalKind(): MsalExceptionKind = when (this) {
     else -> MsalExceptionKind.OTHER
 }
 
-/** Classe un échec quelconque levé par MSAL. */
+/** Classifies any failure thrown by MSAL. */
 internal fun classifyMsalError(error: Throwable): MsalFailure =
     classifyMsalError(error.msalKind(), (error as? MsalException)?.errorCode)

@@ -1,55 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Economiseur d'espace : copies du téléphone déjà sur OneDrive (préfixe saver_). -->
+<!-- Space saver: phone copies already on OneDrive (prefix saver_). -->
 <resources>
-    <string name="saver_title">Économiseur d\'espace</string>
-    <string name="saver_entry_summary">Copies du téléphone déjà sur OneDrive, vérifiées par empreinte</string>
+    <string name="saver_title">Space saver</string>
+    <string name="saver_entry_summary">Phone copies already on OneDrive, verified by hash</string>
 
-    <!-- Résumé et explications -->
-    <string name="saver_summary">%1$s · %2$s libérables</string>
-    <string name="saver_info">Ces photos et vidéos ont exactement le même contenu sur OneDrive (empreinte et taille identiques). Les copies cochées iront dans la corbeille Android, récupérables pendant 30 jours ; elles restent sur OneDrive.</string>
+    <!-- Summary and explanations -->
+    <string name="saver_summary">%1$s · %2$s to free up</string>
+    <string name="saver_info">These photos and videos have exactly the same content on OneDrive (same hash and size). Checked copies go to the Android trash, recoverable for 30 days; they stay on OneDrive.</string>
     <plurals name="saver_excluded">
-        <item quantity="one">%d copie favorite ou dans un album n\'est pas proposée tant qu\'elle n\'est pas regroupée avec OneDrive.</item>
-        <item quantity="many">%d copies favorites ou dans un album ne sont pas proposées tant qu\'elles ne sont pas regroupées avec OneDrive.</item>
-        <item quantity="other">%d copies favorites ou dans un album ne sont pas proposées tant qu\'elles ne sont pas regroupées avec OneDrive.</item>
+        <item quantity="one">%d favorite or album copy isn\'t offered until it\'s grouped with OneDrive.</item>
+        <item quantity="other">%d favorite or album copies aren\'t offered until they\'re grouped with OneDrive.</item>
     </plurals>
 
-    <!-- Filtre d'ancienneté -->
-    <string name="saver_age">Ancienneté</string>
-    <string name="saver_age_all">Toutes</string>
-    <string name="saver_age_30">Prises il y a plus de 30 jours</string>
-    <string name="saver_age_90">Prises il y a plus de 90 jours</string>
-    <string name="saver_age_year">Prises il y a plus d\'un an</string>
+    <!-- Age filter -->
+    <string name="saver_age">Age</string>
+    <string name="saver_age_all">All</string>
+    <string name="saver_age_30">Taken more than 30 days ago</string>
+    <string name="saver_age_90">Taken more than 90 days ago</string>
+    <string name="saver_age_year">Taken more than a year ago</string>
 
-    <!-- Sélection -->
-    <string name="saver_select_all">Tout cocher</string>
-    <string name="saver_select_none">Tout décocher</string>
-    <string name="saver_item_checked">%1$s, cochée</string>
-    <string name="saver_item_unchecked">%1$s, non cochée</string>
+    <!-- Selection -->
+    <string name="saver_select_all">Check all</string>
+    <string name="saver_select_none">Uncheck all</string>
+    <string name="saver_item_checked">%1$s, checked</string>
+    <string name="saver_item_unchecked">%1$s, not checked</string>
 
-    <!-- Action et confirmation -->
-    <string name="saver_free_up">Libérer %1$s</string>
-    <string name="saver_confirm_title">Libérer %1$s ?</string>
+    <!-- Action and confirmation -->
+    <string name="saver_free_up">Free up %1$s</string>
+    <string name="saver_confirm_title">Free up %1$s?</string>
     <plurals name="saver_confirm_message">
-        <item quantity="one">%d copie du téléphone va dans la corbeille Android (récupérable 30 jours). Elle reste sur OneDrive. Android vous demandera ensuite de confirmer.</item>
-        <item quantity="many">%d copies du téléphone vont dans la corbeille Android (récupérables 30 jours). Elles restent sur OneDrive. Android vous demandera ensuite de confirmer.</item>
-        <item quantity="other">%d copies du téléphone vont dans la corbeille Android (récupérables 30 jours). Elles restent sur OneDrive. Android vous demandera ensuite de confirmer.</item>
+        <item quantity="one">%d phone copy goes to the Android trash (recoverable for 30 days). It stays on OneDrive. Android will then ask you to confirm.</item>
+        <item quantity="other">%d phone copies go to the Android trash (recoverable for 30 days). They stay on OneDrive. Android will then ask you to confirm.</item>
     </plurals>
-    <string name="saver_confirm">Mettre à la corbeille</string>
+    <string name="saver_confirm">Move to trash</string>
 
-    <!-- Résultats -->
+    <!-- Results -->
     <plurals name="saver_freed">
-        <item quantity="one">%1$d copie mise à la corbeille, %2$s libérés</item>
-        <item quantity="many">%1$d copies mises à la corbeille, %2$s libérés</item>
-        <item quantity="other">%1$d copies mises à la corbeille, %2$s libérés</item>
+        <item quantity="one">%1$d copy moved to trash, %2$s freed up</item>
+        <item quantity="other">%1$d copies moved to trash, %2$s freed up</item>
     </plurals>
     <plurals name="saver_changed">
-        <item quantity="one">%d copie a changé depuis la revue et n\'a pas été supprimée</item>
-        <item quantity="many">%d copies ont changé depuis la revue et n\'ont pas été supprimées</item>
-        <item quantity="other">%d copies ont changé depuis la revue et n\'ont pas été supprimées</item>
+        <item quantity="one">%d copy changed since review and wasn\'t removed</item>
+        <item quantity="other">%d copies changed since review and weren\'t removed</item>
     </plurals>
 
-    <!-- Etats vides -->
-    <string name="saver_empty_title">Aucune copie à libérer</string>
-    <string name="saver_empty_message">Une photo ou une vidéo du téléphone est proposée une fois son empreinte calculée (téléphone en charge) et identique à celle d\'un élément OneDrive.</string>
-    <string name="saver_empty_filter">Aucune copie avec ce filtre d\'ancienneté.</string>
+    <!-- Empty states -->
+    <string name="saver_empty_title">Nothing to free up</string>
+    <string name="saver_empty_message">A phone photo or video is offered once its hash has been computed (while charging) and matches a OneDrive item.</string>
+    <string name="saver_empty_filter">No copies match this age filter.</string>
 </resources>

@@ -49,7 +49,7 @@ class GraphRetryLogicTest {
         assertEquals(8_000L, retryDelayMs(2, null))
         assertEquals(16_000L, retryDelayMs(3, null))
         assertEquals(32_000L, retryDelayMs(4, null))
-        // Plafond : jamais plus de 60 s, même avec beaucoup de tentatives autorisées.
+        // Cap: never more than 60 s, even with many allowed attempts.
         assertTrue((0 until MAX_RETRIES).all { (retryDelayMs(it, null) ?: 0) <= BACKOFF_CAP_MS })
     }
 
@@ -67,7 +67,7 @@ class GraphRetryLogicTest {
         assertEquals(location, resyncStartUrl(location, initial))
         assertEquals(initial, resyncStartUrl(null, initial))
         assertEquals(initial, resyncStartUrl("  ", initial))
-        // Jamais de jeton vers un autre hôte.
+        // Never send a token to another host.
         assertEquals(initial, resyncStartUrl("https://evil.example.com/delta", initial))
     }
 
@@ -96,7 +96,7 @@ class GraphRetryLogicTest {
             "https://graph.microsoft.com/v1.0/me/drive/items/ABC123!456/thumbnails/0/c384x384_crop/content",
             thumbnailContentUrl("ABC123!456", "c384x384_crop"),
         )
-        // Identifiant inattendu : encodé comme un segment, jamais interprété comme un chemin.
+        // Unexpected identifier: encoded as a segment, never interpreted as a path.
         val odd = thumbnailContentUrl("a b/../c", "large")
         assertEquals("https://graph.microsoft.com/v1.0/me/drive/items/a%20b%2F..%2Fc/thumbnails/0/large/content", odd)
         assertTrue(isTrustedGraphUrl(odd))
@@ -104,9 +104,9 @@ class GraphRetryLogicTest {
 
     @Test
     fun downloadInfoUrl_encodesItemId_withoutSelect() {
-        // Sans `$select` : l'annotation `@microsoft.graph.downloadUrl` est dans la réponse complète.
+        // Without `$select`: the `@microsoft.graph.downloadUrl` annotation is in the full response.
         assertEquals("https://graph.microsoft.com/v1.0/me/drive/items/ABC123!456", downloadInfoUrl("ABC123!456"))
-        // Identifiant inattendu : encodé comme un segment, jamais interprété comme un chemin.
+        // Unexpected identifier: encoded as a segment, never interpreted as a path.
         val odd = downloadInfoUrl("a b/../c")
         assertEquals("https://graph.microsoft.com/v1.0/me/drive/items/a%20b%2F..%2Fc", odd)
         assertTrue(isTrustedGraphUrl(odd))

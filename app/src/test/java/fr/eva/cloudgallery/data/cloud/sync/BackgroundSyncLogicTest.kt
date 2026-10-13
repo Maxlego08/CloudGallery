@@ -7,7 +7,7 @@ import fr.eva.cloudgallery.domain.model.CloudErrorCode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Travail périodique de synchronisation OneDrive d'après le réglage et l'état du compte. */
+/** Periodic OneDrive sync job based on the setting and the account state. */
 class BackgroundSyncLogicTest {
 
     private val signedIn = CloudAccountState.SignedIn(CloudAccount("a@b.c", "id"))
@@ -22,7 +22,7 @@ class BackgroundSyncLogicTest {
             BackgroundSyncPlan.Schedule(1, unmeteredOnly = true),
             backgroundSyncPlan(true, BackgroundSyncInterval.HOURLY, wifiOnly = true, account = signedIn),
         )
-        // Session à renouveler : le travail reste planifié (le passage ne fait rien d'ici là).
+        // Session needs renewing: the job stays scheduled (runs do nothing until then).
         assertEquals(
             BackgroundSyncPlan.Schedule(24, unmeteredOnly = false),
             backgroundSyncPlan(true, BackgroundSyncInterval.DAILY, false, CloudAccountState.NeedsReauth(CloudAccount(null))),

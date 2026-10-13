@@ -42,7 +42,7 @@ fun MediaSourceEntity.toInfo(): MediaSourceInfo = MediaSourceInfo(
     relativePath = relativePath,
     sizeBytes = sizeBytes,
     dateModified = dateModified,
-    // Pour une source locale, la colonne contient GENERATION_MODIFIED : sans intérêt hors OneDrive.
+    // For a local source, the column holds GENERATION_MODIFIED: irrelevant outside OneDrive.
     cTag = cTag.takeIf { kind != SourceKind.LOCAL },
 )
 
@@ -65,7 +65,7 @@ fun MediaEntity.toDetails(
     orientation = orientation,
     uri = primaryUri?.toUri(),
     isFavorite = isFavorite,
-    // Une source masquée (corbeille, volume démonté…) n'est pas exploitable par l'UI.
+    // A hidden source (trash, unmounted volume…) is not usable by the UI.
     sources = sources.filter { it.missingSince == null }.map { it.toInfo() },
     cloudThumb = cloudThumbRef(cloudItemId, cloudCTag, dateModified),
     offlineFile = offlineFile,
@@ -93,8 +93,8 @@ fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(
 )
 
 /**
- * Miniature OneDrive : version = cTag (contenu) ; à défaut (cTag absent), la date de
- * modification, pour qu'un changement de contenu invalide quand même le cache.
+ * OneDrive thumbnail: version = cTag (content); failing that (cTag missing), the modification
+ * date, so that a content change still invalidates the cache.
  */
 internal fun cloudThumbRef(itemId: String?, cTag: String?, dateModified: Long): CloudThumbRef? =
     itemId?.let { CloudThumbRef(it, cTag?.takeIf { tag -> tag.isNotBlank() } ?: "m$dateModified") }

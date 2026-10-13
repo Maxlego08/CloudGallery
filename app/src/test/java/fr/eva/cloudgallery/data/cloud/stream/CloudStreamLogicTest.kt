@@ -59,7 +59,7 @@ class CloudStreamLogicTest {
         assertTrue(chain.last() === failure)
         assertTrue(causeChain(null).none())
 
-        // Chaîne cyclique : jamais de boucle infinie.
+        // Cyclic chain: never an infinite loop.
         val a = IOException("a")
         val b = IOException("b", a)
         a.initCause(b)

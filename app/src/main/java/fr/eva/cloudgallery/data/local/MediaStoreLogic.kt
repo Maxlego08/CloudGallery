@@ -4,22 +4,22 @@ import fr.eva.cloudgallery.domain.model.MediaSummary
 import fr.eva.cloudgallery.domain.model.MediaType
 
 /*
- * Logique pure (sans dépendance Android) de l'indexation MediaStore, testée en JVM.
+ * Pure logic (no Android dependency) of the MediaStore indexing, tested on the JVM.
  */
 
-/** Nom du fournisseur dans la table sync_cursor. */
+/** Provider name in the sync_cursor table. */
 internal const val MEDIASTORE_PROVIDER = "mediastore"
 
 private const val PREFIX_IMAGE = "image"
 private const val PREFIX_VIDEO = "video"
 
-/** Identifiant externe d'une source LOCAL : « image:123 » / « video:45 » (les _ID images et vidéos ne sont pas disjoints). */
+/** External id of a LOCAL source: "image:123" / "video:45" (image and video _IDs are not disjoint). */
 internal fun buildExternalId(type: MediaType, mediaStoreId: Long): String = when (type) {
     MediaType.IMAGE -> "$PREFIX_IMAGE:$mediaStoreId"
     MediaType.VIDEO -> "$PREFIX_VIDEO:$mediaStoreId"
 }
 
-/** Inverse de [buildExternalId]. Renvoie null si le format n'est pas reconnu. */
+/** Inverse of [buildExternalId]. Returns null if the format is not recognized. */
 internal fun parseExternalId(externalId: String): Pair<MediaType, Long>? {
     val sep = externalId.indexOf(':')
     if (sep <= 0) return null
@@ -32,12 +32,12 @@ internal fun parseExternalId(externalId: String): Pair<MediaType, Long>? {
     return type to id
 }
 
-/** Clé de dossier d'une source locale. */
+/** Folder key of a local source. */
 internal fun localBucketKey(bucketId: Long): String = "local:$bucketId"
 
 /**
- * Date de prise de vue en ms : DATE_TAKEN (ms) si renseignée, sinon DATE_ADDED puis
- * DATE_MODIFIED (en secondes dans MediaStore), sinon 0.
+ * Capture date in ms: DATE_TAKEN (ms) if set, otherwise DATE_ADDED then DATE_MODIFIED (in
+ * seconds in MediaStore), otherwise 0.
  */
 internal fun resolveDateTaken(dateTakenMs: Long?, dateAddedSec: Long?, dateModifiedSec: Long?): Long = when {
     dateTakenMs != null && dateTakenMs > 0 -> dateTakenMs
@@ -47,9 +47,9 @@ internal fun resolveDateTaken(dateTakenMs: Long?, dateAddedSec: Long?, dateModif
 }
 
 /**
- * Une relecture complète est nécessaire si elle est demandée, s'il n'existe pas encore de
- * curseur exploitable, ou si la version MediaStore a changé (les générations ne sont alors
- * plus comparables : base MediaStore recréée, restauration…).
+ * A full re-read is needed if it is requested, if there is no usable cursor yet, or if the
+ * MediaStore version has changed (generations are then no longer comparable: MediaStore
+ * database recreated, restore…).
  */
 internal fun needsFullSync(
     forceFull: Boolean,
@@ -62,30 +62,30 @@ internal fun needsFullSync(
     currentVersion == null ||
     storedVersion != currentVersion
 
-/** La version MediaStore a changé (et non simplement « inconnue ») : les _ID ne sont plus fiables. */
+/** The MediaStore version has changed (and is not merely "unknown"): _IDs are no longer reliable. */
 internal fun mediaStoreVersionChanged(storedVersion: String?, currentVersion: String?): Boolean =
     storedVersion != null && currentVersion != null && storedVersion != currentVersion
 
 /**
- * Empreinte stable d'un fichier, indépendante du _ID MediaStore : sert à ré-associer une source
- * à son média (favoris, albums) après un changement de version MediaStore.
+ * Stable fingerprint of a file, independent of the MediaStore _ID: used to re-match a source
+ * to its media (favorites, albums) after a MediaStore version change.
  */
 internal fun localFingerprint(relativePath: String?, displayName: String, sizeBytes: Long): String =
     "${relativePath.orEmpty().trim('/')}|$displayName|$sizeBytes"
 
-/** Délai au-delà duquel une source masquée dont la disparition est confirmée est purgée. */
+/** Delay after which a hidden source whose disappearance is confirmed gets purged. */
 internal const val MISSING_GRACE_MS = 30L * 24 * 60 * 60 * 1000
 
-/** Seuils du frein anti-suppression massive (proportion ET nombre absolu). */
+/** Thresholds of the mass-deletion brake (fraction AND absolute count). */
 internal const val MASS_REMOVAL_MIN_COUNT = 200
 internal const val MASS_REMOVAL_FRACTION = 0.25
 
-/** Etat constaté d'une source qui n'apparaît plus dans la requête MediaStore standard. */
+/** Observed state of a source that no longer appears in the standard MediaStore query. */
 internal enum class MissingVerdict {
-    /** Absente de MediaStore (y compris corbeille / en attente) alors que son volume est monté. */
+    /** Absent from MediaStore (including trash / pending) while its volume is mounted. */
     GONE,
 
-    /** Encore présente mais invisible (corbeille, en attente), sur un volume démonté, ou invérifiable. */
+    /** Still present but invisible (trash, pending), on an unmounted volume, or unverifiable. */
     HIDDEN,
 }
 
@@ -93,26 +93,26 @@ internal data class MissingCandidate(
     val sourceId: Long,
     val mediaId: Long,
     val verdict: MissingVerdict,
-    /** Déjà masquée depuis cet instant, ou null. */
+    /** Already hidden since this instant, or null. */
     val missingSince: Long?,
 )
 
 internal data class RemovalPlan(
-    /** Sources à supprimer de la base (avec leurs médias devenus orphelins). */
+    /** Sources to delete from the database (along with their media that became orphans). */
     val delete: List<MissingCandidate>,
-    /** Sources à masquer (conservées avec favoris et albums). */
+    /** Sources to hide (kept along with favorites and albums). */
     val hide: List<MissingCandidate>,
-    /** Vrai si le frein anti-suppression massive a été déclenché. */
+    /** True if the mass-deletion brake was triggered. */
     val massRemovalBlocked: Boolean,
 )
 
 /**
- * Décide du sort des sources absentes de la requête MediaStore. Rien n'est supprimé
- * définitivement sans accès complet (images ET vidéos) : en accès partiel, MediaStore ne
- * renvoie que la sélection de l'utilisateur. Une disparition confirmée est supprimée
- * immédiatement, sauf si elle est massive (frein : masquage puis purge après [MISSING_GRACE_MS]).
- * Une source déjà masquée (corbeille, volume démonté, accès partiel, frein) n'est purgée qu'une
- * fois confirmée disparue et après le délai de grâce.
+ * Decides the fate of sources missing from the MediaStore query. Nothing is permanently
+ * deleted without full access (images AND videos): under partial access, MediaStore only
+ * returns the user's selection. A confirmed disappearance is deleted immediately, unless it is
+ * massive (brake: hidden, then purged after [MISSING_GRACE_MS]). A source that is already
+ * hidden (trash, unmounted volume, partial access, brake) is only purged once confirmed gone
+ * and after the grace period.
  */
 internal fun planRemovals(
     candidates: List<MissingCandidate>,
@@ -129,7 +129,7 @@ internal fun planRemovals(
     for (c in candidates) {
         when {
             c.verdict == MissingVerdict.HIDDEN -> hide += c
-            // Déjà masquée (frein, accès partiel…) : purgée seulement après le délai de grâce.
+            // Already hidden (brake, partial access…): purged only after the grace period.
             c.missingSince != null -> if (now - c.missingSince >= MISSING_GRACE_MS) delete += c else hide += c
             massive -> hide += c
             else -> delete += c
@@ -139,9 +139,9 @@ internal fun planRemovals(
 }
 
 /**
- * Analyse les segments de chemin d'une URI MediaStore (`content://media/<volume>/images/media/<id>`,
- * `.../video/media/<id>`, `.../file/<id>`) et renvoie les identifiants externes candidats.
- * Pour les URI « file » le type est inconnu : les deux candidats sont renvoyés.
+ * Parses the path segments of a MediaStore URI (`content://media/<volume>/images/media/<id>`,
+ * `.../video/media/<id>`, `.../file/<id>`) and returns the candidate external ids.
+ * For "file" URIs the type is unknown: both candidates are returned.
  */
 internal fun externalIdCandidatesFromMediaStorePath(pathSegments: List<String>): List<String> {
     if (pathSegments.size < 3) return emptyList()
@@ -155,19 +155,19 @@ internal fun externalIdCandidatesFromMediaStorePath(pathSegments: List<String>):
 }
 
 /**
- * Identifiant de document du MediaDocumentsProvider (« image:123 », « video:45 ») :
- * il a justement le format de nos identifiants externes.
+ * Document id of the MediaDocumentsProvider ("image:123", "video:45"): it happens to have
+ * exactly the format of our external ids.
  */
 internal fun externalIdFromMediaDocumentId(documentId: String): String? =
     parseExternalId(documentId)?.let { (type, id) -> buildExternalId(type, id) }
 
-/** Normalise un angle en 0, 90, 180 ou 270 ; null si ce n'est pas un multiple de 90. */
+/** Normalizes an angle to 0, 90, 180 or 270; null if it is not a multiple of 90. */
 internal fun normalizeRightAngle(degrees: Int): Int? {
     if (degrees % 90 != 0) return null
     return ((degrees % 360) + 360) % 360
 }
 
-/** Rectangle normalisé (0..1). */
+/** Normalized rectangle (0..1). */
 internal data class NormRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
@@ -180,42 +180,42 @@ internal data class NormRect(val left: Float, val top: Float, val right: Float, 
 }
 
 /**
- * Convertit un rectangle de recadrage exprimé dans l'image **pivotée** de [rotationDegrees]
- * (sens horaire) en rectangle dans l'image source non pivotée. Permet de recadrer avant de
- * pivoter, et donc de n'allouer qu'un seul bitmap de la taille du recadrage.
+ * Converts a crop rectangle expressed in the image **rotated** by [rotationDegrees]
+ * (clockwise) into a rectangle in the unrotated source image. This allows cropping before
+ * rotating, and thus allocating only a single bitmap the size of the crop.
  */
 internal fun cropRectInSource(rotated: NormRect, rotationDegrees: Int): NormRect {
     val r = rotated.clamped()
     return when (normalizeRightAngle(rotationDegrees) ?: 0) {
-        // Rotation horaire de 90° : x' = 1 - y, y' = x  =>  x = y', y = 1 - x'
+        // 90° clockwise rotation: x' = 1 - y, y' = x  =>  x = y', y = 1 - x'
         90 -> NormRect(left = r.top, top = 1f - r.right, right = r.bottom, bottom = 1f - r.left)
         180 -> NormRect(left = 1f - r.right, top = 1f - r.bottom, right = 1f - r.left, bottom = 1f - r.top)
-        // Rotation horaire de 270° : x' = y, y' = 1 - x  =>  x = 1 - y', y = x'
+        // 270° clockwise rotation: x' = y, y' = 1 - x  =>  x = 1 - y', y = x'
         270 -> NormRect(left = 1f - r.bottom, top = r.left, right = 1f - r.top, bottom = r.right)
         else -> r
     }
 }
 
-/** Facteur de sous-échantillonnage (>= 1) pour que le plus grand côté ne dépasse pas [maxSide]. */
+/** Subsampling factor (>= 1) so that the longest side does not exceed [maxSide]. */
 internal fun sampleSizeFor(width: Int, height: Int, maxSide: Int): Int {
     val largest = maxOf(width, height)
     if (largest <= maxSide || maxSide <= 0) return 1
     return (largest + maxSide - 1) / maxSide
 }
 
-/** Normalise un chemin relatif MediaStore : sans « / » initial, avec « / » final. */
+/** Normalizes a MediaStore relative path: no leading "/", with a trailing "/". */
 internal fun normalizeRelativePath(path: String): String {
     val trimmed = path.trim().trim('/')
     return if (trimmed.isEmpty()) "" else "$trimmed/"
 }
 
-/** « IMG_001.jpg » -> « IMG_001_crop_<ts>.jpg ». */
+/** "IMG_001.jpg" -> "IMG_001_crop_<ts>.jpg". */
 internal fun croppedCopyName(originalName: String?, timestamp: Long): String {
     val base = originalName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: "IMG"
     return "${base}_crop_$timestamp.jpg"
 }
 
-/** Une position de lecture n'est mémorisée que si elle n'est ni au tout début ni à la toute fin. */
+/** A playback position is only remembered if it is neither at the very start nor at the very end. */
 internal fun shouldKeepPlaybackPosition(positionMs: Long, durationMs: Long, marginMs: Long = 3_000L): Boolean {
     if (positionMs < marginMs) return false
     if (durationMs > 0 && positionMs > durationMs - marginMs) return false
@@ -223,8 +223,8 @@ internal fun shouldKeepPlaybackPosition(positionMs: Long, durationMs: Long, marg
 }
 
 /**
- * Ordonne deux médias selon leur position dans les grilles (dateTaken DESC, id DESC) :
- * renvoie (le plus haut dans la liste, le plus bas).
+ * Orders two media by their position in the grids (dateTaken DESC, id DESC):
+ * returns (the higher one in the list, the lower one).
  */
 internal fun orderedByListPosition(a: MediaSummary, b: MediaSummary): Pair<MediaSummary, MediaSummary> {
     val aFirst = a.dateTaken > b.dateTaken || (a.dateTaken == b.dateTaken && a.id >= b.id)

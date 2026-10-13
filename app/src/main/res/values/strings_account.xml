@@ -1,74 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ecran Compte OneDrive : connexion, déconnexion, données OneDrive de l'appareil. -->
+<!-- OneDrive account screen: sign-in, sign-out, OneDrive data on the device. -->
 <resources>
-    <string name="account_title">Compte OneDrive</string>
-    <string name="account_section_account">Compte</string>
-    <string name="account_section_device_data">Données sur l\'appareil</string>
+    <string name="account_title">OneDrive account</string>
+    <string name="account_section_account">Account</string>
+    <string name="account_section_device_data">Data on this device</string>
 
-    <!-- Non connecté -->
-    <string name="account_intro_title">Connectez votre OneDrive</string>
-    <string name="account_intro_message">Vos photos et vidéos OneDrive apparaîtront dans CloudGallery. L\'accès est en lecture seule : vos fichiers sur OneDrive et sur ce téléphone ne sont jamais modifiés.</string>
-    <string name="account_personal_only">Comptes Microsoft personnels uniquement.</string>
-    <string name="account_sign_in">Se connecter à OneDrive</string>
-    <string name="account_signing_in">Connexion…</string>
+    <!-- Signed out -->
+    <string name="account_intro_title">Connect your OneDrive</string>
+    <string name="account_intro_message">Your OneDrive photos and videos will appear in CloudGallery. Access is read-only: your files on OneDrive and on this phone are never modified.</string>
+    <string name="account_personal_only">Personal Microsoft accounts only.</string>
+    <string name="account_sign_in">Sign in to OneDrive</string>
+    <string name="account_signing_in">Signing in…</string>
 
-    <!-- Connecté -->
-    <string name="account_signed_in">Connecté</string>
-    <string name="account_microsoft_personal">Compte Microsoft personnel</string>
-    <string name="account_read_only">Accès en lecture seule</string>
-    <string name="account_read_only_summary">Fichiers et profil uniquement. CloudGallery ne modifie ni ne supprime rien sur OneDrive.</string>
-    <string name="account_sign_out">Se déconnecter</string>
-    <string name="account_sign_out_title">Se déconnecter de OneDrive ?</string>
-    <string name="account_sign_out_message">Les photos et vidéos OneDrive disparaîtront de CloudGallery, avec leurs favoris, leurs ajouts aux albums, les albums OneDrive (y compris renommés ou épinglés) et les miniatures en cache. Les copies hors ligne sont supprimées de l\'appareil. Vos fichiers sur OneDrive et sur ce téléphone ne sont pas modifiés.</string>
-    <string name="account_signing_out">Déconnexion en cours…</string>
-    <string name="account_signed_out_toast">Déconnecté de OneDrive</string>
-    <string name="account_sign_out_failed">Déconnexion impossible : %1$s</string>
+    <!-- Signed in -->
+    <string name="account_signed_in">Signed in</string>
+    <string name="account_microsoft_personal">Personal Microsoft account</string>
+    <string name="account_read_only">Read-only access</string>
+    <string name="account_read_only_summary">Files and profile only. CloudGallery never changes or deletes anything on OneDrive.</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_sign_out_title">Sign out of OneDrive?</string>
+    <string name="account_sign_out_message">OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions, the OneDrive albums (even renamed or pinned ones) and the cached thumbnails. Offline copies are removed from the device. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_signing_out">Signing out…</string>
+    <string name="account_signed_out_toast">Signed out of OneDrive</string>
+    <string name="account_sign_out_failed">Can\'t sign out: %1$s</string>
 
-    <!-- Reconnexion -->
-    <string name="account_reauth_title">Reconnexion requise</string>
-    <string name="account_reauth_message">La session OneDrive a expiré. Reconnectez-vous pour reprendre la synchronisation ; les éléments déjà indexés sont conservés.</string>
-    <string name="account_reauth_action">Se reconnecter</string>
+    <!-- Sign in again -->
+    <string name="account_reauth_title">Sign-in required</string>
+    <string name="account_reauth_message">Your OneDrive session has expired. Sign in again to resume syncing; items already indexed are kept.</string>
+    <string name="account_reauth_action">Sign in again</string>
 
-    <!-- Données restantes d'une session précédente -->
-    <string name="account_leftover_purge">Supprimer les données OneDrive de l\'appareil</string>
-    <string name="account_leftover_purge_summary">Éléments OneDrive d\'une session précédente encore présents dans CloudGallery</string>
-    <string name="account_purge_title">Supprimer les données OneDrive ?</string>
-    <string name="account_purge_message">Les photos et vidéos OneDrive d\'une session précédente disparaîtront de CloudGallery, avec leurs favoris, leurs ajouts aux albums et les albums OneDrive. Les copies hors ligne sont supprimées de l\'appareil. Vos fichiers sur OneDrive et sur ce téléphone ne sont pas modifiés.</string>
-    <string name="account_purge_done">Données OneDrive retirées de l\'appareil</string>
-    <string name="account_purge_failed">Impossible de retirer les données OneDrive.</string>
+    <!-- Data left over from a previous session -->
+    <string name="account_leftover_purge">Remove OneDrive data from this device</string>
+    <string name="account_leftover_purge_summary">OneDrive items from a previous session are still in CloudGallery</string>
+    <string name="account_purge_title">Remove OneDrive data?</string>
+    <string name="account_purge_message">OneDrive photos and videos from a previous session will disappear from CloudGallery, along with their favorites, their album additions and the OneDrive albums. Offline copies are removed from the device. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_purge_done">OneDrive data removed from this device</string>
+    <string name="account_purge_failed">Can\'t remove the OneDrive data.</string>
 
-    <!-- Profil -->
-    <string name="account_storage">Stockage Microsoft</string>
-    <string name="account_quota">%1$s utilisés sur %2$s</string>
+    <!-- Profile -->
+    <string name="account_storage">Microsoft storage</string>
+    <string name="account_quota">%1$s used of %2$s</string>
 
-    <!-- Synchronisation -->
-    <string name="account_section_sync">Synchronisation</string>
-    <string name="account_sync_now">Synchroniser maintenant</string>
+    <!-- Sync -->
+    <string name="account_section_sync">Sync</string>
+    <string name="account_sync_now">Sync now</string>
     <plurals name="account_sync_running">
-        <item quantity="one">Synchronisation… (%d élément reçu)</item>
-        <item quantity="many">Synchronisation… (%d éléments reçus)</item>
-        <item quantity="other">Synchronisation… (%d éléments reçus)</item>
+        <item quantity="one">Syncing… (%d item received)</item>
+        <item quantity="other">Syncing… (%d items received)</item>
     </plurals>
-    <string name="account_sync_last">Synchronisé le %1$s · %2$s</string>
-    <string name="account_sync_never">Pas encore synchronisé</string>
-    <string name="account_sync_error">Échec de la synchronisation : %1$s</string>
-    <string name="account_sync_paused">Synchronisation suspendue : autre compte OneDrive</string>
+    <string name="account_sync_last">Synced %1$s · %2$s</string>
+    <string name="account_sync_never">Not synced yet</string>
+    <string name="account_sync_error">Sync failed: %1$s</string>
+    <string name="account_sync_paused">Sync paused: different OneDrive account</string>
 
-    <!-- Autre compte que celui des données de l'appareil -->
-    <string name="account_mismatch_title">Autre compte OneDrive</string>
-    <string name="account_mismatch_message">Les éléments OneDrive présents dans CloudGallery proviennent d\'un autre compte. La synchronisation est suspendue tant que vous ne les remplacez pas par ceux de ce compte.</string>
-    <string name="account_mismatch_action">Remplacer par ce compte</string>
-    <string name="account_mismatch_dialog_title">Remplacer les données OneDrive ?</string>
-    <string name="account_mismatch_dialog_message">Les photos et vidéos OneDrive de l\'ancien compte disparaîtront de CloudGallery, avec leurs favoris, leurs ajouts aux albums, les albums OneDrive et les copies hors ligne (supprimées de l\'appareil). Celles de ce compte seront ensuite synchronisées. Vos fichiers sur OneDrive et sur ce téléphone ne sont pas modifiés.</string>
-    <string name="account_mismatch_confirm">Remplacer</string>
-    <string name="account_mismatch_done">Données de l\'ancien compte retirées, synchronisation lancée</string>
-    <string name="account_mismatch_failed">Impossible de remplacer les données OneDrive.</string>
+    <!-- Account other than the one the device data belongs to -->
+    <string name="account_mismatch_title">Different OneDrive account</string>
+    <string name="account_mismatch_message">The OneDrive items in CloudGallery come from another account. Syncing is paused until you replace them with this account\'s items.</string>
+    <string name="account_mismatch_action">Replace with this account</string>
+    <string name="account_mismatch_dialog_title">Replace the OneDrive data?</string>
+    <string name="account_mismatch_dialog_message">The previous account\'s OneDrive photos and videos will disappear from CloudGallery, along with their favorites, their album additions, the OneDrive albums and the offline copies (removed from the device). This account\'s items will then be synced. Your files on OneDrive and on this phone are not modified.</string>
+    <string name="account_mismatch_confirm">Replace</string>
+    <string name="account_mismatch_done">Previous account data removed, sync started</string>
+    <string name="account_mismatch_failed">Can\'t replace the OneDrive data.</string>
 
-    <!-- Erreurs et états -->
-    <string name="account_error_title">OneDrive indisponible</string>
-    <string name="account_not_configured">OneDrive n\'est pas configuré dans cette version de l\'application.</string>
-    <string name="account_sign_in_failed">Connexion impossible : %1$s</string>
-    <string name="account_status_signed_out">Non connecté</string>
-    <string name="account_status_reauth">Reconnexion requise</string>
-    <string name="account_status_signing_out">Déconnexion…</string>
+    <!-- Errors and states -->
+    <string name="account_error_title">OneDrive unavailable</string>
+    <string name="account_not_configured">OneDrive isn\'t configured in this version of the app.</string>
+    <string name="account_sign_in_failed">Can\'t sign in: %1$s</string>
+    <string name="account_status_signed_out">Not signed in</string>
+    <string name="account_status_reauth">Sign-in required</string>
+    <string name="account_status_signing_out">Signing out…</string>
 </resources>

@@ -25,7 +25,7 @@ import javax.inject.Inject
 
 data class AlbumPickerUiState(
     val loading: Boolean = true,
-    /** Albums personnalisés uniquement : on n'ajoute que des références, jamais dans un dossier. */
+    /** Custom albums only: we only add references, never into a folder. */
     val albums: List<AlbumSummary> = emptyList(),
 )
 
@@ -47,8 +47,8 @@ class AlbumPickerViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AlbumPickerUiState())
 
     /**
-     * Crée un album personnalisé puis appelle [onCreated] (sur le thread principal) avec son id,
-     * ou [onError] en cas d'échec.
+     * Creates a custom album then calls [onCreated] (on the main thread) with its id,
+     * or [onError] on failure.
      */
     fun createAlbum(name: String, onCreated: (Long) -> Unit, onError: () -> Unit) {
         val clean = AlbumsLogic.normalizeName(name) ?: return

@@ -37,7 +37,7 @@ import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import kotlinx.coroutines.launch
 
-/** Panneau « Copier vers un dossier » : liste des dossiers locaux (MediaStore) existants. */
+/** "Copy to folder" sheet: lists the existing local (MediaStore) folders. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FolderPickerSheet(
@@ -54,7 +54,7 @@ internal fun FolderPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // Ouvert au-dessus de la visionneuse (fond noir) : icônes de barre d'état claires.
+        // Opened over the viewer (black background): light status bar icons.
         properties = fullscreenSheetProperties(),
         shape = RoundedCornerShape(topStart = radius, topEnd = radius),
         containerColor = colors.sheet,

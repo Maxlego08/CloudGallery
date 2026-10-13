@@ -10,10 +10,10 @@ plugins {
 }
 
 // --- OneDrive (MSAL) ---------------------------------------------------------------------
-// Identifiant d'application Entra et empreinte de signature : lus depuis local.properties
-// (non versionné) ou, en priorité, depuis une propriété Gradle (-Pmsal.clientId=…,
-// ~/.gradle/gradle.properties). Jamais écrits en dur dans le dépôt. Valeurs absentes ou
-// invalides : le build réussit et la fonction OneDrive est masquée dans l'appli.
+// Entra application ID and signature hash: read from local.properties (not versioned) or,
+// with priority, from a Gradle property (-Pmsal.clientId=…, ~/.gradle/gradle.properties).
+// Never hard-coded in the repository. Missing or invalid values: the build succeeds and the
+// OneDrive feature is hidden in the app.
 val localProps = Properties().apply {
     providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.orNull
         ?.let { load(StringReader(it)) }
@@ -32,12 +32,12 @@ if (msalClientId.isEmpty() || msalSignatureHash.isEmpty()) {
     logger.warn("MSAL not configured (msal.clientId / msal.signatureHash): OneDrive disabled in this build")
 }
 
-// --- Signature release -------------------------------------------------------------------
-// Keystore et mots de passe lus hors du dépôt (cloudgallery.release.* dans
-// ~/.gradle/gradle.properties ou local.properties). Absents : release signé avec la clé debug.
+// --- Release signing ---------------------------------------------------------------------
+// Keystore and passwords read outside the repository (cloudgallery.release.* in
+// ~/.gradle/gradle.properties or local.properties). Missing: release signed with the debug key.
 val releaseStoreFile: File? = msalProp("cloudgallery.release.storeFile")
     .takeIf { it.isNotEmpty() }?.let(::file)?.takeIf { it.isFile }
-// Empreinte de la clé release, enregistrée en plus de celle de debug dans Entra.
+// Hash of the release key, registered in Entra in addition to the debug one.
 val msalReleaseSignatureHash: String = msalProp("msal.releaseSignatureHash")
     .takeIf { releaseStoreFile != null && Regex("^[A-Za-z0-9+/]{27}=$").matches(it) }
     ?: msalSignatureHash
@@ -62,8 +62,8 @@ android {
 
         buildConfigField("String", "MSAL_CLIENT_ID", "\"$msalClientId\"")
         buildConfigField("String", "MSAL_SIGNATURE_HASH", "\"$msalSignatureHash\"")
-        // Toujours défini (sinon la fusion du manifeste échoue) ; chemin factice si non configuré,
-        // sans effet puisque la fonction est alors désactivée.
+        // Always defined (otherwise the manifest merge fails); dummy path if not configured,
+        // harmless since the feature is then disabled.
         manifestPlaceholders["msalSignatureHash"] = msalSignatureHash.ifEmpty { "msal-not-configured" }
     }
 
@@ -97,7 +97,7 @@ android {
         compose = true
         buildConfig = true
     }
-    // Schémas Room exportés, lus par MigrationTestHelper dans les tests instrumentés.
+    // Exported Room schemas, read by MigrationTestHelper in the instrumented tests.
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }

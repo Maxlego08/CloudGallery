@@ -13,20 +13,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Dédoublonnage local / OneDrive dans l'index (jamais de fichier touché).
+ * Local / OneDrive deduplication in the index (no file is ever touched).
  *
- * - Fusion : un élément OneDrive et un fichier du téléphone de même QuickXorHash et même taille
- *   ([planMerges]) deviennent un seul média, celui du fichier local (ses métadonnées, sa date
- *   EXIF/MediaStore, son fichier pour l'affichage). Le média OneDrive est supprimé après le
- *   transfert de ses sources (OneDrive, copie hors ligne), favori, albums, couverture d'album,
- *   fichiers en cache, téléchargements et position de lecture.
- * - Défusion ([shouldSplit]) : la source OneDrive (avec sa copie hors ligne, son original
- *   temporaire et ses téléchargements) repart dans un nouveau média ; favoris et albums restent
- *   sur le média du fichier local, qui est celui que l'utilisateur voyait.
+ * - Merge: a OneDrive item and a phone file with the same QuickXorHash and the same size
+ *   ([planMerges]) become a single media item, the local file's (its metadata, its
+ *   EXIF/MediaStore date, its file for display). The OneDrive media is deleted after its
+ *   sources (OneDrive, offline copy), favorite, albums, album cover, cached files, downloads and
+ *   playback position have been transferred.
+ * - Unmerge ([shouldSplit]): the OneDrive source (with its offline copy, its temporary original
+ *   and its downloads) moves to a new media item; favorites and albums stay on the local file's
+ *   media, which is the one the user was seeing.
  *
- * Appelé après une synchro MediaStore, après un passage OneDrive et après un lot d'empreintes ;
- * un seul passage à la fois, par lots en transactions courtes (chaque couple est revérifié dans
- * sa transaction).
+ * Called after a MediaStore sync, after a OneDrive pass and after a batch of hashes; one pass at
+ * a time, in batches of short transactions (each pair is rechecked within its transaction).
  */
 @Singleton
 class MediaMerger @Inject constructor(
@@ -38,12 +37,12 @@ class MediaMerger @Inject constructor(
     private val sourceDao = db.mediaSourceDao()
     private val mutex = Mutex()
 
-    /** Défusions puis fusions. Renvoie le nombre de fusions faites (tests, journal). */
+    /** Unmerges, then merges. Returns the number of merges performed (tests, log). */
     suspend fun reconcile(): Int = withContext(io) {
         mutex.withLock {
             val splits = dedupDao.mergedMedia().filter(::shouldSplit)
             for (chunk in splits.chunked(CHUNK)) db.withTransaction { chunk.forEach { split(it) } }
-            if (splits.isNotEmpty()) Log.i(TAG, "${splits.size} fusion(s) défaite(s) : empreintes différentes")
+            if (splits.isNotEmpty()) Log.i(TAG, "${splits.size} merge(s) undone: different hashes")
 
             val plans = planMerges(dedupDao.mergeCandidates())
             var merged = 0
@@ -56,7 +55,7 @@ class MediaMerger @Inject constructor(
                     }
                 }
             }
-            if (merged > 0) Log.i(TAG, "$merged élément(s) OneDrive rattaché(s) à leur fichier local")
+            if (merged > 0) Log.i(TAG, "$merged OneDrive item(s) attached to their local file")
             merged
         }
     }
@@ -70,7 +69,7 @@ class MediaMerger @Inject constructor(
         dedupDao.moveDownloadTasks(from, to)
         dedupDao.copyPlaybackPosition(from, to)
         dedupDao.deleteSearchEntry(from)
-        // Restes éventuels (ligne de cache du même type déjà présente) supprimés en cascade.
+        // Any leftovers (a cache row of the same kind already present) are deleted by cascade.
         dedupDao.deleteMedia(from)
         refresh(listOf(to))
     }
@@ -97,10 +96,10 @@ class MediaMerger @Inject constructor(
 }
 
 /**
- * Média OneDrive recréé à la défusion : métadonnées du média fusionné (le prochain changement
- * de l'élément sur OneDrive les remplace par celles de Graph), taille, date de modification et
- * empreinte de l'élément OneDrive. Miniatures Graph déjà orientées : orientation 0. Les
- * indicateurs de sources sont recalculés ensuite.
+ * OneDrive media recreated on unmerge: metadata of the merged media (the next change of the item
+ * on OneDrive replaces them with Graph's), size, modification date and hash of the OneDrive item.
+ * Graph thumbnails are already oriented: orientation 0. The source flags are recomputed
+ * afterwards.
  */
 internal fun cloudOnlyCopyOf(media: MediaEntity, sizeBytes: Long, dateModified: Long, quickXorHash: String?) = media.copy(
     id = 0,

@@ -20,7 +20,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** File des copies hors ligne (`download_task`) et sources OFFLINE_COPY. */
+/** Offline copy queue (`download_task`) and OFFLINE_COPY sources. */
 @RunWith(AndroidJUnit4::class)
 class OfflineDaoTest {
 
@@ -56,17 +56,17 @@ class OfflineDaoTest {
             sizeBytes = 10, dateModified = 1, cTag = cTag, missingSince = missingSince,
         )
 
-    // --- File ---------------------------------------------------------------------------------
+    // --- Queue --------------------------------------------------------------------------------
 
     @Test
     fun enqueueIfAbsent_neverCreatesTwoOpenTasksForAMedia() = runTest {
         val dao = db.downloadTaskDao()
         val id = db.mediaDao().insert(media("a"))
         assertEquals(1, dao.enqueueIfAbsent(listOf(task(id, "A", "c1"))))
-        // Même version déjà en attente : rien de plus.
+        // Same version already queued: nothing more.
         assertEquals(0, dao.enqueueIfAbsent(listOf(task(id, "A", "c1"))))
         assertEquals(1, dao.listOpen().size)
-        // Nouvelle version : la même ligne est remise en attente avec la nouvelle version.
+        // New version: the same row is requeued with the new version.
         assertEquals(1, dao.enqueueIfAbsent(listOf(task(id, "A", "c2"))))
         val open = dao.listOpen().single()
         assertEquals("c2", open.cTag)
@@ -111,12 +111,12 @@ class OfflineDaoTest {
         dao.markRunning(dao.nextQueued()!!.id, 1)
         assertEquals(1, dao.resetRunningToQueued(2))
         assertTrue(dao.listOpen().all { it.state == DownloadState.QUEUED })
-        // Arrêt par l'utilisateur : toute la file en pause, plus rien « en attente ».
+        // User stop: the whole queue paused, nothing left "queued".
         dao.markRunning(dao.nextQueued()!!.id, 3)
         assertEquals(2, dao.pauseActive(4))
         assertNull(dao.nextQueued())
         assertFalse(dao.existsQueued())
-        // Reprise explicite.
+        // Explicit resume.
         assertEquals(2, dao.resumeStopped(5))
         assertTrue(dao.existsQueued())
     }
@@ -144,7 +144,7 @@ class OfflineDaoTest {
         assertTrue(m.hasOffline)
         assertTrue(m.hasCloud)
         assertNull(m.primaryUri)
-        // « Afficher OneDrive dans Photos » désactivé : un élément conservé hors ligne y figure.
+        // "Show OneDrive in Photos" off: an item kept offline still appears there.
         assertEquals(listOf(id), mediaDao.observeTimelineIds(includeCloudOnly = false).first())
         assertEquals(1, mediaDao.countWithOfflineCopy(listOf(id)))
         assertEquals(0, mediaDao.countKeepableOffline(listOf(id)))
@@ -164,7 +164,7 @@ class OfflineDaoTest {
         assertEquals(50L, sourceDao.find(SourceKind.OFFLINE_COPY, "A")!!.missingSince)
         assertFalse(mediaDao.getById(id)!!.hasOffline)
         assertTrue(mediaDao.observeTimelineIds(includeCloudOnly = false).first().isEmpty())
-        // Plus de source OneDrive (copie conservée) : visible.
+        // No OneDrive source anymore (kept copy): visible.
         sourceDao.deleteForMedia(SourceKind.ONEDRIVE, listOf(id))
         sourceDao.syncOfflineCopyVisibility(listOf(id))
         mediaDao.refreshSourceFlags(listOf(id))
@@ -176,19 +176,19 @@ class OfflineDaoTest {
     fun lastCopies_andAwaitingDecision() = runTest {
         val mediaDao = db.mediaDao()
         val sourceDao = db.mediaSourceDao()
-        // Supprimé de OneDrive il y a longtemps, copie hors ligne : en attente de décision.
+        // Deleted from OneDrive long ago, offline copy: awaiting a decision.
         val old = mediaDao.insert(media("old"))
         sourceDao.insert(source(old, SourceKind.ONEDRIVE, "A", missingSince = 10))
         sourceDao.insert(source(old, SourceKind.OFFLINE_COPY, "A", missingSince = 10))
-        // Supprimé récemment : en délai de grâce.
+        // Deleted recently: within the grace period.
         val recent = mediaDao.insert(media("recent"))
         sourceDao.insert(source(recent, SourceKind.ONEDRIVE, "B", missingSince = 1_000))
         sourceDao.insert(source(recent, SourceKind.OFFLINE_COPY, "B", missingSince = 1_000))
-        // Toujours sur OneDrive.
+        // Still on OneDrive.
         val alive = mediaDao.insert(media("alive"))
         sourceDao.insert(source(alive, SourceKind.ONEDRIVE, "C"))
         sourceDao.insert(source(alive, SourceKind.OFFLINE_COPY, "C"))
-        // Aussi sur l'appareil : jamais une dernière copie.
+        // Also on the device: never a last copy.
         val local = mediaDao.insert(media("local"))
         sourceDao.insert(source(local, SourceKind.LOCAL, "9"))
         sourceDao.insert(source(local, SourceKind.ONEDRIVE, "D", missingSince = 10))
@@ -199,7 +199,7 @@ class OfflineDaoTest {
         assertEquals(listOf(old, local), sourceDao.observeAwaitingDecisionMediaIds(expiredBefore = 100).first().sorted())
         assertEquals(2, sourceDao.countOfflineLastCopies())
         assertEquals(4, sourceDao.countAll(SourceKind.OFFLINE_COPY))
-        // Candidats à « Conserver hors ligne » : éléments OneDrive visibles sans copie.
+        // "Keep offline" candidates: visible OneDrive items without a copy.
         val fresh = mediaDao.insert(media("fresh"))
         sourceDao.insert(source(fresh, SourceKind.ONEDRIVE, "E", cTag = "e1"))
         val candidates = sourceDao.keepOfflineCandidates(listOf(old, recent, alive, local, fresh))
@@ -215,7 +215,7 @@ class OfflineDaoTest {
         val old = mediaDao.insert(media("old"))
         sourceDao.insert(source(old, SourceKind.ONEDRIVE, "A", missingSince = 10))
         sourceDao.insert(source(old, SourceKind.OFFLINE_COPY, "A", missingSince = 10))
-        // Masqué pendant le délai de grâce : sa copie (masquée) est déjà la dernière.
+        // Hidden during the grace period: its (hidden) copy is already the last one.
         val recent = mediaDao.insert(media("recent"))
         sourceDao.insert(source(recent, SourceKind.ONEDRIVE, "B", missingSince = 1_000))
         sourceDao.insert(source(recent, SourceKind.OFFLINE_COPY, "B", missingSince = 1_000))
@@ -228,9 +228,9 @@ class OfflineDaoTest {
         assertEquals(2, sourceDao.countOfflineLastCopiesAmong(listOf(old, recent, alive)))
         assertEquals(0, sourceDao.countOfflineLastCopiesAmong(listOf(alive)))
 
-        // Décision : seulement les éléments confirmés encore en attente.
+        // Decision: only confirmed items still awaiting.
         assertEquals(listOf(old), sourceDao.awaitingDecisionAmong(listOf(old, recent, alive), expiredBefore = 100))
-        // Retiré seulement s'il est masqué : la source visible de « alive » reste.
+        // Removed only if hidden: the visible source of "alive" remains.
         sourceDao.deleteHiddenForMedia(SourceKind.ONEDRIVE, listOf(old, alive))
         assertNull(sourceDao.find(SourceKind.ONEDRIVE, "A"))
         assertEquals(alive, sourceDao.find(SourceKind.ONEDRIVE, "C")!!.mediaId)
@@ -247,7 +247,7 @@ class OfflineDaoTest {
         dao.enqueueIfAbsent(listOf(task(a, "A", "c1", createdAt = 1), task(b, "B", "c1", createdAt = 2)))
         val taskA = dao.listOpen().first { it.mediaId == a }
         val taskB = dao.listOpen().first { it.mediaId == b }
-        // A : contenu plus récent sur OneDrive que dans l'index, sans essai compté.
+        // A: newer content on OneDrive than in the index, no attempt counted.
         dao.markRunning(taskA.id, 3)
         dao.requeue(taskA.id, "CONTENT_CHANGED", 0, 4)
         assertEquals(taskB.id, dao.nextRunnable(listOf(-1))!!.id)
@@ -255,12 +255,12 @@ class OfflineDaoTest {
         assertNull(dao.nextRunnable(listOf(taskB.id)))
         assertNull(dao.nextRunnableAmong(listOf(taskA.id), listOf(-1)))
         assertFalse(dao.existsRunnableAmong(listOf(taskA.id)))
-        // Synchronisation : nouvelle version dans l'index, A repart (en premier, plus ancienne).
+        // Sync: new version in the index, A restarts (first, as the oldest).
         val cloudA = sourceDao.find(SourceKind.ONEDRIVE, "A")!!
         sourceDao.update(cloudA.copy(cTag = "c2"))
         assertEquals(taskA.id, dao.nextRunnable(listOf(-1))!!.id)
         assertEquals(taskA.id, dao.nextRunnableAmong(listOf(taskA.id), listOf(-1))!!.id)
-        // Progression d'une tâche disparue : aucune ligne touchée.
+        // Progress of a vanished task: no row touched.
         dao.markRunning(taskB.id, 5)
         assertEquals(1, dao.updateProgress(taskB.id, 4, 10, 6))
         dao.deleteForMedia(listOf(b))
@@ -282,9 +282,9 @@ class OfflineDaoTest {
         mediaDao.refreshSourceFlags(listOf(queued, failed, pinned))
         dao.enqueueIfAbsent(listOf(task(queued, "Q", "c1"), task(failed, "F", "c1"), task(pinned, "P", "c2")))
         dao.markFailed(dao.listOpen().first { it.mediaId == failed }.id, "NETWORK", 5, 1)
-        // En attente : plus proposé ; en échec : proposé (« Conserver hors ligne » le relance).
+        // Queued: no longer offered; failed: offered ("Keep offline" restarts it).
         assertEquals(1, mediaDao.countKeepableOffline(listOf(queued, failed)))
-        // Mise à jour d'une copie présente arrêtée : candidate à la reprise.
+        // Stopped update of an existing copy: candidate for resuming.
         assertTrue(sourceDao.stoppedUpdateCandidates(listOf(pinned)).isEmpty())
         dao.pauseActive(2)
         assertEquals(listOf(pinned), sourceDao.stoppedUpdateCandidates(listOf(queued, failed, pinned)).map { it.mediaId })

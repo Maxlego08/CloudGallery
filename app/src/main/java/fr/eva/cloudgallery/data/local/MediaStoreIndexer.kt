@@ -52,14 +52,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Miroir incrémental MediaStore -> Room.
+ * Incremental MediaStore -> Room mirror.
  *
- * - Curseur = génération MediaStore relevée avant la lecture ; relecture complète si la version
- *   MediaStore change (ré-association des sources par empreinte, les _ID n'étant plus fiables).
- * - Sources absentes : masquées (missingSince) tant que leur disparition n'est pas confirmée
- *   (accès partiel, corbeille, volume démonté, disparition massive) ; supprimées de la base
- *   seulement en accès complet, une fois confirmées. Favoris et albums survivent au masquage.
- * - Ne supprime JAMAIS de fichier : seule la base est modifiée.
+ * - Cursor = MediaStore generation captured before reading; full re-read if the MediaStore
+ *   version changes (sources are re-matched by fingerprint, since _IDs are no longer reliable).
+ * - Missing sources: hidden (missingSince) as long as their disappearance is not confirmed
+ *   (partial access, trash, unmounted volume, mass disappearance); deleted from the database
+ *   only with full access, once confirmed. Favorites and albums survive hiding.
+ * - NEVER deletes a file: only the database is modified.
  */
 @Singleton
 class MediaStoreIndexer @Inject constructor(
@@ -82,7 +82,7 @@ class MediaStoreIndexer @Inject constructor(
 
     private val mutex = Mutex()
 
-    /** Numéro de demande : une synchro démarrée après une demande la satisfait (coalescence). */
+    /** Request number: a sync started after a request satisfies it (coalescing). */
     private val requestCounter = AtomicLong(0)
 
     @Volatile
@@ -107,7 +107,7 @@ class MediaStoreIndexer @Inject constructor(
         val ticket = requestCounter.incrementAndGet()
         withContext(io) {
             mutex.withLock {
-                // Une synchro incrémentale démarrée après cette demande a déjà tout couvert.
+                // An incremental sync started after this request has already covered everything.
                 if (!full && lastStartedRequest >= ticket) return@withLock
                 lastStartedRequest = requestCounter.get()
                 runSync(full)
@@ -133,7 +133,7 @@ class MediaStoreIndexer @Inject constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "Synchronisation après changement MediaStore impossible", e)
+                        Log.w(TAG, "Sync after MediaStore change failed", e)
                     }
                 }
         }
@@ -145,26 +145,26 @@ class MediaStoreIndexer @Inject constructor(
         _state.update { it.copy(running = true) }
         try {
             if (!hasAnyMediaPermission()) {
-                // Sans permission MediaStore renvoie une liste vide : ne surtout pas vider la base.
+                // Without permission MediaStore returns an empty list: must not wipe the database.
                 fail(context.getString(R.string.data_error_no_permission))
                 return
             }
-            // Accès complet = images ET vidéos. Sinon (sélection partielle, un seul des deux types),
-            // MediaStore ne renvoie qu'une partie de la bibliothèque : aucune suppression définitive.
+            // Full access = images AND videos. Otherwise (partial selection, only one of the two
+            // types), MediaStore returns only part of the library: no permanent deletion.
             val fullAccess = hasFullMediaAccess()
             val stored = cursorDao.get(MEDIASTORE_PROVIDER)
             val version = currentVersion()
             val full = needsFullSync(forceFull, stored?.cursor, stored?.version, version)
             val previousGeneration = if (full) -1L else stored?.cursor?.toLongOrNull() ?: -1L
             if (mediaStoreVersionChanged(stored?.version, version)) {
-                // Les _ID ne sont plus comparables : ré-association par empreinte pendant la relecture.
+                // _IDs are no longer comparable: re-match by fingerprint during the re-read.
                 sourceDao.markLocalStale()
             }
-            // Génération relevée AVANT toute lecture : une modification validée pendant la synchro
-            // aura une génération supérieure et sera relue la prochaine fois (relecture idempotente).
+            // Generation captured BEFORE any read: a change committed during the sync will have a
+            // higher generation and will be re-read next time (idempotent re-read).
             val generationSnapshot = currentGeneration()
 
-            // 1. Identifiants visibles (léger).
+            // 1. Visible ids (lightweight).
             val visible = HashSet<String>(4096)
             for (c in COLLECTIONS) queryIds(c, visible)
             val initialStamps = sourceDao.stamps(SourceKind.LOCAL)
@@ -175,7 +175,7 @@ class MediaStoreIndexer @Inject constructor(
                 if (s.missingSince != null) hiddenKnown += s.externalId
             }
 
-            // 2. Nouveaux / modifiés.
+            // 2. New / modified.
             val stale = StaleMatcher(sourceDao.staleLocal())
             var maxGeneration = previousGeneration.coerceAtLeast(0L)
             val written = HashSet<String>()
@@ -185,9 +185,9 @@ class MediaStoreIndexer @Inject constructor(
                 maxGeneration = maxOf(maxGeneration, queryAndWrite(c, selection, args, full, written, stale))
             }
             if (!full) {
-                // Eléments visibles mais absents de la base (ou masqués) dont la génération est
-                // ancienne : nouvelles photos accordées en accès partiel, sortie de corbeille,
-                // volume remonté, retour à l'accès complet…
+                // Items that are visible but missing from the database (or hidden) and whose
+                // generation is old: new photos granted under partial access, restored from trash,
+                // remounted volume, back to full access…
                 for (c in COLLECTIONS) {
                     val missing = visible.asSequence()
                         .filter { (it !in known || it in hiddenKnown) && it !in written }
@@ -205,10 +205,10 @@ class MediaStoreIndexer @Inject constructor(
                 }
             }
 
-            // 3. Sources absentes : masquées ou supprimées (base uniquement, jamais les fichiers).
+            // 3. Missing sources: hidden or deleted (database only, never the files).
             val massBlocked = applyRemovals(visible, written, fullAccess)
 
-            // 4. Albums-dossiers.
+            // 4. Folder albums.
             syncFolderAlbums(fullAccess)
 
             val now = System.currentTimeMillis()
@@ -229,10 +229,10 @@ class MediaStoreIndexer @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: SecurityException) {
-            Log.w(TAG, "Accès MediaStore refusé", e)
+            Log.w(TAG, "MediaStore access denied", e)
             fail(context.getString(R.string.data_error_no_permission))
         } catch (e: Exception) {
-            Log.e(TAG, "Echec de l'indexation", e)
+            Log.e(TAG, "Indexing failed", e)
             fail(context.getString(R.string.data_error_sync_failed, e.message ?: e.javaClass.simpleName))
         } finally {
             _state.update { it.copy(running = false) }
@@ -240,9 +240,9 @@ class MediaStoreIndexer @Inject constructor(
     }
 
     /**
-     * Après une synchro réussie : fusion / défusion avec OneDrive (fichiers modifiés, éléments
-     * revenus) et calcul des empreintes des nouveaux fichiers (en charge). Un échec ici ne remet
-     * pas en cause l'indexation.
+     * After a successful sync: merge / unmerge with OneDrive (modified files, items that came
+     * back) and hashing of new files (while charging). A failure here does not invalidate the
+     * indexing.
      */
     private suspend fun afterIndexUpdate() {
         try {
@@ -251,22 +251,22 @@ class MediaStoreIndexer @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Dédoublonnage après l'indexation impossible", e)
+            Log.w(TAG, "Deduplication after indexing failed", e)
         }
     }
 
     /**
-     * Traite les sources LOCAL absentes de la requête standard. Renvoie vrai si le frein
-     * anti-suppression massive a été déclenché.
+     * Handles LOCAL sources missing from the standard query. Returns true if the mass-deletion
+     * brake was triggered.
      */
     private suspend fun applyRemovals(visible: Set<String>, written: Set<String>, fullAccess: Boolean): Boolean {
         val stamps = sourceDao.stamps(SourceKind.LOCAL)
         val absent = stamps.filter { it.externalId !in visible && it.externalId !in written }
         if (absent.isEmpty()) return false
         if (visible.isEmpty() && written.isEmpty()) {
-            // MediaStore ne renvoie plus rien alors que la base connaît des médias : état transitoire
-            // (fournisseur en cours de reconstruction, stockage indisponible). On ne touche à rien.
-            Log.w(TAG, "MediaStore vide avec ${stamps.size} sources connues : suppressions ignorées")
+            // MediaStore returns nothing while the database knows media: transient state
+            // (provider being rebuilt, storage unavailable). Leave everything untouched.
+            Log.w(TAG, "MediaStore empty with ${stamps.size} known sources: removals skipped")
             return false
         }
         val now = System.currentTimeMillis()
@@ -275,7 +275,7 @@ class MediaStoreIndexer @Inject constructor(
         }
         val plan = planRemovals(candidates, stamps.size, fullAccess, now)
         if (plan.massRemovalBlocked) {
-            Log.w(TAG, "Frein anti-suppression : ${plan.delete.size + plan.hide.size} sources absentes masquées")
+            Log.w(TAG, "Mass-deletion brake: ${plan.delete.size + plan.hide.size} missing sources hidden")
         }
         val toHide = plan.hide.filter { it.missingSince == null }
         for (chunk in toHide.chunked(BATCH_SIZE)) {
@@ -295,8 +295,8 @@ class MediaStoreIndexer @Inject constructor(
     }
 
     /**
-     * Accès complet : distingue une disparition réelle d'un élément seulement invisible
-     * (corbeille, en attente — relus avec MATCH_INCLUDE) ou situé sur un volume démonté.
+     * Full access: tells a real disappearance apart from an item that is merely invisible
+     * (trashed, pending — re-read with MATCH_INCLUDE) or located on an unmounted volume.
      */
     private fun classifyAbsent(absent: List<SourceStamp>, now: Long): List<MissingCandidate> {
         val attachedVolumes = runCatching { MediaStore.getExternalVolumeNames(context) }.getOrNull()
@@ -319,8 +319,8 @@ class MediaStoreIndexer @Inject constructor(
             val parsed = parseExternalId(s.externalId)
             val volumeDetached = s.volumeName != null && attachedVolumes != null && s.volumeName !in attachedVolumes
             val verdict = when {
-                // Source en attente de ré-identification (changement de version MediaStore) :
-                // invérifiable, purgée seulement après le délai de grâce.
+                // Source awaiting re-identification (MediaStore version change):
+                // unverifiable, purged only after the grace period.
                 parsed == null ->
                     if (s.missingSince != null && now - s.missingSince >= MISSING_GRACE_MS && !volumeDetached) {
                         MissingVerdict.GONE
@@ -360,7 +360,7 @@ class MediaStoreIndexer @Inject constructor(
         runCatching { MediaStore.getVersion(context) }.getOrNull()
     }
 
-    /** Génération MediaStore courante (maximum sur les volumes externes montés), ou null. */
+    /** Current MediaStore generation (maximum across mounted external volumes), or null. */
     private fun currentGeneration(): Long? = runCatching {
         MediaStore.getExternalVolumeNames(context)
             .mapNotNull { volume -> runCatching { MediaStore.getGeneration(context, volume) }.getOrNull() }
@@ -381,7 +381,7 @@ class MediaStoreIndexer @Inject constructor(
         } ?: error("MediaStore query returned null for ${collection.uri}")
     }
 
-    /** Lit les lignes et les écrit par lots. Renvoie la plus grande génération rencontrée. */
+    /** Reads the rows and writes them in batches. Returns the highest generation seen. */
     private suspend fun queryAndWrite(
         collection: StoreCollection,
         selection: String?,
@@ -450,7 +450,7 @@ class MediaStoreIndexer @Inject constructor(
                 val source = existing[externalId]
                 val entity = source?.let { media[it.mediaId] }
                 if (source != null && entity != null) {
-                    // Relecture complète avec la même version : inutile de réécrire l'inchangé.
+                    // Full re-read with the same version: no need to rewrite what is unchanged.
                     if (full && source.missingSince == null && source.generation == row.generation &&
                         source.uri == row.uri && source.dateModified == row.dateModified &&
                         source.relativePath == row.relativePath && source.volumeName == row.volumeName
@@ -462,8 +462,8 @@ class MediaStoreIndexer @Inject constructor(
                     touched += entity.id
                 } else {
                     if (source != null) sourceDao.deleteByIds(listOf(source.id))
-                    // Après un changement de version MediaStore : ré-association par empreinte au
-                    // média existant, pour conserver favoris, albums et position de lecture.
+                    // After a MediaStore version change: re-match to the existing media by
+                    // fingerprint, to keep favorites, albums and playback position.
                     val match = stale.take(localFingerprint(row.relativePath, row.displayName, row.sizeBytes))
                     val staleSource = match?.let { sourceDao.getById(it.id) }
                     val staleMedia = match?.let { mediaDao.getById(it.mediaId) }
@@ -483,10 +483,9 @@ class MediaStoreIndexer @Inject constructor(
     }
 
     /**
-     * Albums-dossiers : création / mise à jour depuis les sources. Un dossier dont le bucket a
-     * disparu n'est jamais supprimé s'il porte une personnalisation (nom, épingle, couverture,
-     * masquage) ; sinon il n'est nettoyé qu'en accès complet. La liste des albums masque déjà
-     * les dossiers vides.
+     * Folder albums: created / updated from the sources. A folder whose bucket has disappeared
+     * is never deleted if it carries a customization (name, pin, cover, hidden); otherwise it is
+     * only cleaned up with full access. The album list already hides empty folders.
      */
     private suspend fun syncFolderAlbums(fullAccess: Boolean) {
         db.withTransaction {
@@ -504,7 +503,7 @@ class MediaStoreIndexer @Inject constructor(
                     ?: context.getString(R.string.data_folder_unnamed)
                 val album = byKey[key]
                 if (album == null) {
-                    // Un album d'un autre type (ex. ancien) peut déjà porter cette clé unique.
+                    // An album of another type (e.g. a legacy one) may already hold this unique key.
                     if (albumDao.getBySourceKey(key) != null) continue
                     albumDao.insert(
                         AlbumEntity(
@@ -525,7 +524,7 @@ class MediaStoreIndexer @Inject constructor(
 
     // ------------------------------------------------------------------------------------
 
-    /** Sources en attente de ré-identification, indexées par empreinte (consommées une à une). */
+    /** Sources awaiting re-identification, indexed by fingerprint (consumed one by one). */
     private class StaleMatcher(rows: List<StaleSourceRow>) {
         private val byFingerprint: MutableMap<String, ArrayDeque<StaleSourceRow>> = HashMap<String, ArrayDeque<StaleSourceRow>>().apply {
             for (r in rows) getOrPut(localFingerprint(r.relativePath, r.displayName, r.sizeBytes)) { ArrayDeque() }.addLast(r)
@@ -629,7 +628,7 @@ class MediaStoreIndexer @Inject constructor(
             volumeName = volumeName,
         )
 
-        /** Met à jour une source existante ; elle redevient visible. */
+        /** Updates an existing source; it becomes visible again. */
         fun applyTo(s: MediaSourceEntity) = s.copy(
             uri = uri,
             bucketKey = bucketKey,

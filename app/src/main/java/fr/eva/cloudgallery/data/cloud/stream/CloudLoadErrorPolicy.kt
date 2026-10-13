@@ -9,11 +9,11 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import fr.eva.cloudgallery.domain.model.CloudStreamException
 
 /**
- * Nouvelles tentatives du streaming OneDrive :
- * - statut 401/403/404/410 de l'hôte de téléchargement : URL oubliée, puis politique par défaut
- *   (la tentative suivante obtient une nouvelle URL) ;
- * - reconnexion nécessaire, élément supprimé ou limitation Graph : échec immédiat ;
- * - autres erreurs : politique par défaut de Media3.
+ * Retries for OneDrive streaming:
+ * - 401/403/404/410 status from the download host: URL forgotten, then default policy
+ *   (the next attempt obtains a new URL);
+ * - sign-in required, item deleted or Graph throttling: immediate failure;
+ * - other errors: Media3's default policy.
  */
 @OptIn(UnstableApi::class)
 class CloudLoadErrorPolicy(private val resolver: OneDriveStreamResolver) : DefaultLoadErrorHandlingPolicy() {

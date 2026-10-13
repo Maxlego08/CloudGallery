@@ -15,11 +15,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Client MSAL « compte unique », créé une seule fois et à la demande (jamais au démarrage).
+ * "Single account" MSAL client, created only once and on demand (never at startup).
  *
- * La configuration JSON est générée depuis BuildConfig puis écrite dans `noBackupFilesDir`
- * (jamais sauvegardé), et transmise à la fabrique bloquante de MSAL, interdite sur le thread
- * principal : tout se passe sur le dispatcher d'E/S.
+ * The JSON configuration is generated from BuildConfig, then written to `noBackupFilesDir`
+ * (never backed up) and passed to MSAL's blocking factory, which is forbidden on the main
+ * thread: everything happens on the I/O dispatcher.
  */
 @Singleton
 class MsalClientProvider @Inject constructor(
@@ -32,10 +32,10 @@ class MsalClientProvider @Inject constructor(
     @Volatile
     private var client: ISingleAccountPublicClientApplication? = null
 
-    /** @throws IllegalStateException si OneDrive n'est pas configuré dans ce build. */
+    /** @throws IllegalStateException if OneDrive is not configured in this build. */
     suspend fun get(): ISingleAccountPublicClientApplication {
         client?.let { return it }
-        check(feature.enabled) { "MSAL non configuré dans ce build" }
+        check(feature.enabled) { "MSAL not configured in this build" }
         return mutex.withLock {
             client ?: withContext(io) {
                 val file = writeConfig()
@@ -44,7 +44,7 @@ class MsalClientProvider @Inject constructor(
         }
     }
 
-    /** Ecrit la configuration seulement si son contenu a changé. */
+    /** Writes the configuration only if its content changed. */
     private fun writeConfig(): File {
         val json = buildMsalConfigJson(feature.clientId, feature.redirectUri)
         val file = File(context.noBackupFilesDir, CONFIG_FILE_NAME)

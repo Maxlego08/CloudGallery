@@ -1,544 +1,538 @@
 # TODO — CloudGallery
 
-Ce qui reste à faire après les phases 1 à 3 (galerie locale MediaStore, OneDrive en lecture seule).
-Les cases cochées sont déjà faites. Règles qui s'appliquent à toutes les phases :
+What remains to be done after phases 1 to 3 (local MediaStore gallery, read-only OneDrive).
+Checked boxes are already done. Rules that apply to every phase:
 
-- aucun fichier de l'utilisateur n'est supprimé sans confirmation explicite ;
-- aucune fonction factice (un bouton absent vaut mieux qu'un bouton qui ne fait rien) ;
-- aucune entrée/sortie sur le thread principal ;
-- uniquement des API documentées et vérifiées.
+- no user file is deleted without explicit confirmation;
+- no dummy feature (a missing button is better than a button that does nothing);
+- no I/O on the main thread;
+- only documented and verified APIs.
 
 ---
 
-## Prochaines actions immédiates (avant la phase 3)
+## Immediate next actions (before phase 3)
 
-- [ ] Installer sur le Galaxy S22 et tester sur la vraie bibliothèque :
+- [ ] Install on the Galaxy S22 and test on the real library:
       `D:\AndroidSDK\platform-tools\adb.exe install -r app\build\outputs\apk\debug\app-debug.apk`.
-      Vérifier les permissions (complet, partiel, refus), la première indexation, le défilement,
-      le zoom de la grille, la sélection, la suppression vers la corbeille, la rotation, le
-      recadrage, le lecteur vidéo et l'ouverture depuis une autre application.
-- [ ] Lancer les tests sur appareil : `gradlew connectedDebugAndroidTest` (`MediaDaoTest`).
-- [ ] Fournir les captures Samsung Galerie listées en phase 7, puis corriger les écarts visuels.
-- [x] Fournir le **Client ID** Microsoft Entra (comptes personnels) et le hachage de signature
-      pour l'URI de redirection MSAL : c'est le prérequis de la phase 3 (dans `local.properties`).
+      Check permissions (full, partial, denied), first indexing, scrolling, grid zoom,
+      selection, deletion to the trash, rotation, cropping, the video player and opening from
+      another app.
+- [ ] Run the on-device tests: `gradlew connectedDebugAndroidTest` (`MediaDaoTest`).
+- [ ] Provide the Samsung Gallery screenshots listed in phase 7, then fix the visual differences.
+- [x] Provide the Microsoft Entra **Client ID** (personal accounts) and the signature hash for
+      the MSAL redirect URI: this is the prerequisite for phase 3 (in `local.properties`).
 
-## Phase 3 — OneDrive : authentification, Graph, delta, miniatures
+## Phase 3 — OneDrive: authentication, Graph, delta, thumbnails
 
-### Authentification (MSAL)
-- [x] Inscrire l'application dans Microsoft Entra : comptes personnels, plateforme Android,
+### Authentication (MSAL)
+- [x] Register the application in Microsoft Entra: personal accounts, Android platform,
       `msauth://fr.eva.cloudgallery/<hash>`, scopes `Files.Read`, `User.Read`, `offline_access`
-      (procédure dans le README).
-- [x] Ajouter la dépendance MSAL (8.5.0, dépôt Duo SDK en `exclusiveContent` pour `display-mask`)
-      et la déclarer dans `libs.versions.toml`.
-- [x] Lire le client ID et le hachage de signature depuis `local.properties` (ou une propriété
-      Gradle), puis les exposer via `BuildConfig` et le placeholder du manifeste. Sans valeurs
-      valides, le build réussit et OneDrive est masqué.
-- [x] Générer la configuration MSAL (`account_mode SINGLE`, audience `PersonalMicrosoftAccount`,
-      fichier écrit à l'exécution dans `noBackupFilesDir`) et déclarer `BrowserTabActivity` dans le
-      manifeste.
-- [x] Gérer la connexion, la déconnexion et l'expiration (`acquireTokenSilent`, puis
-      « Reconnexion requise » si `MsalUiRequiredException`). Écran « Compte OneDrive » dans Menu et
-      Paramètres, à la place de « Disponible dans une prochaine version ».
-- [x] Décider du sort des données OneDrive à la déconnexion, avec confirmation : purger les sources
-      `ONEDRIVE`, les albums OneDrive et les miniatures en cache, sans toucher aux fichiers locaux.
-- [x] Exclure les fichiers de jetons MSAL des sauvegardes Android (`backup_rules.xml`,
+      (procedure in the README).
+- [x] Add the MSAL dependency (8.5.0, Duo SDK repository as `exclusiveContent` for `display-mask`)
+      and declare it in `libs.versions.toml`.
+- [x] Read the client ID and signature hash from `local.properties` (or a Gradle property),
+      then expose them via `BuildConfig` and the manifest placeholder. Without valid values, the
+      build succeeds and OneDrive is hidden.
+- [x] Generate the MSAL configuration (`account_mode SINGLE`, audience `PersonalMicrosoftAccount`,
+      file written at runtime in `noBackupFilesDir`) and declare `BrowserTabActivity` in the
+      manifest.
+- [x] Handle sign-in, sign-out and expiration (`acquireTokenSilent`, then "Sign-in required" on
+      `MsalUiRequiredException`). "OneDrive account" screen in Menu and Settings, replacing
+      "Available in a future version".
+- [x] Decide what happens to OneDrive data on sign-out, with confirmation: purge the `ONEDRIVE`
+      sources, the OneDrive albums and the cached thumbnails, without touching local files.
+- [x] Exclude the MSAL token files from Android backups (`backup_rules.xml`,
       `data_extraction_rules.xml`).
 
-### Client Microsoft Graph
-- [x] Client HTTP (OkHttp 5.5.0, créé au premier appel sur le thread d'E/S), sérialisation avec
-      kotlinx-serialization, jeton `Bearer` envoyé uniquement à `graph.microsoft.com`.
-- [x] `GET /me/drive/root/delta` (tout le OneDrive) avec un `$select` explicite. Suivre
-      `@odata.nextLink` et enregistrer `@odata.deltaLink` dans `sync_cursor`
-      (`provider = "onedrive"`), lié au `drive.id` et à la version du `$select`.
-- [x] Gérer `410 Gone` (deltaLink expiré) par une resynchronisation complète, avec les règles de
-      masquage plutôt que de suppression (`planCloudRemovals`).
-- [x] Respecter `429` / `503` + `Retry-After`, avec backoff exponentiel plafonné, pause globale de
-      toutes les requêtes et sans parallélisme excessif.
-- [x] Traiter les éléments `deleted` : masquer la source puis la purger après 30 jours. Le fichier
-      local correspondant n'est jamais supprimé. Dossiers supprimés traités en fin de passage.
-- [x] Filtrer les éléments sans facette `file`, et ne garder que les MIME image/vidéo.
-- [x] Écrire des sources `ONEDRIVE` (`externalId`, `bucketKey = onedrive:<parentId>`, `eTag`,
-      `cTag`, `quickXorHash`, `sha1Hash` si disponible), mettre à jour `hasCloud` /
-      `refreshSourceFlags` et créer les albums-dossiers OneDrive (badge « Album OneDrive »).
-- [x] Choisir la date à afficher : `photo.takenDateTime`, puis `fileSystemInfo.createdDateTime`,
-      puis `createdDateTime`.
-- [x] Changement de compte Microsoft : synchro suspendue et remplacement des données seulement
-      après confirmation.
-- [x] Réglage « Afficher les éléments OneDrive dans Photos » (désactivé par défaut) pour éviter les
-      doublons dans Photos et Vidéos avant le dédoublonnage.
+### Microsoft Graph client
+- [x] HTTP client (OkHttp 5.5.0, created on first call on the I/O thread), serialization with
+      kotlinx-serialization, `Bearer` token sent only to `graph.microsoft.com`.
+- [x] `GET /me/drive/root/delta` (the whole OneDrive) with an explicit `$select`. Follow
+      `@odata.nextLink` and store `@odata.deltaLink` in `sync_cursor`
+      (`provider = "onedrive"`), tied to the `drive.id` and to the `$select` version.
+- [x] Handle `410 Gone` (expired deltaLink) with a full resync, using hide-rather-than-delete
+      rules (`planCloudRemovals`).
+- [x] Honor `429` / `503` + `Retry-After`, with capped exponential backoff, a global pause of
+      all requests and no excessive parallelism.
+- [x] Process `deleted` items: hide the source, then purge it after 30 days. The matching local
+      file is never deleted. Deleted folders are processed at the end of the pass.
+- [x] Filter out items without a `file` facet, and keep only image/video MIME types.
+- [x] Write `ONEDRIVE` sources (`externalId`, `bucketKey = onedrive:<parentId>`, `eTag`,
+      `cTag`, `quickXorHash`, `sha1Hash` if available), update `hasCloud` /
+      `refreshSourceFlags` and create the OneDrive folder albums ("OneDrive album" badge).
+- [x] Choose the date to display: `photo.takenDateTime`, then `fileSystemInfo.createdDateTime`,
+      then `createdDateTime`.
+- [x] Microsoft account change: sync suspended and data replaced only after confirmation.
+- [x] "Show OneDrive items in Photos" setting (disabled by default) to avoid duplicates in
+      Photos and Videos before deduplication.
 
-### Miniatures
-- [x] Ajouter un `Fetcher`/`Keyer` Coil pour les miniatures Graph
-      (`/items/{id}/thumbnails/0/{taille}/content`), avec la clé de cache fondée sur `cTag`, des
-      tailles personnalisées `c{n}x{n}_crop` (repli sur les tailles standard) et le cache disque
-      partagé de l'ImageLoader.
-- [x] Afficher les miniatures dans la grille, les couvertures d'album, la bande de miniatures et le
-      sélecteur d'album, avec un indicateur de source cloud seulement sur la cellule.
-- [x] Aperçu OneDrive dans la visionneuse (sans zoom, badge vidéo), actions sur fichier local
-      masquées ou désactivées pour les éléments présents uniquement sur OneDrive.
-- [x] État de la synchro OneDrive dans le Menu et les Paramètres.
-- [x] Migration Room 2→3 (`media.cloudItemId`, `media.cloudCTag`, table `cloud_folder`), schéma
-      exporté, `MigrationTest` (2→3 et 1→3).
+### Thumbnails
+- [x] Add a Coil `Fetcher`/`Keyer` for Graph thumbnails
+      (`/items/{id}/thumbnails/0/{size}/content`), with a cache key based on `cTag`, custom
+      `c{n}x{n}_crop` sizes (falling back to the standard sizes) and the ImageLoader's shared
+      disk cache.
+- [x] Show thumbnails in the grid, album covers, the filmstrip and the album picker, with a
+      cloud source indicator on the cell only.
+- [x] OneDrive preview in the viewer (no zoom, video badge), local-file actions hidden or
+      disabled for items that exist only on OneDrive.
+- [x] OneDrive sync state in the Menu and Settings.
+- [x] Room migration 2→3 (`media.cloudItemId`, `media.cloudCTag`, `cloud_folder` table), schema
+      exported, `MigrationTest` (2→3 and 1→3).
 
-### Vérifications sur l'appareil (phase 3)
-Détail dans le README (« Vérifications sur l'appareil : OneDrive ») :
-- [ ] Lancer `gradlew connectedDebugAndroidTest` (`MigrationTest`, `CloudSyncWriterTest`,
-      `CloudDataPurgerTest`, `MediaDaoTest`) : compilés, pas encore exécutés.
-- [ ] Connexion par l'onglet de navigateur, compte conservé après un arrêt forcé, reconnexion,
-      déconnexion. Vérifier que `broker_redirect_uri_registered=false` garde l'onglet de
-      navigateur même si Microsoft Authenticator est installé.
-- [ ] Supprimer une photo et un dossier de test sur OneDrive (web) : vérifier que `deleted`,
-      `root`, `parentReference.id`, `file.hashes.quickXorHash` et `photo` reviennent bien avec le
-      `$select` (sinon modifier `DELTA_SELECT` et incrémenter `DELTA_SELECT_VERSION`), et que Graph
-      accepte le `$select` littéral avec virgules.
-- [ ] Tailles de miniatures personnalisées `c{n}x{n}_crop` et `c1600x1600` acceptées en segment de
-      chemin, et redirection des miniatures sans authentification.
-- [ ] Renommage, déplacement et restauration de dossier depuis la corbeille OneDrive, y compris
-      un dossier dont les photos sont dans un sous-dossier : vérifier si la requête delta renvoie
-      chaque descendant restauré (si oui, la détection large « dossier retiré de l'index » pourrait
-      être resserrée pour éviter des énumérations complètes inutiles).
-- [ ] Connexion à un autre compte Microsoft : carte « Autre compte OneDrive », rien de purgé avant
-      confirmation.
-- [ ] Logcat sans jeton, deltaLink ni nom de compte ; OkHttp 5.5.0 et TLS sur l'appareil.
-- [ ] `adb shell run-as fr.eva.cloudgallery ls -R shared_prefs files app_fr.eva.cloudgallery` :
-      noms des fichiers MSAL (dont `app_fr.eva.cloudgallery/adalks`) conformes aux exclusions de
-      sauvegarde.
-- [ ] Déconnexion pendant le chargement de miniatures sur réseau lent : le compte reste « Non
-      connecté » et aucune synchro ne repart.
+### On-device checks (phase 3)
+Details in the README ("On-device checks: OneDrive"):
+- [ ] Run `gradlew connectedDebugAndroidTest` (`MigrationTest`, `CloudSyncWriterTest`,
+      `CloudDataPurgerTest`, `MediaDaoTest`): compiled, not yet run.
+- [ ] Sign-in through the browser tab, account kept after a force stop, re-sign-in, sign-out.
+      Check that `broker_redirect_uri_registered=false` keeps the browser tab even if
+      Microsoft Authenticator is installed.
+- [ ] Delete a test photo and folder on OneDrive (web): check that `deleted`, `root`,
+      `parentReference.id`, `file.hashes.quickXorHash` and `photo` do come back with the
+      `$select` (otherwise change `DELTA_SELECT` and increment `DELTA_SELECT_VERSION`), and that
+      Graph accepts the literal `$select` with commas.
+- [ ] Custom thumbnail sizes `c{n}x{n}_crop` and `c1600x1600` accepted as a path segment, and
+      thumbnail redirects without authentication.
+- [ ] Rename, move and restore a folder from the OneDrive recycle bin, including a folder whose
+      photos are in a subfolder: check whether the delta request returns every restored
+      descendant (if so, the broad "folder removed from the index" detection could be tightened
+      to avoid needless full enumerations).
+- [ ] Sign-in to another Microsoft account: "Different OneDrive account" card, nothing purged
+      before confirmation.
+- [ ] Logcat without token, deltaLink or account name; OkHttp 5.5.0 and TLS on the device.
+- [ ] `adb shell run-as fr.eva.cloudgallery ls -R shared_prefs files app_fr.eva.cloudgallery`:
+      MSAL file names (including `app_fr.eva.cloudgallery/adalks`) match the backup
+      exclusions.
+- [ ] Sign-out while thumbnails are loading on a slow network: the account stays "Not signed
+      in" and no sync restarts.
 
-## Phase 4 — Streaming, aperçus adaptatifs, téléchargements hors ligne
+## Phase 4 — Streaming, adaptive previews, offline downloads
 
-- [x] Visionneuse : miniature puis aperçu OneDrive dans `CloudOnlyPage` (`ui/viewer/ViewerPages.kt`),
-      fait en phase 3.
-- [x] Visionneuse : original OneDrive au zoom profond (téléchargement à la demande, automatique sur
-      réseau non facturé, pastille « Charger l'original (x Mo) » sinon, réglage « Charger les
-      originaux sur réseau mobile »), `CloudOriginalStore` + `CdnDownloader`, aperçu zoomable.
-- [x] Choisir le niveau d'aperçu selon la taille de l'écran, l'image et le réseau (paliers 1600 /
-      2048, 1600 au plus sur réseau facturé, palier refusé par Graph abandonné).
-- [x] Ajouter `PlaybackSource.Remote` (`ui/video/PlaybackSource.kt`) : URL temporaire
-      `@microsoft.graph.downloadUrl`, `ResolvingDataSource` au-dessus de `DefaultHttpDataSource`
-      (HTTP Range pour le seek) et renouvellement de l'URL à son expiration (`data/cloud/stream/`,
-      `CloudDownloadUrlProvider`, garde d'accès commune `CloudAccessGuard`, journal Media3 expurgé
-      des URL).
-- [x] Lire en priorité une copie `OFFLINE_COPY` quand elle existe (`PlaybackSource.Offline`, copie
-      vérifiée hors du thread principal ; « Ouvrir avec » par le FileProvider).
-- [x] Vérifier que Media3 1.11.1 renvoie bien `ERROR_CODE_IO_*` pour les erreurs réseau (vérifié
-      dans le bytecode : 2001/2002 réseau, 2004 statut HTTP, 2000 pour une erreur du résolveur), et
-      ajouter les messages correspondants (réseau, lien, connexion requise, limitation, introuvable).
-- [x] État du réseau par défaut (`data/net/NetworkStatus`) : mesuré ou non, économiseur de données
-      (compté comme mesuré), état inconnu traité comme facturé. Utilisé par les aperçus et
-      téléchargements des tranches suivantes.
-- [x] Partage et « Ouvrir avec » d'un média cloud : téléchargement de l'original (progression
-      annulable, 20 éléments / 500 Mo), `CloudGalleryFileProvider`, CloudGallery exclue du sélecteur.
-- [x] Base v4 (`cached_file.version`, `download_task.cloudItemId` / `cTag` / `attempts`), schéma
-      exporté, `MigrationTest` 3→4, 2→4, 1→4 ; cache temporaire des originaux (1 Go, 7 jours,
-      nettoyage au démarrage) ; purge des originaux à la déconnexion (`CloudDataGeneration`).
-- [x] Message de dépassement des plafonds de partage (`share_cloud_too_large`, `share_cloud_too_many`)
-      qui propose « Conserver hors ligne » ; copies hors ligne partagées sans téléchargement.
-- [ ] Lire l'EXIF d'un original téléchargé (panneau Détails) sans passer par `MediaStore.setRequireOriginal`.
-- [x] Téléchargements hors ligne : file `download_task` (reprise par Range, progression, annulation,
-      pause après un arrêt par l'utilisateur, erreurs codées), tâche JobScheduler lancée par
-      l'utilisateur (`OfflineTransferJobService`), notification avec « Annuler ». Une copie terminée
-      (`filesDir/offline/`, exclue des sauvegardes) devient une source `OFFLINE_COPY` et marque
-      `hasOffline` ; enregistrement revérifié (purge, libération, version).
-- [x] Action « Conserver hors ligne » / « Libérer l'espace » (`pinned`) depuis la visionneuse et en
-      sélection multiple ; autorisation des notifications au premier usage ; gros lot (200 éléments /
-      1 Go) confirmé ; espace insuffisant (écran système) ; réglage « Wi-Fi uniquement » et
-      « Télécharger maintenant » ; section « Hors ligne » de l'écran Compte.
-- [x] Nouvelle version d'un élément conservé : nouveau téléchargement, l'ancienne copie reste jusqu'au
-      remplacement ; original temporaire périmé retiré.
-- [x] Déconnexion, purge des données restantes, changement de compte : moteur arrêté, copies
-      supprimées, confirmation avec le nombre de copies et de dernières copies (D3).
-- [x] Élément supprimé de OneDrive (D1) : copie masquée avec lui, jamais purgée sans décision après
-      30 jours ; carte de l'écran Compte et pastille du Menu (« Supprimer les copies » /
-      « Les conserver ») ; copie conservée visible, « Libérer » avec confirmation de dernière copie ;
-      élément revenu rattaché au même média.
-- [x] Corrections de la revue de la phase 4 : décision D1 limitée à la liste confirmée et revérifiée
-      dans la transaction ; dernières copies comptées copies masquées comprises et « Libérer »
-      abandonné si le compte échoue ; confirmations de purge désactivées tant que le nombre de copies
-      n'est pas lu (avertissement prudent en cas d'échec) ; « Télécharger maintenant » limité aux
-      tâches en file à cet instant ; réglage « Wi-Fi uniquement » appliqué aussitôt (replanification,
-      réseau vérifié avant chaque élément) ; `allocateBytes` appelé quand l'espace libre manque mais
-      est obtenable (copies et originaux) ; pause au démarrage seulement après un arrêt pendant un
-      téléchargement ; fin de travail revérifiée (`OfflineJobTracker`) ; « Libérer » / « Annuler »
-      de l'élément en cours sans arrêter le passage ; contenu plus récent que l'index en attente de
-      la synchro ; version redemandée à Graph avant une reprise Range ; mise à jour arrêtée
-      signalée et reprenable ; original jamais écrasé avant l'enregistrement du suivant ; nettoyage
-      des originaux conditionnel ; aperçu choisi une fois le réseau connu ; zoom haute résolution
-      avec les dimensions du fichier ; aperçu en cache seulement pour une copie hors ligne ; zoom
-      profond sans compte signalé ; sign-out en échec : file relancée après la fin de l'état
-      « déconnexion » ; tests `OfflineRepositoryTest`, `OfflineJobTrackerTest`,
-      `CloudOriginalLogicTest`.
+- [x] Viewer: thumbnail then OneDrive preview in `CloudOnlyPage` (`ui/viewer/ViewerPages.kt`),
+      done in phase 3.
+- [x] Viewer: OneDrive original on deep zoom (on-demand download, automatic on an unmetered
+      network, "Load original (x MB)" chip otherwise, "Load originals on mobile network"
+      setting), `CloudOriginalStore` + `CdnDownloader`, zoomable preview.
+- [x] Choose the preview tier from the screen size, the image and the network (tiers 1600 /
+      2048, at most 1600 on a metered network, tier rejected by Graph dropped).
+- [x] Add `PlaybackSource.Remote` (`ui/video/PlaybackSource.kt`): temporary
+      `@microsoft.graph.downloadUrl` URL, `ResolvingDataSource` on top of `DefaultHttpDataSource`
+      (HTTP Range for seeking) and URL renewal on expiry (`data/cloud/stream/`,
+      `CloudDownloadUrlProvider`, shared access guard `CloudAccessGuard`, Media3 log scrubbed of
+      URLs).
+- [x] Play an `OFFLINE_COPY` first when one exists (`PlaybackSource.Offline`, copy checked off
+      the main thread; "Open with" through the FileProvider).
+- [x] Check that Media3 1.11.1 does return `ERROR_CODE_IO_*` for network errors (checked in the
+      bytecode: 2001/2002 network, 2004 HTTP status, 2000 for a resolver error), and add the
+      matching messages (network, link, sign-in required, throttling, not found).
+- [x] Default network state (`data/net/NetworkStatus`): metered or not, data saver (counted as
+      metered), unknown state treated as metered. Used by the previews and downloads of the
+      following slices.
+- [x] Share and "Open with" for a cloud media item: download of the original (cancellable
+      progress, 20 items / 500 MB), `CloudGalleryFileProvider`, CloudGallery excluded from the
+      chooser.
+- [x] Database v4 (`cached_file.version`, `download_task.cloudItemId` / `cTag` / `attempts`), schema
+      exported, `MigrationTest` 3→4, 2→4, 1→4; temporary cache of originals (1 GB, 7 days,
+      cleanup at startup); originals purged on sign-out (`CloudDataGeneration`).
+- [x] Message when the share caps are exceeded (`share_cloud_too_large`, `share_cloud_too_many`)
+      offering "Keep offline"; offline copies shared without downloading.
+- [ ] Read the EXIF of a downloaded original (Details panel) without going through `MediaStore.setRequireOriginal`.
+- [x] Offline downloads: `download_task` queue (Range resume, progress, cancellation, pause
+      after a stop by the user, coded errors), user-initiated JobScheduler job
+      (`OfflineTransferJobService`), notification with "Cancel". A finished copy
+      (`filesDir/offline/`, excluded from backups) becomes an `OFFLINE_COPY` source and sets
+      `hasOffline`; registration re-checked (purge, release, version).
+- [x] "Keep offline" / "Free up space" action (`pinned`) from the viewer and in multi-selection;
+      notification permission on first use; large batch (200 items / 1 GB) confirmed;
+      insufficient space (system screen); "Wi-Fi only" setting and "Download now"; "Offline"
+      section of the Account screen.
+- [x] New version of a kept item: new download, the old copy remains until replaced; stale
+      temporary original removed.
+- [x] Sign-out, purge of leftover data, account change: engine stopped, copies deleted,
+      confirmation with the number of copies and of last copies (D3).
+- [x] Item deleted from OneDrive (D1): copy hidden along with it, never purged without a decision
+      after 30 days; Account screen card and Menu badge ("Delete the copies" /
+      "Keep them"); kept copy visible, "Free up" with last-copy confirmation; item that comes
+      back re-attached to the same media item.
+- [x] Phase 4 review fixes: D1 decision limited to the confirmed list and re-checked in the
+      transaction; last copies counted including hidden copies, and "Free up" abandoned if the
+      count fails; purge confirmations disabled until the number of copies is read (cautious
+      warning on failure); "Download now" limited to the tasks queued at that moment; "Wi-Fi
+      only" setting applied right away (rescheduling, network checked before each item);
+      `allocateBytes` called when free space is lacking but obtainable (copies and originals);
+      pause at startup only after a stop during a download; end of work re-checked
+      (`OfflineJobTracker`); "Free up" / "Cancel" of the current item without stopping the pass;
+      content newer than the index waits for the sync; version re-requested from Graph before a
+      Range resume; stopped update reported and resumable; original never overwritten before
+      the next one is saved; conditional cleanup of originals; preview chosen once the network
+      is known; high-resolution zoom with the file dimensions; cached preview only for an
+      offline copy; deep zoom without an account reported; failed sign-out: queue restarted
+      after the "signing out" state ends; tests `OfflineRepositoryTest`,
+      `OfflineJobTrackerTest`, `CloudOriginalLogicTest`.
 
-### Vérifications sur l'appareil (phase 4)
-Détail dans le README (« Vérifications sur l'appareil : streaming OneDrive ») :
-- [x] `@microsoft.graph.downloadUrl` absent avec `$select` sur OneDrive personnel : requête sans
-      `$select` (réponse complète), originaux, vidéo et téléchargements vérifiés sur l'appareil.
-- [ ] Réponse 206 de l'hôte de téléchargement aux requêtes Range (seek rapide).
-- [ ] Statut HTTP renvoyé pour une URL expirée (401, 403, 404 ou 410 attendus) et durée de
-      validité réelle (URL réutilisée deux minutes au plus).
-- [ ] Logcat sans URL `files.1drv.com` ni `tempauth`, y compris après une erreur de lecture.
-- [ ] Taille d'aperçu `c2048x2048` acceptée par Graph et image réellement plus grande que
-      `c1600x1600` (sinon `CLOUD_PREVIEW_TIERS = [1600]`).
-- [ ] Original OneDrive de 50 Mpx affiché sans plantage (décodage réduit) ; orientation EXIF correcte.
-- [ ] Pastille « Charger l'original » en données mobiles et avec l'économiseur de données ;
-      chargement automatique en Wi-Fi.
-- [ ] Partage d'un original vers Gmail / Messages : nom OneDrive affiché ; « Ouvrir avec » sans
-      CloudGallery dans le sélecteur.
-- [ ] `connectedDebugAndroidTest` : `MigrationTest` (3→4, 2→4, 1→4), `CachedFileDaoTest`,
+### On-device checks (phase 4)
+Details in the README ("On-device checks: OneDrive streaming"):
+- [x] `@microsoft.graph.downloadUrl` missing with `$select` on personal OneDrive: request without
+      `$select` (full response), originals, video and downloads checked on the device.
+- [ ] 206 response from the download host to Range requests (fast seek).
+- [ ] HTTP status returned for an expired URL (401, 403, 404 or 410 expected) and actual
+      validity period (URL reused for two minutes at most).
+- [ ] Logcat without `files.1drv.com` or `tempauth` URLs, including after a playback error.
+- [ ] Preview size `c2048x2048` accepted by Graph and image actually larger than `c1600x1600`
+      (otherwise `CLOUD_PREVIEW_TIERS = [1600]`).
+- [ ] 50 MP OneDrive original displayed without crashing (downsampled decoding); correct EXIF
+      orientation.
+- [ ] "Load original" chip on mobile data and with the data saver; automatic loading on Wi-Fi.
+- [ ] Share an original to Gmail / Messages: OneDrive name shown; "Open with" without
+      CloudGallery in the chooser.
+- [ ] `connectedDebugAndroidTest`: `MigrationTest` (3→4, 2→4, 1→4), `CachedFileDaoTest`,
       `CloudDataPurgerTest`, `OfflineDaoTest`, `OfflineDownloadEngineTest`, `OfflineRepositoryTest`,
       `CloudSyncWriterTest`
-      (la suite instrumentée de la phase 3 n'a pas encore tourné non plus).
-- [ ] Copies hors ligne (détail dans le README, « Vérifications sur l'appareil : copies hors ligne ») :
-  - [ ] première demande d'autorisation des notifications, téléchargement aussi en cas de refus
-        (tâche visible dans le Gestionnaire de tâches) ;
-  - [ ] Wi-Fi uniquement : boîte « En attente du Wi-Fi », « Télécharger maintenant » en mobile,
-        économiseur de données compris ;
-  - [ ] passage du Wi-Fi au mobile en cours de téléchargement : arrêt, reprise au retour du Wi-Fi
-        (Range, fichier partiel gardé), jamais en mobile (`JobParameters.getNetwork`) ;
-  - [ ] VPN actif : la tâche démarre ;
-  - [ ] arrêt depuis le Gestionnaire de tâches : file en pause, aucune reprise automatique (vérifier
-        si `onStopJob` reçoit `STOP_REASON_USER` ou si le processus est tué : motif de sortie
-        `REASON_USER_REQUESTED` utilisé au redémarrage) ; appli balayée depuis les applis récentes
-        avec une file en attente du Wi-Fi : file toujours en attente à la réouverture ;
-  - [ ] « Télécharger maintenant » en mobile, puis nouvelle version trouvée par la synchro : la
-        nouvelle tâche attend le Wi-Fi ;
-  - [ ] « Wi-Fi uniquement » activé pendant un téléchargement en mobile : arrêt et attente du
-        Wi-Fi ; désactivé alors que la file attend le Wi-Fi : démarrage aussitôt ;
-  - [ ] « Libérer » de l'élément en cours de téléchargement : les suivants continuent ;
-  - [ ] espace presque plein avec du cache d'autres applis : copie de plusieurs Go menée à bien
-        (`allocateBytes`) ;
-  - [ ] redémarrage du téléphone avec une file en attente : reprise à l'ouverture suivante ;
-  - [ ] restrictions One UI « applis en veille » ;
-  - [ ] `parentReference.driveId` renvoyé par Graph comparé au lecteur de l'index (casse ignorée) ;
-  - [ ] nouvelle version sur OneDrive : retéléchargement, ancienne copie affichée jusque-là ;
-  - [ ] élément conservé supprimé sur OneDrive : masqué, carte au bout de 30 jours (horloge
-        avancée), « Les conserver » / « Supprimer les copies » ;
-  - [ ] déconnexion : `files/offline` vide, message avec le nombre de copies ;
-  - [ ] logcat sans URL ni nom de fichier ; `dumpsys jobscheduler` : tâche 4001 « user-initiated ».
+      (the phase 3 instrumented suite has not run yet either).
+- [ ] Offline copies (details in the README, "On-device checks: offline copies"):
+  - [ ] first notification permission request, download also when denied (task visible in the
+        Task manager);
+  - [ ] Wi-Fi only: "Waiting for Wi-Fi" dialog, "Download now" on mobile, data saver included;
+  - [ ] switch from Wi-Fi to mobile during a download: stop, resume when Wi-Fi returns (Range,
+        partial file kept), never on mobile (`JobParameters.getNetwork`);
+  - [ ] active VPN: the job starts;
+  - [ ] stop from the Task manager: queue paused, no automatic resume (check whether
+        `onStopJob` receives `STOP_REASON_USER` or the process is killed: exit reason
+        `REASON_USER_REQUESTED` used at restart); app swiped away from recent apps with a queue
+        waiting for Wi-Fi: queue still waiting when reopened;
+  - [ ] "Download now" on mobile, then new version found by the sync: the new task waits for
+        Wi-Fi;
+  - [ ] "Wi-Fi only" enabled during a mobile download: stop and wait for Wi-Fi; disabled while
+        the queue waits for Wi-Fi: starts right away;
+  - [ ] "Free up" on the item being downloaded: the following ones continue;
+  - [ ] storage almost full with other apps' cache: copy of several GB completed
+        (`allocateBytes`);
+  - [ ] phone reboot with a pending queue: resumed at the next opening;
+  - [ ] One UI "sleeping apps" restrictions;
+  - [ ] `parentReference.driveId` returned by Graph compared with the index drive (case
+        ignored);
+  - [ ] new version on OneDrive: re-download, old copy shown until then;
+  - [ ] kept item deleted on OneDrive: hidden, card after 30 days (clock moved forward),
+        "Keep them" / "Delete the copies";
+  - [ ] sign-out: `files/offline` empty, message with the number of copies;
+  - [ ] logcat without URL or file name; `dumpsys jobscheduler`: job 4001 "user-initiated".
 
-## Phase 5 — Cache LRU, page Stockage, synchro périodique
+## Phase 5 — LRU cache, Storage page, periodic sync
 
-Décisions (phase 5) : plafond des originaux 1 Go par défaut (500 Mo / 1 Go / 2 Go / 5 Go) ; cache
-Coil (miniatures et aperçus) séparé de `cached_file`, avec son propre plafond réglable ; synchro
-OneDrive de fond réglable (désactivée / 1 h / 6 h / 24 h, 6 h par défaut) ; en « OneDrive seul »,
-l'onglet Photos montre OneDrive quel que soit le réglage.
+Decisions (phase 5): originals cap 1 GB by default (500 MB / 1 GB / 2 GB / 5 GB); Coil cache
+(thumbnails and previews) separate from `cached_file`, with its own configurable cap; background
+OneDrive sync configurable (off / 1 h / 6 h / 24 h, 6 h by default); in "OneDrive only" mode,
+the Photos tab shows OneDrive regardless of the setting.
 
-- [x] Recenser les fichiers de cache : originaux et copies hors ligne dans `cached_file`
-      (`lastAccessAt` rafraîchi sur le dispatcher d'E/S) ; miniatures et aperçus dans le cache
-      disque Coil, qui a sa propre éviction LRU (décision : pas de ligne par miniature).
-- [x] Éviction LRU des originaux sous un plafond réglable (`AppSettings.originalsCacheMaxBytes`),
-      au démarrage et après chaque téléchargement (`CloudOriginalStore.requestTrim`). **Les lignes
-      `pinned` ne sont jamais évincées ni comptées** ; un original utilisé depuis moins de 30 min
-      (affiché, partagé) n'est pas évincé, le plafond pouvant être dépassé un moment.
-- [x] Page « Stockage » (Paramètres > Stockage, `ui/storage/`) : espace mesuré sur le disque par
-      niveau (miniatures et aperçus, originaux, copies hors ligne) et espace libre, plafonds des
-      originaux et des miniatures, « Vider le cache » (miniatures, aperçus, originaux ; jamais les
-      copies hors ligne) avec confirmation.
-- [x] Coil : cache disque séparé de `cached_file` (décision), plafond réglable 100 / 250 / 500 Mo /
-      1 Go (250 Mo par défaut, `ThumbnailCacheLimit`), appliqué au prochain démarrage.
-- [x] WorkManager périodique pour le delta OneDrive (`OneDriveSyncWorker`, `@HiltWorker`) :
-      Paramètres > Compte « Synchroniser en arrière-plan » (désactivée / 1 h / 6 h / 24 h, 6 h par
-      défaut) et « Synchroniser en Wi-Fi uniquement » ; batterie non faible ; planifié pour un
-      compte connecté, annulé à la déconnexion (`BackgroundSyncScheduler`) ; initialiseur
-      WorkManager par défaut retiré (`Configuration.Provider`).
-- [ ] Rattrapage MediaStore en arrière-plan (`ContentUriTrigger`) : pas fait, l'index local est déjà
-      rattrapé à chaque ouverture (`MediaSyncCoordinator`) ; utile seulement pour une future
-      fonction de fond qui lirait l'index local.
-- [x] Afficher l'état de synchro OneDrive dans Paramètres (dernier delta, erreurs, nombre
-      d'éléments) : fait en phase 3.
-- [x] Énumération complète OneDrive reprenable après un arrêt du processus ou une erreur : nextLink
-      et nombre de pages dans `cloud_sync.xml`, éléments vus journalisés page par page
-      (`noBackupFilesDir/onedrive_enumeration_seen.log`, `EnumerationResumeLogic`) ; reprise
-      refusée (départ du début) si autre lecteur, plus de 24 h, journal incomplet ou lien refusé.
-- [x] Usage « OneDrive seul » (reporté de la phase 4, décision D4) : « Utiliser OneDrive
-      seulement » sur l'écran d'autorisation (choix mémorisé, oublié dès qu'un accès est accordé) ;
-      onglets complets, OneDrive d'office dans Photos et Vidéos (`includeCloudOnlyInLibrary`,
-      `MediaAccessState`), bandeau « Photos du téléphone non autorisées — Autoriser », état vide
-      « Se connecter à OneDrive » sans compte.
-- [ ] Copies hors ligne : relancer automatiquement un nouveau téléchargement détecté par une synchro
-      en arrière-plan (aujourd'hui au premier plan seulement : la tâche lancée par l'utilisateur ne
-      peut être planifiée qu'appli visible) ; couvertures d'album et EXIF depuis la copie hors ligne.
-- [x] Marqueur de suppression des dossiers OneDrive (base v5, `cloud_folder.deletedAt`) : un dossier
-      supprimé (et ses dossiers intermédiaires) reste marqué tant que son sous-arbre a des éléments
-      masqués, puis est retiré après leur purge (`planFolderTombstones`). Seul un marqueur restauré
-      avec des éléments masqués déclenche une énumération complète ; un nouveau dossier n'en
-      déclenche plus (sauf éléments masqués orphelins d'avant la v5, jusqu'à leur purge). Le delta
-      limité au dossier restauré n'est pas utilisé (fusion avec le delta du lecteur non vérifiée).
-- [x] Changement de compte bloqué dès le démarrage : compte MSAL vérifié et « autre compte »
-      enregistrés (`CloudSyncThrottleStore`) ; `CloudAccessGuard` refuse tout accès à un compte non
-      vérifié ou après la détection d'un autre lecteur, sans attendre le premier passage, qui part
-      alors sans délai. Données d'avant la phase 5 (aucun compte vérifié) : accès permis jusqu'au
-      prochain passage, qui vérifie.
+- [x] Inventory the cache files: originals and offline copies in `cached_file`
+      (`lastAccessAt` refreshed on the I/O dispatcher); thumbnails and previews in the Coil disk
+      cache, which has its own LRU eviction (decision: no row per thumbnail).
+- [x] LRU eviction of originals under a configurable cap (`AppSettings.originalsCacheMaxBytes`),
+      at startup and after each download (`CloudOriginalStore.requestTrim`). **`pinned` rows are
+      never evicted or counted**; an original used less than 30 min ago (displayed, shared) is
+      not evicted, so the cap may be exceeded for a while.
+- [x] "Storage" page (Settings > Storage, `ui/storage/`): space measured on disk per tier
+      (thumbnails and previews, originals, offline copies) and free space, caps for originals
+      and thumbnails, "Clear cache" (thumbnails, previews, originals; never offline copies) with
+      confirmation.
+- [x] Coil: disk cache separate from `cached_file` (decision), configurable cap 100 / 250 / 500 MB /
+      1 GB (250 MB by default, `ThumbnailCacheLimit`), applied at the next start.
+- [x] Periodic WorkManager for the OneDrive delta (`OneDriveSyncWorker`, `@HiltWorker`):
+      Settings > Account "Sync in the background" (off / 1 h / 6 h / 24 h, 6 h by default) and
+      "Sync on Wi-Fi only"; battery not low; scheduled for a signed-in account, cancelled on
+      sign-out (`BackgroundSyncScheduler`); default WorkManager initializer removed
+      (`Configuration.Provider`).
+- [ ] Background MediaStore catch-up (`ContentUriTrigger`): not done, the local index is already
+      caught up at each opening (`MediaSyncCoordinator`); only useful for a future background
+      feature that would read the local index.
+- [x] Show the OneDrive sync state in Settings (last delta, errors, number of items): done in
+      phase 3.
+- [x] Full OneDrive enumeration resumable after a process kill or an error: nextLink and page
+      count in `cloud_sync.xml`, seen items logged page by page
+      (`noBackupFilesDir/onedrive_enumeration_seen.log`, `EnumerationResumeLogic`); resume
+      refused (start from the beginning) if another drive, more than 24 h, incomplete log or
+      link rejected.
+- [x] "OneDrive only" usage (postponed from phase 4, decision D4): "Use OneDrive only" on the
+      permission screen (choice remembered, forgotten as soon as access is granted); full tabs,
+      OneDrive by default in Photos and Videos (`includeCloudOnlyInLibrary`,
+      `MediaAccessState`), "Phone photos not allowed — Allow" banner, "Sign in to OneDrive"
+      empty state without an account.
+- [ ] Offline copies: automatically restart a new download detected by a background sync (today
+      in the foreground only: the user-initiated job can only be scheduled while the app is
+      visible); album covers and EXIF from the offline copy.
+- [x] Deletion marker for OneDrive folders (database v5, `cloud_folder.deletedAt`): a deleted
+      folder (and its intermediate folders) stays marked as long as its subtree has hidden
+      items, then is removed after their purge (`planFolderTombstones`). Only a restored marker
+      with hidden items triggers a full enumeration; a new folder no longer triggers one
+      (except orphan hidden items from before v5, until their purge). The delta limited to the
+      restored folder is not used (merging with the drive delta not verified).
+- [x] Account change blocked from startup: verified MSAL account and "other account" saved
+      (`CloudSyncThrottleStore`); `CloudAccessGuard` refuses any access to an unverified account
+      or after another drive is detected, without waiting for the first pass, which then starts
+      without delay. Data from before phase 5 (no verified account): access allowed until the
+      next pass, which verifies.
 
-### Vérifications sur l'appareil (phase 5)
-- [ ] Énumération reprise : première connexion sur un gros OneDrive, arrêt forcé après quelques
-      pages (logcat « Reprise de l'énumération complète après N pages » au redémarrage) ; à la
-      fin, aucun élément des premières pages masqué, nombre d'éléments identique à une
-      énumération sans arrêt ; logcat sans nextLink.
-- [ ] « OneDrive seul » : refuser l'accès, « Utiliser OneDrive seulement » ; sans compte, Photos
-      propose la connexion ; connecté, Photos/Vidéos montrent OneDrive sans le réglage ; bandeau
-      « Autoriser » (demande, puis paramètres après un refus définitif) ; accès accordé puis retiré
-      dans les paramètres : l'écran d'autorisation revient.
-- [ ] Page Stockage : tailles cohérentes avec « Infos sur l'appli > Stockage » d'Android ; « Vider
-      le cache » pendant un téléchargement d'original (téléchargement terminé normalement) ;
-      plafond des miniatures changé : « appliqué au prochain démarrage », puis effectif après un
-      arrêt forcé.
-- [ ] Synchro en arrière-plan : `adb shell dumpsys jobscheduler | grep -A5 onedrive` (ou App
-      Inspection > Background Task Inspector) montre le travail périodique ; désactivée : annulé ;
-      déconnexion : annulé ; passage forcé (`adb shell cmd jobscheduler run -f fr.eva.cloudgallery
-      <id>`) appli fermée : nouveaux éléments visibles à l'ouverture sans attendre.
-- [ ] Autre compte : déconnexion sans purge impossible, donc tester avec « Données restantes »
-      puis connexion à un autre compte ; arrêt forcé avant la fin du premier passage : au
-      redémarrage, aucune miniature de l'ancien compte demandée, carte « Autre compte OneDrive ».
-- [ ] Dossiers supprimés (OneDrive web) : dossier de photos supprimé puis, avant 30 jours, nouveau
-      dossier créé (synchro incrémentale, pas d'énumération complète dans le logcat `OneDriveSync`),
-      puis dossier restauré depuis la corbeille (énumération complète, photos et album de retour).
-- [ ] Plafond des originaux à 500 Mo avec 1 Go d'originaux : les moins récents partent aussitôt,
-      sauf ceux ouverts depuis moins de 30 min ; un original partagé vers Gmail reste lisible.
+### On-device checks (phase 5)
+- [ ] Resumed enumeration: first sign-in on a large OneDrive, force stop after a few pages
+      (logcat "Resuming the full enumeration after N pages" at restart); at the end, no item of
+      the first pages hidden, same item count as an enumeration without a stop; logcat without
+      nextLink.
+- [ ] "OneDrive only": deny access, "Use OneDrive only"; without an account, Photos offers
+      sign-in; signed in, Photos/Videos show OneDrive without the setting; "Allow" banner
+      (request, then settings after a permanent denial); access granted then revoked in the
+      settings: the permission screen comes back.
+- [ ] Storage page: sizes consistent with Android's "App info > Storage"; "Clear cache" during
+      an original download (download finishes normally); thumbnail cap changed: "applied at the
+      next start", then effective after a force stop.
+- [ ] Background sync: `adb shell dumpsys jobscheduler | grep -A5 onedrive` (or App
+      Inspection > Background Task Inspector) shows the periodic work; disabled: cancelled;
+      sign-out: cancelled; forced run (`adb shell cmd jobscheduler run -f fr.eva.cloudgallery
+      <id>`) with the app closed: new items visible at opening without waiting.
+- [ ] Other account: sign-out without purge is impossible, so test with "Leftover data" then
+      sign-in to another account; force stop before the end of the first pass: at restart, no
+      thumbnail of the old account requested, "Different OneDrive account" card.
+- [ ] Deleted folders (OneDrive web): photo folder deleted then, before 30 days, new folder
+      created (incremental sync, no full enumeration in the `OneDriveSync` logcat), then folder
+      restored from the recycle bin (full enumeration, photos and album back).
+- [ ] Originals cap at 500 MB with 1 GB of originals: the least recent go right away, except
+      those opened less than 30 min ago; an original shared to Gmail stays readable.
 
-## Phase 6 — Dédoublonnage, économiseur d'espace, recherche, albums mixtes
+## Phase 6 — Deduplication, space saver, search, mixed albums
 
-Décisions (phase 6) : empreintes calculées en charge seulement ; économiseur d'espace sur les
-photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec Android.
+Decisions (phase 6): hashes computed only while charging; space saver for photos and videos,
+with an age filter; favorites not synced with Android.
 
-- [x] Empreinte QuickXorHash des fichiers locaux (`data/dedup/QuickXorHash`, testée contre une
-      implémentation bit à bit indépendante) : `LocalHashWorker` en charge et batterie non faible,
-      lots de 100 fichiers / 1 Go (doublons probables d'abord : taille présente sur OneDrive),
-      8 min par passage puis passage enchaîné, quotidien de rattrapage ; enregistrée avec la
-      signature du fichier (`hashSignature`) seulement s'il n'a pas changé pendant le calcul ;
-      `media.contentHash` = `qxh:<empreinte>`.
-- [x] Fusion local / OneDrive **uniquement sur QuickXorHash et taille identiques** (`MediaMerger`) :
-      le média du fichier local reçoit la source OneDrive (et sa copie hors ligne) ; favori,
-      albums, couverture d'album, fichiers en cache, téléchargements et position de lecture du
-      média OneDrive lui sont transférés. Doublons identiques : appariement déterministe par ordre
-      des sources. Pas de fusion pendant un téléchargement en cours. Lancée après l'indexation
-      locale, chaque passage OneDrive et chaque lot d'empreintes.
-- [x] Défusion : tailles différentes, ou deux empreintes connues différentes (contenu modifié sur
-      OneDrive, ou empreinte locale recalculée) ; une empreinte locale seulement périmée (fichier
-      touché, même taille) garde la fusion jusqu'au calcul suivant. La source OneDrive repart dans
-      un nouveau média avec sa copie hors ligne, son original et ses téléchargements ; favoris et
-      albums restent sur le média du fichier local.
-- [x] Économiseur d'espace (Paramètres > Stockage > Économiseur d'espace, `ui/saver/`) : copies
-      locales visibles dont l'empreinte est à jour (`hashSignature` =
-      `"<sizeBytes>:<dateModified>:<generation>"`) et égale, taille comprise, à celle d'un élément
-      OneDrive visible (regroupés ou non, `SPACE_SAVER_SELECT`) ; une copie favorite ou dans un album
-      n'est proposée qu'une fois regroupée avec l'élément OneDrive. Filtre d'ancienneté (30 jours par
-      défaut), tout coché puis revue, résumé, confirmation dans l'appli puis boîte système,
-      revérification en base juste avant, **toujours la corbeille** (lots de 1 000), resynchro.
-      Jamais déclenché automatiquement.
-- [x] Recherche plein texte : index `media_fts` (FTS4 unicode61) sur le nom, les dossiers (sources
-      visibles, albums virtuels, noms personnalisés) et les libellés de date et de type (année, mois
-      et jour de la semaine en français et en anglais, « vidéo », « photo »), tenu à jour par
-      `SearchIndexer` (toute écriture dans media / media_source / album / album_media, mise à jour
-      incrémentale). Écran Rechercher (icône de l'onglet Photos) : suggestions (albums, recherches
-      récentes effaçables), résultats en grille (médias visibles, OneDrive compris), visionneuse
-      dans les résultats (`MediaContext.Search`). Le lieu reste à faire avec le géocodage.
-- [x] Albums virtuels mêlant sources locales et OneDrive : un média fusionné reste dans l'album tant
-      qu'une de ses sources est visible, puis est masqué (jamais supprimé) ; testé
+- [x] QuickXorHash of local files (`data/dedup/QuickXorHash`, tested against an independent
+      bit-by-bit implementation): `LocalHashWorker` while charging with battery not low,
+      batches of 100 files / 1 GB (likely duplicates first: size present on OneDrive),
+      8 min per pass then a chained pass, daily catch-up; saved with the file signature
+      (`hashSignature`) only if the file did not change during the computation;
+      `media.contentHash` = `qxh:<hash>`.
+- [x] Local / OneDrive merge **only on identical QuickXorHash and size** (`MediaMerger`): the
+      local file's media item receives the OneDrive source (and its offline copy); favorite,
+      albums, album cover, cached files, downloads and playback position of the OneDrive media
+      item are transferred to it. Identical duplicates: deterministic pairing by source order.
+      No merge during a download in progress. Run after local indexing, each OneDrive pass and
+      each batch of hashes.
+- [x] Unmerge: different sizes, or two known different hashes (content modified on OneDrive, or
+      local hash recomputed); a merely stale local hash (file touched, same size) keeps the
+      merge until the next computation. The OneDrive source moves to a new media item with its
+      offline copy, its original and its downloads; favorites and albums stay on the local
+      file's media item.
+- [x] Space saver (Settings > Storage > Space saver, `ui/saver/`): visible local copies whose
+      hash is up to date (`hashSignature` = `"<sizeBytes>:<dateModified>:<generation>"`) and
+      equal, size included, to that of a visible OneDrive item (grouped or not,
+      `SPACE_SAVER_SELECT`); a copy that is a favorite or in an album is offered only once
+      grouped with the OneDrive item. Age filter (30 days by default), everything checked then
+      review, summary, in-app confirmation then system dialog, re-check in the database right
+      before, **always the trash** (batches of 1,000), resync. Never triggered automatically.
+- [x] Full-text search: `media_fts` index (FTS4 unicode61) on the name, the folders (visible
+      sources, virtual albums, custom names) and the date and type labels (year, month and
+      weekday in French and English, "video", "photo"), kept up to date by `SearchIndexer`
+      (every write to media / media_source / album / album_media, incremental update). Search
+      screen (icon in the Photos tab): suggestions (albums, clearable recent searches), results
+      in a grid (visible media, OneDrive included), viewer within the results
+      (`MediaContext.Search`). Location remains to be done along with geocoding.
+- [x] Virtual albums mixing local and OneDrive sources: a merged media item stays in the album as
+      long as one of its sources is visible, then is hidden (never deleted); tested
       (`MediaMergerTest`).
-- [x] Albums-dossiers : `ALBUM_MEMBERS` / `ALBUM_ROWS` (`FOLDER_MEMBER_SOURCE`) ne comptent une source
-      masquée que si le média n'a aucune source visible rattachée à un dossier : un média fusionné
-      n'est que dans les dossiers de ses sources visibles ; une copie conservée hors ligne reste
-      dans son dossier OneDrive comme avant.
-- [x] Dates OneDrive : sans effet sur le rapprochement, qui ne se fait que sur l'empreinte et la
-      taille ; un média fusionné garde la date du fichier local (EXIF/MediaStore), jamais remplacée
-      par la synchro OneDrive.
-- [ ] Éventuellement, synchroniser les favoris avec `MediaStore.createFavoriteRequest` (avec la
-      confirmation système), à condition que cela n'écrase pas les favoris Samsung existants.
+- [x] Folder albums: `ALBUM_MEMBERS` / `ALBUM_ROWS` (`FOLDER_MEMBER_SOURCE`) only count a hidden
+      source if the media item has no visible source attached to a folder: a merged media item
+      is only in the folders of its visible sources; a copy kept offline stays in its OneDrive
+      folder as before.
+- [x] OneDrive dates: no effect on matching, which is based only on hash and size; a merged
+      media item keeps the local file's date (EXIF/MediaStore), never replaced by the OneDrive
+      sync.
+- [ ] Possibly sync favorites with `MediaStore.createFavoriteRequest` (with the system
+      confirmation), provided it does not overwrite existing Samsung favorites.
 
-### Vérifications sur l'appareil (phase 6)
-- [ ] Recherche : premier lancement après la mise à jour (logcat `SearchIndexer` : index rempli, durée
-      sur la vraie bibliothèque) ; « août 2026 », un nom de dossier, un album renommé, « vidéo »,
-      un élément uniquement OneDrive ; nouvelle photo prise puis recherchée (index à jour quelques
-      secondes après) ; visionneuse ouverte depuis les résultats (balayage limité aux résultats) ;
-      recherches récentes retirées une à une et effacées ; saisies spéciales (`"`, `*`, `-`, `OR`)
-      sans erreur.
-- [ ] Économiseur d'espace : après le calcul des empreintes (en charge), une photo présente sur le
-      téléphone et sur OneDrive est proposée, une photo modifiée sur le téléphone ne l'est plus ;
-      décocher une copie la garde ; « Libérer » : boîte de l'appli puis boîte système, fichiers dans
-      la corbeille Samsung (restaurables), toujours visibles via OneDrive ; refus de la boîte système :
-      rien n'est supprimé ; filtre « plus d'un an » et grosse sélection (plus de 1 000 : plusieurs
-      boîtes système). `connectedDebugAndroidTest` : `SpaceSaverDaoTest`.
-- [ ] Empreintes : appareil branché, `adb shell dumpsys jobscheduler | grep -A5 local_hash` montre le
-      travail ; logcat `MediaMerger` « N élément(s) OneDrive rattaché(s) » ; une photo sauvegardée
-      sur OneDrive n'apparaît plus qu'une fois dans Photos avec « Afficher OneDrive » activé ;
-      débranché pendant le calcul : arrêt aussitôt, reprise à la charge suivante.
-- [ ] Empreinte locale identique à celle de Graph pour une même photo (comparer `quickXorHash` des
-      deux sources dans la base, `adb shell run-as … sqlite3`), photo et vidéo de plusieurs Go.
-- [ ] Défusion : photo modifiée (recadrage) sur le téléphone puis indexée et rehachée : deux
-      médias, favori resté sur la photo du téléphone ; nouvelle version sur OneDrive : idem.
+### On-device checks (phase 6)
+- [ ] Search: first launch after the update (logcat `SearchIndexer`: index filled, duration on
+      the real library); "août 2026", a folder name, a renamed album, "video", a OneDrive-only
+      item; new photo taken then searched for (index up to date a few seconds later); viewer
+      opened from the results (swiping limited to the results); recent searches removed one by
+      one and cleared; special inputs (`"`, `*`, `-`, `OR`) without error.
+- [ ] Space saver: after the hashes are computed (while charging), a photo present on the phone
+      and on OneDrive is offered, a photo modified on the phone no longer is; unchecking a copy
+      keeps it; "Free up": app dialog then system dialog, files in the Samsung trash
+      (restorable), still visible via OneDrive; system dialog declined: nothing is deleted;
+      "more than a year" filter and large selection (more than 1,000: several system dialogs).
+      `connectedDebugAndroidTest`: `SpaceSaverDaoTest`.
+- [ ] Hashes: device plugged in, `adb shell dumpsys jobscheduler | grep -A5 local_hash` shows the
+      work; logcat `MediaMerger` "N OneDrive item(s) attached"; a photo backed up to OneDrive
+      appears only once in Photos with "Show OneDrive" enabled; unplugged during the
+      computation: stops right away, resumes at the next charge.
+- [ ] Local hash identical to Graph's for the same photo (compare `quickXorHash` of both sources
+      in the database, `adb shell run-as … sqlite3`), photo and video of several GB.
+- [ ] Unmerge: photo modified (cropped) on the phone then indexed and rehashed: two media
+      items, favorite stays on the phone photo; new version on OneDrive: same.
 
-## Améliorations de navigation (après la phase 6)
+## Navigation improvements (after phase 6)
 
-- [x] Retour : l'écran sort en glissant entièrement vers la droite (sans fondu), l'écran précédent
-      revient avec un léger décalage ; suit le geste de retour prédictif. La visionneuse et le
-      lecteur gardent leur zoom arrière.
-- [x] Passages d'écran calés sur Samsung Galerie 15.8 (One UI 8, Android 16), mesurés image par image
-      (`adb shell screenrecord`) : écran du dessus entièrement par la droite, écran du dessous
-      décalé de 30 % et assombri presque jusqu'au noir (~130 ms), courbe
-      `cubic-bezier(0.9, 0, 0.3, 1)` sur 340 ms dans les deux sens. Geste de retour prédictif :
-      mêmes transitions (`predictivePop*Transition`), linéaires pour suivre le doigt ; auparavant
-      Navigation appliquait les siennes (écran réduit à 70 %).
-- [x] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
-      atteindre n'importe quelle date sans faire défiler toute la grille. Photos et toutes les
-      collections (`ui/grid/FastScroller.kt`) ; position calculée sur les dates de tous les
-      médias du contexte (requêtes `observe*Dates`) ; saut hors des pages chargées par
-      rechargement de la pagination au rang du premier média de la période.
-- [x] Mise en cache de tout OneDrive : un bouton télécharge les miniatures de grille et les aperçus
-      taille écran de tous les éléments OneDrive, gardés hors du plafond LRU, pour une navigation
-      fluide (zoom maximal et vidéos restent en ligne). Paramètres > Stockage, estimation et
-      confirmation, WorkManager en service de premier plan `dataSync`, reprise, « Garder à jour ».
-- [x] Dossier sécurisé Samsung : action « Déplacer vers le Dossier sécurisé » pour les photos du
-      téléphone (partage Android vers une appli du Dossier sécurisé, puis corbeille des originaux
-      après confirmation). Pas d'API Knox privée. Menu « Plus » de la sélection et de la
-      visionneuse, seulement si `com.samsung.knox.securefolder` est installé ; 100 éléments au plus
-      par envoi ; toujours la corbeille (`ui/securefolder/`).
+- [x] Back: the screen leaves by sliding fully to the right (no fade), the previous screen comes
+      back with a slight offset; follows the predictive back gesture. The viewer and the player
+      keep their zoom-out.
+- [x] Screen transitions matched to Samsung Gallery 15.8 (One UI 8, Android 16), measured frame
+      by frame (`adb shell screenrecord`): top screen fully from the right, bottom screen offset
+      by 30 % and dimmed almost to black (~130 ms), curve `cubic-bezier(0.9, 0, 0.3, 1)` over
+      340 ms in both directions. Predictive back gesture: same transitions
+      (`predictivePop*Transition`), linear to follow the finger; previously Navigation applied
+      its own (screen shrunk to 70 %).
+- [x] Fast scroll: handle on the right of the grid with a date bubble (month, year), to reach any
+      date without scrolling through the whole grid. Photos and all collections
+      (`ui/grid/FastScroller.kt`); position computed from the dates of all media in the context
+      (`observe*Dates` queries); jump outside the loaded pages by reloading paging at the
+      position of the period's first media item.
+- [x] Caching of all of OneDrive: a button downloads the grid thumbnails and screen-size
+      previews of all OneDrive items, kept outside the LRU cap, for smooth browsing (maximum
+      zoom and videos stay online). Settings > Storage, estimate and confirmation, WorkManager as
+      a `dataSync` foreground service, resume, "Keep up to date".
+- [x] Samsung Secure Folder: "Move to Secure Folder" action for phone photos (Android share to a
+      Secure Folder app, then originals moved to the trash after confirmation). No private Knox
+      API. "More" menu of the selection and of the viewer, only if
+      `com.samsung.knox.securefolder` is installed; at most 100 items per send; always the trash
+      (`ui/securefolder/`).
 
-### Vérifications sur l'appareil (améliorations)
-- [ ] Retour depuis Paramètres, Stockage, un album, la recherche : glissement vers la droite, au
-      bouton et au geste (aperçu prédictif). Vérifier aussi l'assombrissement en thème clair (non comparé à Samsung).
-- [ ] Dossier sécurisé : l'entrée apparaît (sélection avec une photo du téléphone, visionneuse) et
-      pas pour un élément uniquement OneDrive ; une appli du Dossier sécurisé (sa Galerie) apparaît
-      dans le menu de partage, sinon l'activer dans les paramètres du Dossier sécurisé et noter le
-      libellé exact du réglage ; photo et vidéo, plusieurs éléments (10, 100) : tous arrivent dans le
-      Dossier sécurisé ? ; au retour, « Garder les originaux » : rien n'est supprimé ; « Mettre les
-      originaux à la corbeille » : boîte système, fichiers dans la corbeille Samsung (restaurables) ;
-      refus de la boîte système : rien n'est supprimé ; partage annulé (retour sans choisir) : la
-      question apparaît, « Garder » ; photo regroupée avec OneDrive : message affiché, l'élément reste
-      visible via OneDrive. Comportement sur un appareil sans Dossier sécurisé configuré.
-- [ ] Défilement rapide : la poignée apparaît au défilement et disparaît ~1,5 s après ; glisser du
-      12 octobre 2026 à janvier 2025 : bulle « Janvier 2025 » (zoom mois) ou « 15 janv. 2025 »
-      (zoom jour), vibration légère à chaque mois, grille placée sur l'en-tête visé au lâcher ;
-      remonter ensuite jusqu'en haut (pages précédentes chargées sans saut visible) ; position
-      cohérente avec « Afficher OneDrive » activé et désactivé, dans un album, les favoris et une
-      recherche ; sélection par glisser et pincement inchangés près du bord droit ; poignée au-dessus
-      de la barre d'onglets et de la barre d'actions en mode sélection ; durée de chargement des
-      dates sur la vraie bibliothèque. `connectedDebugAndroidTest` : `MediaDaoTest`
+### On-device checks (improvements)
+- [ ] Back from Settings, Storage, an album, search: slide to the right, with the button and the
+      gesture (predictive preview). Also check the dimming in light theme (not compared with Samsung).
+- [ ] Secure Folder: the entry appears (selection with a phone photo, viewer) and not for a
+      OneDrive-only item; a Secure Folder app (its Gallery) appears in the share menu, otherwise
+      enable it in the Secure Folder settings and note the exact label of the setting; photo
+      and video, several items (10, 100): do they all arrive in the Secure Folder?; on return,
+      "Keep the originals": nothing is deleted; "Move the originals to the trash": system
+      dialog, files in the Samsung trash (restorable); system dialog declined: nothing is
+      deleted; share cancelled (back without choosing): the question appears, "Keep"; photo
+      grouped with OneDrive: message shown, the item stays visible via OneDrive. Behavior on a
+      device without a configured Secure Folder.
+- [ ] Fast scroll: the handle appears while scrolling and disappears ~1.5 s later; drag from
+      October 12, 2026 to January 2025: "January 2025" bubble (month zoom) or "Jan 15, 2025"
+      (day zoom), light vibration at each month, grid positioned on the targeted header on
+      release; then scroll back up to the top (previous pages loaded without a visible jump);
+      position consistent with "Show OneDrive" enabled and disabled, in an album, favorites and
+      a search; drag selection and pinch unchanged near the right edge; handle above the tab
+      bar and the action bar in selection mode; date loading time on the real library.
+      `connectedDebugAndroidTest`: `MediaDaoTest`
       (`dates_followGridOrderAndFilters`, `pagingTimeline_initialKey_startsAtRankAndPrependsBefore`).
-- [ ] Mise en cache de tout OneDrive : estimation cohérente (nombre d'éléments OneDrive seuls),
-      notification de progression avec « Annuler », progression dans la page Stockage ; appli
-      fermée pendant le passage : il continue ; mode avion puis retour : « En attente » puis reprise
-      sans retélécharger (logcat `OneDrivePrecache`) ; ensuite, mode avion : grille et visionneuse
-      d'éléments OneDrive affichées sans réseau ; taille affichée dans Stockage ; « Vider le cache »
-      : tout supprimé, « Garder à jour » décoché.
-- [ ] Mise en cache : vérifier que la grille au zoom par défaut et la visionneuse ne refont aucune
-      requête de miniature (logcat OkHttp / Graph) pour un élément déjà en cache, et que le palier
-      2048 est accepté par Graph (sinon aperçus enregistrés en 1600).
-- [ ] Mise en cache : « Garder à jour » activé, ajout d'une photo sur OneDrive depuis un autre
-      appareil, synchro : la photo est mise en cache en arrière-plan ; Android 15, passage de plus
-      de 6 h : interrompu par le système puis repris.
+- [ ] Caching of all of OneDrive: consistent estimate (number of OneDrive-only items), progress
+      notification with "Cancel", progress in the Storage page; app closed during the pass: it
+      continues; airplane mode then back: "Waiting" then resume without re-downloading (logcat
+      `OneDrivePrecache`); afterwards, airplane mode: grid and viewer of OneDrive items shown
+      without network; size shown in Storage; "Clear cache": everything deleted, "Keep up to
+      date" unchecked.
+- [ ] Caching: check that the grid at the default zoom and the viewer make no thumbnail request
+      (OkHttp / Graph logcat) for an item already cached, and that the 2048 tier is accepted
+      by Graph (otherwise previews saved at 1600).
+- [ ] Caching: "Keep up to date" enabled, photo added to OneDrive from another device, sync: the
+      photo is cached in the background; Android 15, pass longer than 6 h: interrupted by the
+      system then resumed.
 
-## Phase 7 — Fidélité visuelle, images lourdes, finitions
+## Phase 7 — Visual fidelity, heavy images, polish
 
-### Visionneuse et formats
-- [ ] Décodage par tuiles (`BitmapRegionDecoder`) pour les images de plus de 24 MP et les panoramas
-      (TODO dans `ui/viewer/ZoomableImage.kt`).
-- [ ] Animer les GIF avec `io.coil-kt.coil3:coil-gif` (même version que Coil, 3.6.3), puis WebP et
-      HEIF animés si pris en charge.
-- [ ] Motion Photos Samsung : détection et lecture de la partie vidéo, seulement après recherche
-      d'un format documenté.
-- [ ] Édition vidéo (découpe) : désactivée pour l'instant (TODO dans `ui/viewer/ViewerScreen.kt`).
-      À évaluer avec Media3 Transformer, toujours en enregistrant une copie.
-- [x] Transition grille ↔ visionneuse calée sur Samsung Galerie (`ui/viewer/ViewerTransition.kt`) :
-      la photo grandit depuis sa vignette (recadrée en carré) jusqu'à sa taille ajustée, et y
-      revient au retour (barres masquées et grille visible aussitôt, vignette masquée pendant le
-      vol). Miniature de la grille (cache mémoire) affichée dès la première image ; pages de la
-      visionneuse composées après l'ouverture (sinon saccades) ; ouverture lancée après la première
-      image dessinée. 250 ms, `cubic-bezier(0.6, 0.4, 0.45, 1)`. Sans vignette visible : fondu.
-- [x] Retour de la visionneuse calé sur Samsung (`cubic-bezier(0.15, 0.4, 0.1, 1)`, 280 ms : la photo
-      perd la moitié de sa taille en ~50 ms), distinct de l'ouverture.
-- [x] « Afficher les éléments OneDrive dans Photos » activé par défaut (fusion des doublons en place).
-- [x] Albums : « Masquer des albums » (menu de l'onglet Albums) ; par album : affiché, masqué dans
-      Albums, ou masqué dans Albums et Photos (ses médias quittent aussi Photos et Vidéos ;
-      `album.hideMedia`, base v7).
-- [x] Album OneDrive : « Ouvrir dans OneDrive » (menu de l'album) ouvre le dossier sur le web
-      (`webUrl` Graph) dans le navigateur. L'appli OneDrive n'ouvre pas un dossier depuis un lien
-      (compte personnel, testé : refus ou accueil de l'appli).
-- [ ] Transition : au retour sur une autre photo que celle ouverte, faire défiler la grille jusqu'à
-      sa vignette (Samsung) au lieu du fondu ; partir de l'état zoomé ou glissé sans saut.
+### Viewer and formats
+- [ ] Tiled decoding (`BitmapRegionDecoder`) for images larger than 24 MP and panoramas
+      (TODO in `ui/viewer/ZoomableImage.kt`).
+- [ ] Animate GIFs with `io.coil-kt.coil3:coil-gif` (same version as Coil, 3.6.3), then animated
+      WebP and HEIF if supported.
+- [ ] Samsung Motion Photos: detection and playback of the video part, only after finding a
+      documented format.
+- [ ] Video editing (trimming): disabled for now (TODO in `ui/viewer/ViewerScreen.kt`).
+      To be evaluated with Media3 Transformer, always saving a copy.
+- [x] Grid ↔ viewer transition matched to Samsung Gallery (`ui/viewer/ViewerTransition.kt`):
+      the photo grows from its thumbnail (cropped to a square) to its fitted size, and goes back
+      on return (bars hidden and grid visible right away, thumbnail hidden during the flight).
+      Grid thumbnail (memory cache) shown from the first frame; viewer pages composed after the
+      opening (otherwise jank); opening started after the first frame is drawn. 250 ms,
+      `cubic-bezier(0.6, 0.4, 0.45, 1)`. Without a visible thumbnail: fade.
+- [x] Viewer return matched to Samsung (`cubic-bezier(0.15, 0.4, 0.1, 1)`, 280 ms: the photo
+      loses half its size in ~50 ms), distinct from the opening.
+- [x] "Show OneDrive items in Photos" enabled by default (duplicates merged in place).
+- [x] Albums: "Hide albums" (Albums tab menu); per album: shown, hidden in Albums, or hidden in
+      Albums and Photos (its media also leave Photos and Videos; `album.hideMedia`, database v7).
+- [x] OneDrive album: "Open in OneDrive" (album menu) opens the folder on the web (Graph
+      `webUrl`) in the browser. The OneDrive app does not open a folder from a link (personal
+      account, tested: refused or app home screen).
+- [ ] Transition: when returning on a photo other than the one opened, scroll the grid to its
+      thumbnail (Samsung) instead of fading; start from the zoomed or dragged state without a
+      jump.
 
-### URI externes et accès partiel
-- [ ] URI du sélecteur de photos (`content://media/picker/...`) et URI FileProvider tierces : elles
-      ne peuvent pas être rattachées à une source MediaStore et s'affichent sans index (TODO dans
-      `data/repository/MediaRepositoryImpl.kt`). Étudier `MediaStore.getMediaUri` et les colonnes
-      lisibles pour en rattacher une partie, sinon conserver le mode lecture seule.
-- [ ] Accès partiel : expliquer dans l'interface que les éléments non sélectionnés sont masqués,
-      pas supprimés. Proposer l'accès complet sans insister. Tester l'ajout et le retrait
-      d'éléments de la sélection sous One UI 8.
-- [ ] Accès partiel : les albums-dossiers ne sont pas nettoyés. Vérifier que les dossiers vides
-      restent bien masqués.
+### External URIs and partial access
+- [ ] Photo picker URIs (`content://media/picker/...`) and third-party FileProvider URIs: they
+      cannot be attached to a MediaStore source and are displayed without an index (TODO in
+      `data/repository/MediaRepositoryImpl.kt`). Look into `MediaStore.getMediaUri` and the
+      readable columns to attach some of them, otherwise keep the read-only mode.
+- [ ] Partial access: explain in the UI that unselected items are hidden, not deleted. Offer
+      full access without insisting. Test adding and removing items from the selection on
+      One UI 8.
+- [ ] Partial access: folder albums are not cleaned up. Check that empty folders do stay
+      hidden.
 
-### Captures Samsung Galerie nécessaires (One UI 8, Galaxy S22, thèmes clair et sombre)
-Elles servent à comparer pixel par pixel les marges, tailles de police, couleurs, rayons et
-animations :
-- [ ] Onglet Photos : grille à **chaque niveau de zoom** (du plus grand au plus petit), en-têtes
-      jour et mois, barre d'onglets, barre supérieure repliée et dépliée, défilement rapide
-      (poignée).
-- [ ] Onglet Albums : grille d'albums, albums épinglés, tri, création d'album, vue d'un album.
-- [ ] Visionneuse : interface (barres haut/bas, boutons), filmstrip, **panneau de détails**
-      (EXIF, carte, emplacement), visionneuse en paysage.
-- [ ] Lecteur vidéo : commandes (lecture, barre de progression, ±10 s, vitesse, son, rotation),
-      état verrouillé, paysage.
-- [ ] Mode sélection : en-tête avec compteur, cases à cocher, sélection d'un jour, barre d'actions
-      du bas, menu « Plus ».
-- [ ] Boîtes de dialogue : suppression (corbeille / définitive), renommage, création d'album,
-      copie vers un dossier, tri, réindexation.
-- [ ] Paramètres de Samsung Galerie (structure des sections et style des interrupteurs).
-- [ ] Onglet / écran Menu (Favoris, Vidéos, Corbeille, Paramètres…).
+### Samsung Gallery screenshots needed (One UI 8, Galaxy S22, light and dark themes)
+They are used to compare margins, font sizes, colors, radii and animations pixel by pixel:
+- [ ] Photos tab: grid at **every zoom level** (largest to smallest), day and month headers,
+      tab bar, top bar collapsed and expanded, fast scroll (handle).
+- [ ] Albums tab: album grid, pinned albums, sorting, album creation, album view.
+- [ ] Viewer: UI (top/bottom bars, buttons), filmstrip, **details panel** (EXIF, map,
+      location), viewer in landscape.
+- [ ] Video player: controls (play, progress bar, ±10 s, speed, sound, rotation), locked
+      state, landscape.
+- [ ] Selection mode: header with counter, checkboxes, selecting a day, bottom action bar,
+      "More" menu.
+- [ ] Dialogs: deletion (trash / permanent), rename, album creation, copy to a folder, sorting,
+      reindexing.
+- [ ] Samsung Gallery settings (section structure and switch style).
+- [ ] Menu tab / screen (Favorites, Videos, Trash, Settings...).
 
-### Divers
-- [ ] Écran « Corbeille » (éléments `IS_TRASHED` de MediaStore) avec restauration et suppression
-      définitive, toutes deux confirmées par le système.
-- [ ] Sauvegarde et restauration manuelles des favoris et albums personnalisés (export JSON), puisque
-      la base est exclue des sauvegardes Android.
-- [ ] Vraie `signingConfig` release si l'application doit être distribuée (et son hachage de
-      signature ajouté dans Microsoft Entra).
-- [ ] Manifeste fusionné : la permission `NFC` et les activités ajoutées par les dépendances de
-      MSAL (YubiKey, Credentials) ; les retirer avec `tools:node="remove"` seulement après test de
-      la connexion.
-- [ ] Profil de performance sur 100 000 médias : démarrage à froid, première indexation, défilement
-      rapide, mémoire. Envisager un Baseline Profile.
-- [ ] Tests : indexeur MediaStore sur appareil (accès partiel, volume amovible, changement de
-      version), tests UI Compose des parcours principaux. (Les migrations Room sont testées par
-      `MigrationTest` depuis la phase 3.)
+### Miscellaneous
+- [ ] "Trash" screen (MediaStore `IS_TRASHED` items) with restore and permanent deletion, both
+      confirmed by the system.
+- [ ] Manual backup and restore of favorites and custom albums (JSON export), since the
+      database is excluded from Android backups.
+- [ ] Real release `signingConfig` if the app is to be distributed (and its signature hash
+      added in Microsoft Entra).
+- [ ] Merged manifest: the `NFC` permission and the activities added by MSAL's dependencies
+      (YubiKey, Credentials); remove them with `tools:node="remove"` only after testing
+      sign-in.
+- [ ] Performance profile on 100,000 media: cold start, first indexing, fast scrolling,
+      memory. Consider a Baseline Profile.
+- [ ] Tests: MediaStore indexer on device (partial access, removable volume, version change),
+      Compose UI tests of the main flows. (Room migrations are tested by `MigrationTest` since
+      phase 3.)
 
 ---
 
-## TODO présents dans le code
+## TODOs in the code
 
-| Fichier | Note |
+| File | Note |
 |---|---|
-| `app/src/main/java/fr/eva/cloudgallery/data/repository/MediaRepositoryImpl.kt` | URI du sélecteur de photos (`content://media/picker/...`) et URI FileProvider tierces : impossible de les rattacher à une source MediaStore, la visionneuse les affiche sans index |
-| `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ViewerScreen.kt` | `TODO(viewer)` : édition vidéo (découpe) non prise en charge |
-| `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ZoomableImage.kt` | `TODO(viewer)` : décodage par tuiles (`BitmapRegionDecoder`) pour les images de plus de 24 MP |
+| `app/src/main/java/fr/eva/cloudgallery/data/repository/MediaRepositoryImpl.kt` | Photo picker URIs (`content://media/picker/...`) and third-party FileProvider URIs: cannot be attached to a MediaStore source, the viewer displays them without an index |
+| `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ViewerScreen.kt` | `TODO(viewer)`: video editing (trimming) not supported |
+| `app/src/main/java/fr/eva/cloudgallery/ui/viewer/ZoomableImage.kt` | `TODO(viewer)`: tiled decoding (`BitmapRegionDecoder`) for images larger than 24 MP |
 
-## Limitations connues (rappel)
+## Known limitations (reminder)
 
-- [ ] OneDrive en lecture seule : un élément présent uniquement sur OneDrive peut être zoomé
-      (original), lu, partagé et ouvert ailleurs, mais ni modifié, ni supprimé, ni copié vers un
-      dossier du téléphone, même conservé hors ligne (copie de l'appli, lecture seule).
-- [ ] Doublons : un fichier du téléphone et son élément OneDrive ne deviennent un seul média
-      qu'une fois l'empreinte locale calculée (en charge) ; d'ici là, deux médias (réglage
-      « Afficher les éléments OneDrive dans Photos » désactivé par défaut). Un fichier modifié après
-      sa sauvegarde n'est jamais fusionné.
-- [ ] Sans permission médias, OneDrive est consultable seulement après « Utiliser OneDrive
-      seulement » (phase 5) ; un build sans OneDrive n'affiche que l'écran d'autorisation.
-- [ ] Pas de synchro en arrière-plan : `work-runtime-ktx` et `hilt-work` sont présents mais ne
-      servent pas.
-- [ ] Les favoris et albums personnalisés sont propres à l'application. Ils sont perdus à la
-      désinstallation (base exclue des sauvegardes) et ne sont pas partagés avec Samsung Galerie.
-- [ ] Table `user_settings` inutilisée (les réglages sont dans DataStore) : l'utiliser ou la
-      supprimer par migration.
-- [ ] Pas de recherche par lieu ni par contenu, pas de GIF animés, pas de Motion Photos, pas de
-      pleine résolution au-delà d'environ 24 MP.
-- [ ] Fidélité visuelle One UI non vérifiée sur des captures de référence.
-- [ ] Visionneuse : la date de la barre supérieure (« Aujourd'hui », « Hier ») n'est pas recalculée
-      au passage de minuit tant que la visionneuse reste ouverte.
-- [ ] Grille : sans placeholders de pagination, un défilement très rapide marque une courte pause
-      en atteignant la fin des pages chargées.
-- [ ] Albums-dossiers : impossible de revenir au nom d'origine après un renommage d'affichage
-      (ajouter « Rétablir le nom du dossier »).
-- [ ] Albums : pas de réorganisation par glisser-déposer (`sortIndex` existe mais n'est pas
-      modifiable depuis l'interface).
-- [ ] Pas d'écran Corbeille (voir phase 7).
+- [ ] Read-only OneDrive: an item that exists only on OneDrive can be zoomed (original), played,
+      shared and opened elsewhere, but not modified, deleted or copied to a phone folder, even
+      when kept offline (app copy, read-only).
+- [ ] Duplicates: a phone file and its OneDrive item only become a single media item once the
+      local hash is computed (while charging); until then, two media items ("Show OneDrive items
+      in Photos" setting disabled by default). A file modified after its backup is never
+      merged.
+- [ ] Without media permission, OneDrive can be browsed only after "Use OneDrive only"
+      (phase 5); a build without OneDrive only shows the permission screen.
+- [ ] No background sync: `work-runtime-ktx` and `hilt-work` are present but unused.
+- [ ] Favorites and custom albums are specific to the app. They are lost on uninstall (database
+      excluded from backups) and are not shared with Samsung Gallery.
+- [ ] Unused `user_settings` table (settings live in DataStore): use it or drop it through a
+      migration.
+- [ ] No search by location or content, no animated GIFs, no Motion Photos, no full resolution
+      beyond about 24 MP.
+- [ ] One UI visual fidelity not verified against reference screenshots.
+- [ ] Viewer: the date in the top bar ("Today", "Yesterday") is not recomputed at midnight while
+      the viewer stays open.
+- [ ] Grid: without paging placeholders, very fast scrolling pauses briefly when reaching the end
+      of the loaded pages.
+- [ ] Folder albums: no way to go back to the original name after a display rename (add
+      "Restore folder name").
+- [ ] Albums: no drag-and-drop reordering (`sortIndex` exists but cannot be changed from the
+      UI).
+- [ ] No Trash screen (see phase 7).

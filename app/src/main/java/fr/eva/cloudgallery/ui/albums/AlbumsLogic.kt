@@ -4,21 +4,21 @@ import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AlbumType
 
 /**
- * Logique pure de l'onglet Albums (sans dépendance Android), testée unitairement.
+ * Pure logic of the Albums tab (no Android dependency), unit tested.
  */
 object AlbumsLogic {
 
-    /** Nombre de colonnes de la grille d'albums : 3 en portrait, 5 en paysage. */
+    /** Number of columns of the album grid: 3 in portrait, 5 in landscape. */
     fun columnCount(isLandscape: Boolean): Int = if (isLandscape) 5 else 3
 
     /**
-     * Albums affichés : les albums vides sont masqués, sauf les albums virtuels
-     * (créés par l'utilisateur, qui doit pouvoir les retrouver pour les remplir).
+     * Displayed albums: empty albums are hidden, except virtual albums
+     * (created by the user, who must be able to find them to fill them).
      */
     fun visibleAlbums(albums: List<AlbumSummary>): List<AlbumSummary> =
         albums.filter { it.mediaCount > 0 || it.type == AlbumType.VIRTUAL }
 
-    /** Retire de la sélection les albums qui ne sont plus affichés. */
+    /** Removes from the selection the albums that are no longer displayed. */
     fun pruneSelection(selection: Set<Long>, albums: List<AlbumSummary>): Set<Long> {
         if (selection.isEmpty()) return selection
         val ids = albums.mapTo(HashSet()) { it.id }
@@ -26,18 +26,18 @@ object AlbumsLogic {
         return if (pruned.size == selection.size) selection else pruned
     }
 
-    /** Bascule d'un album dans la sélection. */
+    /** Toggles an album in the selection. */
     fun toggle(selection: Set<Long>, id: Long): Set<Long> =
         if (id in selection) selection - id else selection + id
 
-    /** « Tout » : sélectionne tout, ou vide la sélection si tout est déjà sélectionné. */
+    /** "All": selects everything, or clears the selection if everything is already selected. */
     fun toggleAll(selection: Set<Long>, albums: List<AlbumSummary>): Set<Long> =
         if (isAllSelected(selection, albums)) emptySet() else albums.mapTo(LinkedHashSet()) { it.id }
 
     fun isAllSelected(selection: Set<Long>, albums: List<AlbumSummary>): Boolean =
         albums.isNotEmpty() && albums.all { it.id in selection }
 
-    /** Actions disponibles dans la barre inférieure pour une sélection donnée. */
+    /** Actions available in the bottom bar for a given selection. */
     fun selectionActions(selected: List<AlbumSummary>): AlbumSelectionActions {
         val pinTarget = selected.any { !it.isPinned }
         return AlbumSelectionActions(
@@ -48,16 +48,16 @@ object AlbumsLogic {
         )
     }
 
-    /** Le renommage d'un album-dossier ne modifie que le nom affiché (rien n'est renommé sur le disque). */
+    /** Renaming a folder album only changes the displayed name (nothing is renamed on disk). */
     fun renameIsDisplayOnly(album: AlbumSummary): Boolean = album.type != AlbumType.VIRTUAL
 
-    /** Nom normalisé saisi par l'utilisateur, ou null s'il est vide. */
+    /** Normalized name entered by the user, or null if it is blank. */
     fun normalizeName(input: String): String? = input.trim().replace(Regex("\\s+"), " ").takeIf { it.isNotEmpty() }
 }
 
 /**
- * Etat des actions de sélection.
- * @property pinTarget true => l'action épingle (au moins un album non épinglé), false => elle désépingle.
+ * State of the selection actions.
+ * @property pinTarget true => the action pins (at least one album is unpinned), false => it unpins.
  */
 data class AlbumSelectionActions(
     val canRename: Boolean,

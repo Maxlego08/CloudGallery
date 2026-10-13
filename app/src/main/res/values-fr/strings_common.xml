@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings shared between screens. Each screen has its own strings_<area>.xml file. -->
+<resources>
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Annuler</string>
+    <string name="common_close">Fermer</string>
+    <string name="common_back">Retour</string>
+    <string name="common_more">Plus d\'options</string>
+    <string name="common_delete">Supprimer</string>
+    <string name="common_share">Partager</string>
+    <string name="common_rename">Renommer</string>
+    <string name="common_create">Créer</string>
+    <string name="common_save">Enregistrer</string>
+    <string name="common_edit">Modifier</string>
+    <string name="common_details">Détails</string>
+    <string name="common_search">Rechercher</string>
+    <string name="common_settings">Paramètres</string>
+    <string name="common_retry">Réessayer</string>
+    <string name="common_all">Tout</string>
+    <string name="common_open_with">Ouvrir avec</string>
+    <string name="common_favorite_add">Ajouter aux favoris</string>
+    <string name="common_favorite_remove">Retirer des favoris</string>
+    <string name="common_add_to_album">Ajouter à l\'album</string>
+    <string name="common_copy_to_album">Copier vers un dossier</string>
+    <string name="common_select_items">Sélectionner des éléments</string>
+    <string name="common_today">Aujourd\'hui</string>
+    <string name="common_yesterday">Hier</string>
+    <string name="common_video">Vidéo</string>
+    <string name="common_image">Image</string>
+    <string name="common_onedrive">OneDrive</string>
+    <string name="common_on_device">Sur l\'appareil</string>
+    <string name="common_offline">Disponible hors connexion</string>
+    <string name="common_loading">Chargement…</string>
+    <string name="common_error_generic">Une erreur s\'est produite.</string>
+    <string name="common_unknown">Inconnu</string>
+    <plurals name="common_selected_count">
+        <item quantity="one">%d sélectionné</item>
+        <item quantity="many">%d sélectionnés</item>
+        <item quantity="other">%d sélectionnés</item>
+    </plurals>
+    <plurals name="common_items_count">
+        <item quantity="one">%d élément</item>
+        <item quantity="many">%d éléments</item>
+        <item quantity="other">%d éléments</item>
+    </plurals>
+    <plurals name="common_images_count">
+        <item quantity="one">%d image</item>
+        <item quantity="many">%d images</item>
+        <item quantity="other">%d images</item>
+    </plurals>
+    <plurals name="common_videos_count">
+        <item quantity="one">%d vidéo</item>
+        <item quantity="many">%d vidéos</item>
+        <item quantity="other">%d vidéos</item>
+    </plurals>
+    <plurals name="common_delete_confirm">
+        <item quantity="one">Supprimer %d élément ?</item>
+        <item quantity="many">Supprimer %d éléments ?</item>
+        <item quantity="other">Supprimer %d éléments ?</item>
+    </plurals>
+    <string name="common_trash_info">Les éléments seront placés dans la corbeille Android pendant 30 jours.</string>
+    <string name="common_cloud_only_not_supported">Action disponible uniquement pour les fichiers présents sur l\'appareil.</string>
+
+    <!-- Downloading OneDrive files (originals, sharing): one message per cause -->
+    <string name="cloud_download_error_network">Pas de connexion à Internet.</string>
+    <string name="cloud_download_error_auth">Connectez-vous à votre compte OneDrive.</string>
+    <string name="cloud_download_error_throttled">OneDrive demande de patienter : réessayez dans quelques minutes.</string>
+    <string name="cloud_download_error_not_found">Ce fichier n\'existe plus sur OneDrive.</string>
+    <string name="cloud_download_error_content_changed">Ce fichier vient d\'être modifié sur OneDrive : réessayez.</string>
+    <string name="cloud_download_error_no_space">Espace de stockage insuffisant sur l\'appareil.</string>
+    <string name="cloud_download_error_size_mismatch">Téléchargement incomplet.</string>
+    <string name="cloud_download_error_server">OneDrive n\'a pas pu fournir le fichier.</string>
+    <string name="cloud_download_error_cancelled">Téléchargement annulé.</string>
+
+    <!-- Share and "Open with" for OneDrive items -->
+    <string name="share_preparing">Téléchargement depuis OneDrive…</string>
+    <string name="share_preparing_progress">%1$s sur %2$s</string>
+    <plurals name="share_preparing_count">
+        <item quantity="one">Téléchargement de %d élément depuis OneDrive…</item>
+        <item quantity="many">Téléchargement de %d éléments depuis OneDrive…</item>
+        <item quantity="other">Téléchargement de %d éléments depuis OneDrive…</item>
+    </plurals>
+    <string name="share_cloud_too_large">Trop volumineux pour être partagé depuis OneDrive (500 Mo au maximum par partage). Utilisez « Conserver hors ligne » pour télécharger ces éléments, puis partagez-les.</string>
+    <plurals name="share_cloud_too_many">
+        <item quantity="one">Vous pouvez partager %d élément OneDrive au maximum à la fois. Utilisez « Conserver hors ligne » pour en partager davantage.</item>
+        <item quantity="many">Vous pouvez partager %d éléments OneDrive au maximum à la fois. Utilisez « Conserver hors ligne » pour en partager davantage.</item>
+        <item quantity="other">Vous pouvez partager %d éléments OneDrive au maximum à la fois. Utilisez « Conserver hors ligne » pour en partager davantage.</item>
+    </plurals>
+    <string name="share_cloud_signed_out">Connectez-vous à OneDrive pour partager les éléments présents uniquement sur OneDrive.</string>
+    <plurals name="share_cloud_skipped_signed_out">
+        <item quantity="one">%d élément présent uniquement sur OneDrive n\'est pas partagé : connectez-vous à OneDrive.</item>
+        <item quantity="many">%d éléments présents uniquement sur OneDrive ne sont pas partagés : connectez-vous à OneDrive.</item>
+        <item quantity="other">%d éléments présents uniquement sur OneDrive ne sont pas partagés : connectez-vous à OneDrive.</item>
+    </plurals>
+</resources>

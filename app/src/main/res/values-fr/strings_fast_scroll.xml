@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Grid fast-scroll handle (accessibility description). -->
-    <string name="fast_scroll_a11y">Fast scroll by date</string>
+    <string name="fast_scroll_a11y">Défilement rapide par date</string>
 </resources>

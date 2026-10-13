@@ -83,10 +83,10 @@ class MediaStoreLogicTest {
     fun cropRect_mapsThroughRotation() {
         val r = NormRect(0.1f, 0.2f, 0.5f, 0.6f)
         assertRect(r, cropRectInSource(r, 0))
-        // 90° horaire : x = y', y = 1 - x'
+        // 90° clockwise: x = y', y = 1 - x'
         assertRect(NormRect(0.2f, 0.5f, 0.6f, 0.9f), cropRectInSource(r, 90))
         assertRect(NormRect(0.5f, 0.4f, 0.9f, 0.8f), cropRectInSource(r, 180))
-        // 270° horaire : x = 1 - y', y = x'
+        // 270° clockwise: x = 1 - y', y = x'
         assertRect(NormRect(0.4f, 0.1f, 0.8f, 0.5f), cropRectInSource(r, 270))
         assertRect(NormRect(0.4f, 0.1f, 0.8f, 0.5f), cropRectInSource(r, -90))
     }
@@ -133,7 +133,7 @@ class MediaStoreLogicTest {
         assertTrue(shouldKeepPlaybackPosition(3_000, 60_000))
         assertTrue(shouldKeepPlaybackPosition(57_000, 60_000))
         assertFalse(shouldKeepPlaybackPosition(57_001, 60_000))
-        assertTrue(shouldKeepPlaybackPosition(100_000, 0)) // durée inconnue
+        assertTrue(shouldKeepPlaybackPosition(100_000, 0)) // unknown duration
     }
 
     @Test

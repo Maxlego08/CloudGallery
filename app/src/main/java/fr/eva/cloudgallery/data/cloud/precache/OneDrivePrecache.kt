@@ -69,9 +69,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Tailles téléchargées pour cet appareil : palier de vignette de la grille Photos au zoom par
- * défaut, et grand côté de l'écran pour l'aperçu de la visionneuse (même calcul que la
- * visionneuse : `screenWidthDp` / `screenHeightDp` × densité).
+ * Sizes downloaded for this device: thumbnail tier of the Photos grid at the default zoom, and
+ * the screen's long side for the viewer preview (same computation as the viewer:
+ * `screenWidthDp` / `screenHeightDp` × density).
  */
 internal class PrecacheTargets(val gridBucket: Int, private val viewportLongPx: Int) {
 
@@ -93,22 +93,22 @@ internal class PrecacheTargets(val gridBucket: Int, private val viewportLongPx: 
     }
 }
 
-/** Référence de miniature d'une ligne (même version que l'affichage : cTag, sinon date de modification). */
+/** Thumbnail reference of a row (same version as the display path: cTag, otherwise modification date). */
 private fun PrecacheRow.ref() = cloudThumbRef(cloudItemId, cloudCTag, dateModified)!!
 
 /**
- * Passage de mise en cache de tout OneDrive : pour chaque élément dont la miniature vient de
- * OneDrive (les plus récents d'abord), vignette de grille puis aperçu de la visionneuse, en
- * sautant ce qui est déjà enregistré (reprise sans retéléchargement). Service de premier plan
- * (type dataSync, notification avec « Annuler ») quand il est lancé appli visible ; sinon
- * travail ordinaire, interrompu et repris par WorkManager.
+ * Pass that caches all of OneDrive: for each item whose thumbnail comes from OneDrive (most
+ * recent first), grid thumbnail then viewer preview, skipping what is already saved (resume
+ * without re-downloading). Foreground service (dataSync type, notification with "Cancel") when
+ * launched while the app is visible; otherwise an ordinary work, interrupted and resumed by
+ * WorkManager.
  *
- * S'arrête proprement sous l'espace libre minimal ([precacheHasRoom]), à la déconnexion, après
- * trop d'échecs réseau consécutifs (reprise plus tard) ou sur une limitation Graph. Un passage
- * complet retire ensuite les fichiers des éléments disparus ou modifiés. En mode
- * [KEY_CLEANUP_ONLY], seul ce nettoyage est fait (aucune requête réseau).
+ * Stops cleanly below the minimum free space ([precacheHasRoom]), on sign-out, after too many
+ * consecutive network failures (resumed later) or on Graph throttling. A complete pass then
+ * removes the files of items that disappeared or changed. In [KEY_CLEANUP_ONLY] mode, only this
+ * cleanup is done (no network request).
  *
- * Journal sans URL, jeton, identifiant d'élément ni nom de compte.
+ * Logs contain no URL, token, item id or account name.
  */
 @HiltWorker
 class OneDrivePrecacheWorker @AssistedInject constructor(
@@ -135,12 +135,12 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: PrecacheClearedException) {
-            // « Vider le cache » pendant le passage : rien à reprendre, aucun bilan.
+            // "Clear cache" during the pass: nothing to resume, no summary.
             Result.success()
         } catch (e: CloudAuthRequiredException) {
             Result.success(outcomeData(PrecacheOutcome.SIGNED_OUT, Counters()))
         } catch (e: Exception) {
-            Log.w(TAG, "Mise en cache de OneDrive interrompue, reprise plus tard", e)
+            Log.w(TAG, "OneDrive caching interrupted, will resume later", e)
             Result.retry()
         }
     }
@@ -163,7 +163,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
             before = page.last().id
             val (usable, total) = store.volumeSpace()
             if (!precacheHasRoom(usable, total)) {
-                Log.i(TAG, "Mise en cache arrêtée : espace libre insuffisant")
+                Log.i(TAG, "Caching stopped: not enough free space")
                 return Result.success(outcomeData(PrecacheOutcome.LOW_SPACE, counters))
             }
             page.forEach { keep += precacheHash(it.ref()) }
@@ -173,13 +173,13 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
                 }.awaitAll()
             }
             if (precacheShouldPause(consecutiveFailures.get())) {
-                Log.w(TAG, "Mise en cache en pause : trop d'échecs consécutifs")
+                Log.w(TAG, "Caching paused: too many consecutive failures")
                 return Result.retry()
             }
             report(counters)
         }
         val removed = store.retainOnly(keep)
-        Log.i(TAG, "Mise en cache terminée : ${counters.done.get()} élément(s), ${counters.failed.get()} sans miniature ou en échec, $removed fichier(s) obsolète(s) retiré(s)")
+        Log.i(TAG, "Caching finished: ${counters.done.get()} item(s), ${counters.failed.get()} without thumbnail or failed, $removed obsolete file(s) removed")
         return Result.success(outcomeData(PrecacheOutcome.COMPLETED, counters))
     }
 
@@ -206,7 +206,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
         } catch (e: CloudAuthRequiredException) {
             throw e
         } catch (e: CloudThrottledException) {
-            // Pause demandée par Graph : le passage reprendra plus tard (WorkManager).
+            // Pause requested by Graph: the pass will resume later (WorkManager).
             throw e
         } catch (e: CloudException) {
             counters.failed.incrementAndGet()
@@ -219,7 +219,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
         }
     }
 
-    /** Nettoyage seul : fichiers des éléments disparus, modifiés ou désormais présents sur le téléphone. */
+    /** Cleanup only: files of items that disappeared, changed or are now present on the phone. */
     private suspend fun cleanup() {
         if (store.isEmpty()) return
         val keep = HashSet<String>()
@@ -232,7 +232,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
             page.forEach { keep += precacheHash(it.ref()) }
         }
         val removed = store.retainOnly(keep)
-        if (removed > 0) Log.i(TAG, "Mise en cache : $removed fichier(s) obsolète(s) retiré(s)")
+        if (removed > 0) Log.i(TAG, "Caching: $removed obsolete file(s) removed")
     }
 
     private suspend fun report(counters: Counters) {
@@ -243,15 +243,15 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Notification non mise à jour : sans effet sur le passage.
-                Log.w(TAG, "Notification de mise en cache non mise à jour", e)
+                // Notification not updated: no effect on the pass.
+                Log.w(TAG, "Caching notification not updated", e)
             }
         }
     }
 
     /**
-     * Service de premier plan (dataSync) : seulement possible appli visible (Android 12+). Lancé
-     * en arrière-plan (« Garder à jour », reprise), le passage continue en travail ordinaire.
+     * Foreground service (dataSync): only possible while the app is visible (Android 12+). When
+     * launched in the background ("Keep up to date", resume), the pass continues as an ordinary work.
      */
     private suspend fun enterForeground(counters: Counters) {
         try {
@@ -261,7 +261,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.i(TAG, "Mise en cache sans service de premier plan (lancée en arrière-plan)")
+            Log.i(TAG, "Caching without a foreground service (launched in the background)")
         }
     }
 
@@ -280,7 +280,7 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
     private fun outcomeData(outcome: PrecacheOutcome, counters: Counters): Data =
         Data.Builder().putAll(counters.toData()).putString(KEY_OUTCOME, outcome.name).build()
 
-    /** Avancement du passage (partagé entre les téléchargements parallèles). */
+    /** Progress of the pass (shared between the parallel downloads). */
     private class Counters {
         @Volatile
         var total = 0
@@ -309,15 +309,15 @@ class OneDrivePrecacheWorker @AssistedInject constructor(
     }
 }
 
-/** Travaux WorkManager de la mise en cache (passage complet, nettoyage seul). */
+/** WorkManager works for caching (complete pass, cleanup only). */
 internal object PrecacheWork {
     const val FULL = "onedrive_precache"
     const val CLEANUP = "onedrive_precache_cleanup"
 
     /**
-     * Passage complet. [append] : ajouté après le passage en cours (« Garder à jour » après une
-     * synchro) au lieu d'être ignoré s'il y en a déjà un. Réseau non facturé si le réglage Wi-Fi
-     * des téléchargements ([wifiOnly]) l'exige ; batterie et stockage non faibles.
+     * Complete pass. [append]: added after the running pass ("Keep up to date" after a sync)
+     * instead of being ignored if there already is one. Unmetered network if the downloads'
+     * Wi-Fi setting ([wifiOnly]) requires it; battery and storage not low.
      */
     fun enqueueFull(context: Context, wifiOnly: Boolean, append: Boolean) {
         val constraints = Constraints.Builder()
@@ -333,7 +333,7 @@ internal object PrecacheWork {
         WorkManager.getInstance(context).enqueueUniqueWork(FULL, policy, request)
     }
 
-    /** Nettoyage seul (sans réseau), regroupé avec un nettoyage déjà prévu. */
+    /** Cleanup only (no network), merged with an already scheduled cleanup. */
     fun enqueueCleanup(context: Context) {
         val request = OneTimeWorkRequestBuilder<OneDrivePrecacheWorker>()
             .setInputData(workDataOf(OneDrivePrecacheWorker.KEY_CLEANUP_ONLY to true))
@@ -341,7 +341,7 @@ internal object PrecacheWork {
         WorkManager.getInstance(context).enqueueUniqueWork(CLEANUP, ExistingWorkPolicy.KEEP, request)
     }
 
-    /** Arrête tout (« Vider le cache », données OneDrive retirées). */
+    /** Stops everything ("Clear cache", OneDrive data removed). */
     fun cancelAll(context: Context) {
         val work = WorkManager.getInstance(context)
         work.cancelUniqueWork(FULL)
@@ -431,7 +431,7 @@ class OneDrivePrecacheRepositoryImpl @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(OneDrivePrecacheWorker.TAG, "Mise en cache de OneDrive non planifiée", e)
+                Log.w(OneDrivePrecacheWorker.TAG, "OneDrive caching not scheduled", e)
             }
         }
     }
@@ -446,9 +446,9 @@ class OneDrivePrecacheRepositoryImpl @Inject constructor(
 }
 
 /**
- * Vidage complet de la mise en cache de tout OneDrive : passages arrêtés puis fichiers supprimés
- * (un téléchargement en cours n'enregistre plus rien, voir [CloudPrecacheStore.writeToken]).
- * Dispatcher d'E/S.
+ * Complete clearing of the all-of-OneDrive cache: passes stopped, then files deleted (a running
+ * download no longer saves anything, see [CloudPrecacheStore.writeToken]).
+ * I/O dispatcher.
  */
 fun interface PrecacheCleaner {
     fun clearAll()
@@ -466,9 +466,9 @@ class WorkManagerPrecacheCleaner @Inject constructor(
 }
 
 /**
- * « Garder à jour » : après chaque synchronisation OneDrive réussie (premier plan ou arrière-plan),
- * un passage est ajouté en arrière-plan pour les nouveaux éléments et nouvelles versions. Sans
- * « Garder à jour », seul un nettoyage (sans réseau) retire les fichiers devenus inutiles.
+ * "Keep up to date": after each successful OneDrive sync (foreground or background), a pass is
+ * added in the background for new items and new versions. Without "Keep up to date", only a
+ * cleanup (no network) removes files that are no longer needed.
  */
 @Singleton
 class OneDrivePrecacheScheduler @Inject constructor(
@@ -482,7 +482,7 @@ class OneDrivePrecacheScheduler @Inject constructor(
 ) {
     private val started = AtomicBoolean(false)
 
-    /** Suivi des synchronisations pour la durée du processus (Application.onCreate). */
+    /** Tracks syncs for the lifetime of the process (Application.onCreate). */
     fun start() {
         if (!feature.enabled || !started.compareAndSet(false, true)) return
         scope.launch(io) {
@@ -496,7 +496,7 @@ class OneDrivePrecacheScheduler @Inject constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(OneDrivePrecacheWorker.TAG, "Mise à jour de la mise en cache non planifiée", e)
+                        Log.w(OneDrivePrecacheWorker.TAG, "Cache update not scheduled", e)
                     }
                 }
         }

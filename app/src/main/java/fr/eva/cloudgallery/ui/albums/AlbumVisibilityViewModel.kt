@@ -12,13 +12,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** « Masquer des albums » : tous les albums, masqués compris, et leur affichage. */
+/** "Hide albums": all albums, hidden ones included, and their visibility. */
 @HiltViewModel
 class AlbumVisibilityViewModel @Inject constructor(
     private val albumRepository: AlbumRepository,
 ) : ViewModel() {
 
-    /** Null pendant le premier chargement. */
+    /** Null during the first load. */
     val albums: StateFlow<List<AlbumSummary>?> = albumRepository.observeAllAlbums()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

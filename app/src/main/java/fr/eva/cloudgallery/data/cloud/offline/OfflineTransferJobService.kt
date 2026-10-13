@@ -20,22 +20,22 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Travail JobScheduler (transfert de données lancé par l'utilisateur) qui vide la file des copies
- * hors ligne avec [OfflineDownloadEngine].
+ * JobScheduler job (user-initiated data transfer) that drains the offline copy queue with
+ * [OfflineDownloadEngine].
  *
- * - Notification fournie dès le démarrage (obligatoire dans les 10 s, à chaque démarrage).
- * - Connexions sur le réseau choisi par le système ([JobParameters.getNetwork]).
- * - `jobFinished` appelé sur tous les chemins, sauf après `onStopJob` (inutile alors).
- * - Avant de se terminer, le travail revérifie la file (sous le verrou de planification) : une
- *   tâche ajoutée pendant la fin d'un passage est prise par un nouveau passage, ou confiée à un
- *   nouveau travail ; des tâches restées en attente du Wi-Fi sont confiées à un nouveau travail
- *   (accepté seulement si l'appli est visible, sinon au prochain premier plan).
- * - Arrêt par l'utilisateur (Gestionnaire de tâches) : file en pause jusqu'à sa reprise ;
- *   annulation par l'appli : rien ; autre arrêt (réseau perdu, Wi-Fi quitté) : reprise par le
- *   système. Le fichier partiel est toujours gardé pour la reprise.
+ * - Notification provided right at start (mandatory within 10 s, on every start).
+ * - Connections on the network chosen by the system ([JobParameters.getNetwork]).
+ * - `jobFinished` called on every path, except after `onStopJob` (pointless then).
+ * - Before finishing, the job rechecks the queue (under the scheduling lock): a task added while
+ *   a pass is ending is picked up by a new pass, or handed to a new job; tasks still waiting for
+ *   Wi-Fi are handed to a new job (accepted only if the app is visible, otherwise the next time
+ *   it is in the foreground).
+ * - Stopped by the user (Task Manager): queue paused until resumed; cancelled by the app:
+ *   nothing; any other stop (network lost, Wi-Fi left): resumed by the system. The partial file
+ *   is always kept for resuming.
  *
- * L'avertissement « SpecifyJobSchedulerIdRange » ne s'applique pas : ce travail est planifié dans
- * son propre espace de noms JobScheduler (« offline »), WorkManager utilise le sien.
+ * The "SpecifyJobSchedulerIdRange" warning does not apply: this job is scheduled in its own
+ * JobScheduler namespace ("offline"), WorkManager uses its own.
  */
 @SuppressLint("SpecifyJobSchedulerIdRange")
 @AndroidEntryPoint
@@ -58,13 +58,13 @@ class OfflineTransferJobService : JobService() {
     private val serviceJob = SupervisorJob()
     private var running: Job? = null
 
-    /** Référence forte aux paramètres du travail en cours (Android 16 : travail « abandonné » sinon). */
+    /** Strong reference to the running job's parameters (Android 16: otherwise the job is "abandoned"). */
     private var params: JobParameters? = null
 
     @Volatile
     private var stoppedBySystem = false
 
-    /** Valeur renvoyée par `onStopJob` : le système replanifie le travail. */
+    /** Value returned by `onStopJob`: the system reschedules the job. */
     @Volatile
     private var stopRescheduled = false
 
@@ -96,7 +96,7 @@ class OfflineTransferJobService : JobService() {
                         reschedule = true
                         break
                     }
-                    // Tâches ajoutées pendant la fin du passage : nouveau passage (borné).
+                    // Tasks added while the pass was ending: new pass (bounded).
                     passes++
                     if (passes >= MAX_PASSES || !offline.continueOrEndJob(jobSeq, network)) break
                 }
@@ -104,9 +104,9 @@ class OfflineTransferJobService : JobService() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Echec du travail des copies hors ligne", e)
+                Log.e(TAG, "Offline copy job failed", e)
             } finally {
-                // Fin normale (pas une annulation par la purge, « Annuler » ou le système).
+                // Normal end (not a cancellation by the purge, "Cancel" or the system).
                 val completedNormally = isActive && !stoppedBySystem
                 if (!stoppedBySystem) jobFinished(params, reschedule)
                 withContext(NonCancellable) {
@@ -125,7 +125,7 @@ class OfflineTransferJobService : JobService() {
         val job = running
         job?.cancel()
         if (action == StopAction.PAUSE) {
-            // Après l'arrêt effectif du passage (tâche remise en attente), toute la file passe en pause.
+            // Once the pass has actually stopped (task put back in the queue), the whole queue is paused.
             appScope.launch(io) {
                 job?.join()
                 offline.pauseAfterUserStop()
@@ -142,7 +142,7 @@ class OfflineTransferJobService : JobService() {
     private companion object {
         const val TAG = "OfflineJob"
 
-        /** Passages successifs au plus dans un même travail (tâches ajoutées en fin de passage). */
+        /** Maximum number of successive passes in a single job (tasks added at the end of a pass). */
         const val MAX_PASSES = 20
     }
 }

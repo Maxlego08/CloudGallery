@@ -2,25 +2,25 @@ package fr.eva.cloudgallery.ui.grid
 
 import kotlin.math.roundToInt
 
-/** Regroupement des cellules de la grille : par jour (zoom rapproché) ou par mois (zoom éloigné). */
+/** Grouping of the grid cells: by day (zoomed in) or by month (zoomed out). */
 enum class GridGrouping { DAY, MONTH }
 
 /**
- * Niveaux de zoom de la grille, comme Samsung Galerie : 0 = plus grandes miniatures.
- * Fonctions pures (testées unitairement).
+ * Grid zoom levels, like Samsung Gallery: 0 = largest thumbnails.
+ * Pure functions (unit-tested).
  */
 object GridZoomLevels {
-    /** Nombre de colonnes en portrait pour chaque niveau. */
+    /** Number of portrait columns for each level. */
     val PORTRAIT_COLUMNS: List<Int> = listOf(2, 3, 4, 6, 9)
 
     const val MIN_LEVEL = 0
     val MAX_LEVEL: Int = PORTRAIT_COLUMNS.lastIndex
     const val DEFAULT_LEVEL = 1
 
-    /** Facteur appliqué en paysage (écran plus large → plus de colonnes). */
+    /** Factor applied in landscape (wider screen → more columns). */
     const val LANDSCAPE_FACTOR = 1.75f
 
-    /** Dernier niveau regroupé par jour ; au-delà, regroupement par mois. */
+    /** Last level grouped by day; beyond it, grouped by month. */
     private const val LAST_DAY_LEVEL = 2
 
     fun clamp(level: Int): Int = level.coerceIn(MIN_LEVEL, MAX_LEVEL)
@@ -34,8 +34,8 @@ object GridZoomLevels {
         if (clamp(level) <= LAST_DAY_LEVEL) GridGrouping.DAY else GridGrouping.MONTH
 
     /**
-     * Niveau résultant d'un pincement. [delta] < 0 : écarter les doigts (miniatures plus grandes,
-     * moins de colonnes) ; [delta] > 0 : pincer (plus de colonnes).
+     * Level resulting from a pinch. [delta] < 0: spreading the fingers (larger thumbnails, fewer
+     * columns); [delta] > 0: pinching in (more columns).
      */
     fun step(level: Int, delta: Int): Int = clamp(clamp(level) + delta)
 }

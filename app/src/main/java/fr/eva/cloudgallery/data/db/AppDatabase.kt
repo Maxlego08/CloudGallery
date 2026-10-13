@@ -30,8 +30,8 @@ import fr.eva.cloudgallery.data.db.entity.SyncCursorEntity
 import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
 
 /**
- * Base locale. Toute évolution du schéma doit incrémenter [version] et fournir une
- * migration (AutoMigration ou Migration manuelle) : les schémas sont exportés dans app/schemas.
+ * Local database. Any schema change must bump [version] and provide a migration
+ * (AutoMigration or a manual Migration): schemas are exported to app/schemas.
  */
 @Database(
     entities = [
@@ -69,8 +69,8 @@ abstract class AppDatabase : RoomDatabase() {
         const val NAME = "cloudgallery.db"
 
         /**
-         * v2 : sources masquées (missingSince) au lieu d'être supprimées, et volume MediaStore.
-         * Le curseur MediaStore est effacé pour forcer une relecture complète qui renseigne volumeName.
+         * v2: sources hidden (missingSince) instead of deleted, and MediaStore volume.
+         * The MediaStore cursor is cleared to force a full rescan that fills in volumeName.
          */
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -81,10 +81,9 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v3 : OneDrive. Identifiant et cTag de l'élément OneDrive dénormalisés dans `media`
-         * (miniatures sans jointure), et table des dossiers OneDrive. Aucune donnée OneDrive
-         * n'existe en v2 : rien à recopier. Les nouvelles colonnes de `media` sont recalculées
-         * par refreshSourceFlags.
+         * v3: OneDrive. OneDrive item id and cTag denormalized into `media` (thumbnails
+         * without a join), and OneDrive folder table. No OneDrive data exists in v2: nothing to
+         * copy over. The new `media` columns are recomputed by refreshSourceFlags.
          */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -100,10 +99,10 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v4 : contenus OneDrive copiés sur l'appareil (originaux temporaires, copies hors ligne).
-         * Version du contenu (cTag) des fichiers en cache, et identifiant, version et nombre de
-         * tentatives des téléchargements (reprise sûre d'un fichier partiel). Lignes existantes :
-         * colonnes nulles (version inconnue, jamais considérée à jour) et 0 tentative.
+         * v4: OneDrive content copied to the device (temporary originals, offline copies).
+         * Content version (cTag) of cached files, and item id, version and attempt count of
+         * downloads (safe resumption of a partial file). Existing rows: null columns (unknown
+         * version, never considered up to date) and 0 attempts.
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -115,9 +114,9 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v5 : marqueur de suppression des dossiers OneDrive (`cloud_folder.deletedAt`). Lignes
-         * existantes : dossiers présents (null). Les dossiers supprimés avant cette version n'ont
-         * plus de ligne : leurs éléments masqués restent détectés comme orphelins.
+         * v5: deletion marker for OneDrive folders (`cloud_folder.deletedAt`). Existing rows:
+         * folders present (null). Folders deleted before this version no longer have a row:
+         * their hidden items are still detected as orphans.
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -126,9 +125,9 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v6 : dédoublonnage et recherche. Signature du fichier local au calcul de son empreinte
-         * (`media_source.hashSignature`, null : à calculer) et index de recherche plein texte
-         * `media_fts` (vide : reconstruit par la couche données).
+         * v6: deduplication and search. Signature of the local file when its hash was computed
+         * (`media_source.hashSignature`, null: to be computed) and full-text search index
+         * `media_fts` (empty: rebuilt by the data layer).
          */
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -138,8 +137,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v7 : albums masqués aussi dans Photos et Vidéos (`album.hideMedia`). Albums existants :
-         * non concernés (0) ; `isHidden` existait déjà (masqué dans Albums seulement).
+         * v7: albums also hidden from Photos and Videos (`album.hideMedia`). Existing albums:
+         * unaffected (0); `isHidden` already existed (hidden from Albums only).
          */
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -147,7 +146,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /** Création de `media_fts`, identique au schéma exporté (app/schemas, version 6). */
+        /** Creation of `media_fts`, identical to the exported schema (app/schemas, version 6). */
         internal const val MEDIA_FTS_CREATE_SQL =
             "CREATE VIRTUAL TABLE IF NOT EXISTS `media_fts` USING FTS4(`name` TEXT NOT NULL, " +
                 "`folders` TEXT NOT NULL, `dates` TEXT NOT NULL, tokenize=unicode61)"

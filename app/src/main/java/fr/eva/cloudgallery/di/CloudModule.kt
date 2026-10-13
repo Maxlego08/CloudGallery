@@ -24,9 +24,9 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 /**
- * OneDrive. Graphe sans cycle : l'UI dépend de [CloudSessionCoordinator], qui dépend de
- * [OneDriveSyncer] et de [MsalAuthService] ; le client Graph ne dépend que de
- * [CloudTokenProvider] (MSAL), qui ne dépend ni de Graph ni de la synchronisation.
+ * OneDrive. Acyclic graph: the UI depends on [CloudSessionCoordinator], which depends on
+ * [OneDriveSyncer] and [MsalAuthService]; the Graph client only depends on
+ * [CloudTokenProvider] (MSAL), which depends neither on Graph nor on the sync.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -59,9 +59,9 @@ abstract class CloudModule {
 object CloudNetworkModule {
 
     /**
-     * Client HTTP de Microsoft Graph. Injecté via dagger.Lazy et créé au premier appel, sur le
-     * dispatcher d'E/S. Les redirections sont suivies ; OkHttp retire l'en-tête Authorization
-     * lors d'une redirection vers un autre hôte.
+     * HTTP client for Microsoft Graph. Injected via dagger.Lazy and created on first call, on the
+     * I/O dispatcher. Redirects are followed; OkHttp strips the Authorization header on a
+     * redirect to another host.
      */
     @Provides @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()

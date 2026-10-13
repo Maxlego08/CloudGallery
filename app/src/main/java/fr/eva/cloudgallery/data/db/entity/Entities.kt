@@ -12,9 +12,9 @@ import fr.eva.cloudgallery.domain.model.MediaType
 import fr.eva.cloudgallery.domain.model.SourceKind
 
 /**
- * Média logique. Les colonnes `hasLocal`, `hasCloud`, `hasOffline`, `primaryUri`, `cloudItemId`
- * et `cloudCTag` sont dénormalisées depuis `media_source` (sources visibles uniquement) pour que
- * la grille n'ait aucune jointure à faire.
+ * Logical media item. The `hasLocal`, `hasCloud`, `hasOffline`, `primaryUri`, `cloudItemId` and
+ * `cloudCTag` columns are denormalized from `media_source` (visible sources only) so that the
+ * grid needs no join.
  */
 @Entity(
     tableName = "media",
@@ -30,7 +30,7 @@ data class MediaEntity(
     val mediaType: MediaType,
     val displayName: String,
     val mimeType: String?,
-    /** Date de prise de vue en ms (EXIF/MediaStore), à défaut date d'ajout. */
+    /** Capture date in ms (EXIF/MediaStore), falling back to the date added. */
     val dateTaken: Long,
     val dateAdded: Long,
     val dateModified: Long,
@@ -43,11 +43,11 @@ data class MediaEntity(
     val hasLocal: Boolean,
     val hasCloud: Boolean,
     val hasOffline: Boolean,
-    /** Empreinte de contenu (ex. SHA-1/QuickXorHash) lorsqu'elle est connue. Sert au dédoublonnage. */
+    /** Content hash (e.g. SHA-1/QuickXorHash) when known. Used for deduplication. */
     val contentHash: String? = null,
-    /** Identifiant de l'élément OneDrive visible (miniatures Graph), null sans source OneDrive. */
+    /** Id of the visible OneDrive item (Graph thumbnails), null without a OneDrive source. */
     val cloudItemId: String? = null,
-    /** cTag de cet élément OneDrive : change avec le contenu (clé de cache des miniatures). */
+    /** cTag of that OneDrive item: changes with the content (thumbnail cache key). */
     val cloudCTag: String? = null,
 )
 
@@ -71,43 +71,43 @@ data class MediaSourceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val mediaId: Long,
     val kind: SourceKind,
-    /** _ID MediaStore (LOCAL), id d'élément OneDrive (ONEDRIVE) ou chemin de cache (OFFLINE_COPY). */
+    /** MediaStore _ID (LOCAL), OneDrive item id (ONEDRIVE) or cache path (OFFLINE_COPY). */
     val externalId: String,
     val uri: String?,
-    /** Clé de dossier : "local:<BUCKET_ID>" ou "onedrive:<parentId>". */
+    /** Folder key: "local:<BUCKET_ID>" or "onedrive:<parentId>". */
     val bucketKey: String?,
     val bucketName: String?,
     val relativePath: String?,
     val sizeBytes: Long,
     val dateModified: Long,
-    /** GENERATION_MODIFIED MediaStore, ou cTag OneDrive. */
+    /** MediaStore GENERATION_MODIFIED, or OneDrive cTag. */
     val generation: Long = 0,
     val eTag: String? = null,
     val cTag: String? = null,
     val sha1Hash: String? = null,
     val quickXorHash: String? = null,
     /**
-     * Fichier local dont [quickXorHash] a été calculé par l'appli : signature du fichier à ce
-     * moment-là (taille, date de modification, génération MediaStore, voir `localHashSignature`).
-     * Une signature différente de l'état courant rend l'empreinte périmée. Null : jamais calculée
-     * (toujours null pour OneDrive, dont l'empreinte vient de Graph).
+     * Local file whose [quickXorHash] was computed by the app: signature of the file at that time
+     * (size, modification date, MediaStore generation, see `localHashSignature`). A signature
+     * different from the current state makes the hash stale. Null: never computed (always null
+     * for OneDrive, whose hash comes from Graph).
      */
     val hashSignature: String? = null,
-    /** VOLUME_NAME MediaStore (ex. « external_primary » ou volume amovible) ; null si inconnu. */
+    /** MediaStore VOLUME_NAME (e.g. "external_primary" or a removable volume); null if unknown. */
     val volumeName: String? = null,
     /**
-     * Instant (ms) depuis lequel la source n'est plus visible dans MediaStore (corbeille, volume
-     * démonté, accès partiel, ré-identification en attente). Null = visible. Une source absente
-     * est masquée mais conservée, avec favoris et albums, jusqu'à confirmation de sa disparition.
+     * Instant (ms) since which the source is no longer visible in MediaStore (trash, unmounted
+     * volume, partial access, pending re-identification). Null = visible. A missing source is
+     * hidden but kept, with its favorites and albums, until its disappearance is confirmed.
      */
     val missingSince: Long? = null,
 )
 
 /**
- * Index de recherche plein texte (FTS4, tokeniseur unicode61 : casse et accents ignorés) d'un
- * média logique : [rowId] = `media.id`. Tenu à jour par la couche données (pas de clé étrangère
- * possible sur une table virtuelle) : nom du fichier, noms des dossiers de ses sources visibles,
- * libellés de date (année, mois en toutes lettres…).
+ * Full-text search index (FTS4, unicode61 tokenizer: case and accents ignored) of a logical
+ * media item: [rowId] = `media.id`. Kept up to date by the data layer (no foreign key possible
+ * on a virtual table): file name, folder names of its visible sources, date labels (year, month
+ * spelled out...).
  */
 @Fts4(tokenizer = FtsOptions.TOKENIZER_UNICODE61)
 @Entity(tableName = "media_fts")
@@ -129,7 +129,7 @@ data class AlbumEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val type: AlbumType,
-    /** bucketKey pour les albums-dossiers, null pour les albums virtuels. */
+    /** bucketKey for folder albums, null for virtual albums. */
     val sourceKey: String?,
     val relativePath: String?,
     val coverMediaId: Long? = null,
@@ -137,11 +137,11 @@ data class AlbumEntity(
     val updatedAt: Long,
     val sortIndex: Int = 0,
     val isPinned: Boolean = false,
-    /** Masqué dans l'onglet Albums (choix de l'utilisateur, « Masquer des albums »). */
+    /** Hidden from the Albums tab (user choice, "Hide albums"). */
     val isHidden: Boolean = false,
-    /** Nom défini par l'utilisateur (prioritaire sur le nom de dossier). */
+    /** User-defined name (takes precedence over the folder name). */
     val customName: String? = null,
-    /** Médias de l'album masqués aussi dans Photos et Vidéos (v7, avec [isHidden]). */
+    /** The album's media are also hidden from Photos and Videos (v7, with [isHidden]). */
     @ColumnInfo(defaultValue = "0") val hideMedia: Boolean = false,
 )
 
@@ -192,19 +192,19 @@ data class CachedFileEntity(
     val sizeBytes: Long,
     val createdAt: Long,
     val lastAccessAt: Long,
-    /** Fichier conservé explicitement hors connexion : jamais supprimé par le nettoyage LRU. */
+    /** File explicitly kept offline: never deleted by the LRU cleanup. */
     val pinned: Boolean,
     /**
-     * Version du contenu copié (cTag OneDrive) : une copie dont la version diffère de celle de
-     * l'élément OneDrive est périmée. Null si inconnue (jamais considérée comme à jour).
+     * Version of the copied content (OneDrive cTag): a copy whose version differs from the
+     * OneDrive item's is stale. Null if unknown (never considered up to date).
      */
     val version: String? = null,
 )
 
 /**
- * Etat d'une copie hors ligne à télécharger (stocké par son nom, colonne TEXT : ajouter une valeur
- * ne change pas le schéma). PAUSED : arrêtée par l'utilisateur (Gestionnaire de tâches, arrêt
- * forcé), reprise uniquement à sa demande.
+ * State of an offline copy to download (stored by name, TEXT column: adding a value does not
+ * change the schema). PAUSED: stopped by the user (Task Manager, force stop), resumed only on
+ * their request.
  */
 enum class DownloadState { QUEUED, RUNNING, DONE, FAILED, CANCELLED, PAUSED }
 
@@ -225,51 +225,51 @@ data class DownloadTaskEntity(
     val keepOffline: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
-    /** Nom d'un code d'erreur (DownloadError), jamais de texte libre ni d'URL. */
+    /** Name of an error code (DownloadError), never free text or a URL. */
     val error: String? = null,
-    /** Identifiant de l'élément OneDrive au moment de la mise en file. */
+    /** OneDrive item id at enqueue time. */
     val cloudItemId: String? = null,
-    /** Version du contenu (cTag) à laquelle appartient le fichier partiel `.part`. */
+    /** Content version (cTag) the partial `.part` file belongs to. */
     val cTag: String? = null,
-    /** Tentatives déjà faites (reprises après erreur). */
+    /** Attempts already made (retries after an error). */
     @ColumnInfo(defaultValue = "0") val attempts: Int = 0,
 )
 
 /**
- * Dossier OneDrive connu (tous les dossiers du lecteur, renvoyés par la requête delta). Sert au
- * nom et au chemin des albums OneDrive et au masquage du contenu d'un dossier supprimé.
+ * Known OneDrive folder (all folders of the drive, returned by the delta query). Used for the
+ * name and path of OneDrive albums and to hide the content of a deleted folder.
  */
 @Entity(
     tableName = "cloud_folder",
     indices = [Index(value = ["parentId"])],
 )
 data class CloudFolderEntity(
-    /** Identifiant d'élément OneDrive du dossier. */
+    /** OneDrive item id of the folder. */
     @PrimaryKey val itemId: String,
-    /** Dossier parent (null pour la racine ou si inconnu). */
+    /** Parent folder (null for the root or if unknown). */
     val parentId: String?,
     val name: String,
-    /** Racine du lecteur (facette `root`). */
+    /** Drive root (`root` facet). */
     val isRoot: Boolean,
     val updatedAt: Long,
     /**
-     * Marqueur de suppression (v5) : dossier supprimé sur OneDrive, gardé tant que son
-     * sous-arbre contient des éléments masqués (restauration possible depuis la corbeille).
-     * Null : dossier présent. Une ligne marquée n'est jamais montrée.
+     * Deletion marker (v5): folder deleted on OneDrive, kept as long as its subtree contains
+     * hidden items (restore from the recycle bin possible).
+     * Null: folder present. A marked row is never shown.
      */
     val deletedAt: Long? = null,
 )
 
 /**
- * Curseur de synchronisation par fournisseur ("mediastore", "onedrive"). Pour OneDrive :
- * `cursor` = deltaLink, `version` = « <drive.id>|<version de $select> » (voir OneDriveLogic).
+ * Sync cursor per provider ("mediastore", "onedrive"). For OneDrive: `cursor` = deltaLink,
+ * `version` = "<drive.id>|<$select version>" (see OneDriveLogic).
  */
 @Entity(tableName = "sync_cursor")
 data class SyncCursorEntity(
     @PrimaryKey val provider: String,
-    /** Génération MediaStore ou deltaLink Microsoft Graph. */
+    /** MediaStore generation or Microsoft Graph deltaLink. */
     val cursor: String?,
-    /** Version MediaStore (getVersion) : si elle change, la génération n'est plus comparable. */
+    /** MediaStore version (getVersion): if it changes, the generation is no longer comparable. */
     val version: String?,
     val lastSyncAt: Long,
     val lastFullSyncAt: Long,
@@ -295,7 +295,7 @@ data class PlaybackPositionEntity(
     val updatedAt: Long,
 )
 
-/** Ligne de grille (projection de `media` + favori). */
+/** Grid row (projection of `media` + favorite). */
 data class MediaRow(
     val id: Long,
     val mediaType: MediaType,
@@ -315,7 +315,7 @@ data class MediaRow(
     val cloudCTag: String?,
 )
 
-/** Ligne de liste d'albums avec statistiques et couverture. */
+/** Album list row with statistics and cover. */
 data class AlbumRow(
     val id: Long,
     val name: String,

@@ -3,8 +3,8 @@ package fr.eva.cloudgallery.domain.model
 import kotlinx.serialization.Serializable
 
 /**
- * Ensemble ordonné de médias dans lequel on navigue (grille, visionneuse…).
- * Sérialisable pour être transmis dans les routes de navigation.
+ * Ordered set of media being navigated (grid, viewer...).
+ * Serializable so it can be passed in navigation routes.
  */
 @Serializable
 sealed interface MediaContext {
@@ -20,11 +20,11 @@ sealed interface MediaContext {
     @Serializable
     data class Album(val albumId: Long) : MediaContext
 
-    /** Résultats d'une recherche plein texte (saisie de l'utilisateur, telle quelle). */
+    /** Results of a full-text search (user input, as typed). */
     @Serializable
     data class Search(val query: String) : MediaContext
 
-    /** Un seul média ouvert depuis une autre application (intent VIEW). */
+    /** A single media item opened from another app (VIEW intent). */
     @Serializable
     data class Single(val mediaId: Long) : MediaContext
 }

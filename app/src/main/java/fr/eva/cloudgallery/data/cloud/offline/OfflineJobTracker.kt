@@ -4,21 +4,21 @@ import kotlinx.coroutines.sync.Mutex
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Suite à donner à une demande de planification du travail. */
+/** What to do with a job scheduling request. */
 internal enum class ScheduleDecision {
-    /** Un travail en cours ou planifié prendra les tâches en charge. */
+    /** A running or scheduled job will pick up the tasks. */
     KEEP,
 
-    /** Planifier (ou replanifier, ce qui remplace le travail existant). */
+    /** Schedule (or reschedule, which replaces the existing job). */
     SCHEDULE,
 }
 
 /**
- * [required] : réseau exigé par les tâches en attente. [active] : réseau du travail en cours dans
- * ce processus (null s'il n'y en a pas, ou s'il a décidé de se terminer). [pendingReliable] :
- * le travail planifié connu de JobScheduler est encore valable (pas un travail que ce processus
- * a vu se terminer : JobScheduler peut encore le renvoyer juste après `jobFinished`).
- * [pending] : réseau du travail planifié d'après JobScheduler.
+ * [required]: network required by the pending tasks. [active]: network of the job running in this
+ * process (null if there is none, or if it has decided to finish). [pendingReliable]: the
+ * scheduled job known to JobScheduler is still valid (not a job this process has seen finish:
+ * JobScheduler may still return it right after `jobFinished`).
+ * [pending]: network of the scheduled job according to JobScheduler.
  */
 internal fun scheduleDecision(
     required: JobNetwork,
@@ -32,19 +32,18 @@ internal fun scheduleDecision(
 }
 
 /**
- * Suivi, dans ce processus, du travail de téléchargement des copies hors ligne : planifications,
- * démarrage et fin. JobScheduler continue de renvoyer un travail qui vient d'appeler
- * `jobFinished` (traité plus tard sur le thread principal) : sans ce suivi, une tâche ajoutée à
- * ce moment-là serait laissée sans travail.
+ * Tracks, within this process, the offline copy download job: schedulings, start and end.
+ * JobScheduler keeps returning a job that has just called `jobFinished` (processed later on the
+ * main thread): without this tracking, a task added at that moment would be left without a job.
  *
- * [lock] sérialise les décisions composées : planification ([scheduleDecision]) d'un côté,
- * « reste-t-il du travail, sinon fin » du travail en cours de l'autre. Les numéros de
- * planification distinguent un ancien travail (remplacé) du travail le plus récent.
+ * [lock] serializes compound decisions: scheduling ([scheduleDecision]) on one side, "is there
+ * any work left, otherwise finish" of the running job on the other. Scheduling sequence numbers
+ * tell an old (replaced) job apart from the most recent one.
  */
 @Singleton
 class OfflineJobTracker @Inject constructor() {
 
-    /** Verrou des décisions « planifier » et « terminer le travail ». */
+    /** Lock for the "schedule" and "finish the job" decisions. */
     internal val lock = Mutex()
 
     private var scheduleSeq = 0L
@@ -52,21 +51,21 @@ class OfflineJobTracker @Inject constructor() {
     private var activeSeq: Long? = null
     private var activeNetwork: JobNetwork? = null
 
-    /** Réseau du travail en cours dans ce processus (null : aucun, ou il se termine). */
+    /** Network of the job running in this process (null: none, or it is finishing). */
     internal val active: JobNetwork?
         @Synchronized get() = activeNetwork
 
-    /** Le travail planifié que renvoie JobScheduler n'est pas un travail déjà terminé. */
+    /** The scheduled job returned by JobScheduler is not an already finished job. */
     internal val pendingReliable: Boolean
         @Synchronized get() = endedSeq < scheduleSeq
 
-    /** Un travail vient d'être planifié (il remplace le précédent). */
+    /** A job has just been scheduled (it replaces the previous one). */
     @Synchronized
     internal fun onScheduled() {
         scheduleSeq++
     }
 
-    /** Le travail démarre avec la contrainte [network] ; renvoie son numéro. */
+    /** The job starts with the [network] constraint; returns its sequence number. */
     @Synchronized
     internal fun onJobStarted(network: JobNetwork): Long {
         activeSeq = scheduleSeq
@@ -74,7 +73,7 @@ class OfflineJobTracker @Inject constructor() {
         return scheduleSeq
     }
 
-    /** Le travail [seq] se termine ; [rescheduled] : il reste planifié (nouvel essai, arrêt par le système). */
+    /** Job [seq] is finishing; [rescheduled]: it stays scheduled (retry, stopped by the system). */
     @Synchronized
     internal fun onJobEnded(seq: Long, rescheduled: Boolean) {
         if (activeSeq == seq) {

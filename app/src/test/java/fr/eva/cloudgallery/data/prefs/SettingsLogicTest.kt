@@ -22,7 +22,7 @@ import org.junit.Test
 
 class SettingsLogicTest {
 
-    /** DataStore en mémoire (JVM), vide au départ comme après une première installation. */
+    /** In-memory DataStore (JVM), initially empty as after a fresh install. */
     private class InMemoryDataStore : DataStore<Preferences> {
         private val mutex = Mutex()
         private val state = MutableStateFlow(emptyPreferences())
@@ -49,13 +49,13 @@ class SettingsLogicTest {
         assertEquals(AlbumSort.COUNT, enumOrDefault("COUNT", AlbumSort.CUSTOM))
     }
 
-    /** Décision utilisateur (13/10/2026) : « Afficher les éléments OneDrive dans Photos » activé par défaut. */
+    /** User decision (2026-10-13): "Show OneDrive items in Photos" enabled by default. */
     @Test
     fun showCloudInPhotos_isOnByDefault() = runTest {
         assertTrue(AppSettings().showCloudInPhotos)
 
         val repository = SettingsRepositoryImpl(InMemoryDataStore())
-        // Clé absente (première installation, ou réglage jamais touché) : repli sur la valeur par défaut.
+        // Missing key (fresh install, or setting never changed): falls back to the default value.
         assertTrue(repository.settings.first().showCloudInPhotos)
 
         repository.setShowCloudInPhotos(false)
@@ -64,7 +64,7 @@ class SettingsLogicTest {
         assertTrue(repository.settings.first().showCloudInPhotos)
     }
 
-    /** Décision utilisateur (D2) : sur réseau facturé, l'original est proposé, pas chargé, par défaut. */
+    /** User decision (D2): on a metered network, the original is offered, not loaded, by default. */
     @Test
     fun loadOriginalsOnMobileData_isOffByDefault() = runTest {
         assertFalse(AppSettings().loadOriginalsOnMobileData)
@@ -72,13 +72,13 @@ class SettingsLogicTest {
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
         repository.setLoadOriginalsOnMobileData(true)
         assertTrue(repository.settings.first().loadOriginalsOnMobileData)
-        // Indépendant de l'autre réglage OneDrive.
+        // Independent of the other OneDrive setting.
         assertTrue(repository.settings.first().showCloudInPhotos)
         repository.setLoadOriginalsOnMobileData(false)
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
     }
 
-    /** Décision utilisateur (D2) : copies hors ligne en Wi-Fi uniquement par défaut. */
+    /** User decision (D2): offline copies over Wi-Fi only by default. */
     @Test
     fun offlineWifiOnly_isOnByDefault_andNotificationsNotYetAsked() = runTest {
         assertTrue(AppSettings().offlineWifiOnly)
@@ -89,11 +89,11 @@ class SettingsLogicTest {
         assertFalse(repository.settings.first().offlineWifiOnly)
         repository.setOfflineNotificationsAsked(true)
         assertTrue(repository.settings.first().offlineNotificationsAsked)
-        // Indépendant des autres réglages OneDrive.
+        // Independent of the other OneDrive settings.
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
     }
 
-    /** Décision utilisateur (phase 5) : plafond des originaux à 1 Go par défaut, parmi les choix proposés. */
+    /** User decision (phase 5): originals cap at 1 GB by default, among the offered choices. */
     @Test
     fun originalsCacheMaxBytes_defaultsTo1Gb_andOnlyAcceptsProposedChoices() = runTest {
         assertEquals(1_000_000_000L, AppSettings().originalsCacheMaxBytes)
@@ -113,11 +113,11 @@ class SettingsLogicTest {
         repository.setThumbnailCacheMaxBytes(1_000_000_000L)
         assertEquals(1_000_000_000L, repository.settings.first().thumbnailCacheMaxBytes)
         assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { repository.setThumbnailCacheMaxBytes(256L * 1024 * 1024) } }
-        // Indépendant du plafond des originaux.
+        // Independent of the originals cap.
         assertEquals(1_000_000_000L, repository.settings.first().originalsCacheMaxBytes)
     }
 
-    /** Décision utilisateur (phase 5) : synchro de fond réglable, toutes les 6 h par défaut, sur tout réseau. */
+    /** User decision (phase 5): configurable background sync, every 6 h by default, on any network. */
     @Test
     fun backgroundSync_every6HoursByDefault_onAnyNetwork() = runTest {
         assertEquals(BackgroundSyncInterval.EVERY_6_HOURS, AppSettings().backgroundSyncInterval)
@@ -128,7 +128,7 @@ class SettingsLogicTest {
         repository.setBackgroundSyncWifiOnly(true)
         assertEquals(BackgroundSyncInterval.OFF, repository.settings.first().backgroundSyncInterval)
         assertTrue(repository.settings.first().backgroundSyncWifiOnly)
-        // Indépendant du réglage Wi-Fi des copies hors ligne.
+        // Independent of the offline copies Wi-Fi setting.
         assertTrue(repository.settings.first().offlineWifiOnly)
         assertEquals(null, BackgroundSyncInterval.OFF.hours)
         assertEquals(listOf(1L, 6L, 24L), BackgroundSyncInterval.entries.mapNotNull { it.hours })

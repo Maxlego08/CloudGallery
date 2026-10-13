@@ -12,7 +12,7 @@ import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 
-/** Texte d'état de l'indexation locale (partagé par Menu et Paramètres). */
+/** Local indexing status text (shared by Menu and Settings). */
 @Composable
 fun indexStatusText(state: IndexState): String = when {
     state.running -> stringResource(R.string.settings_index_running)
@@ -25,7 +25,7 @@ fun indexStatusText(state: IndexState): String = when {
     else -> stringResource(R.string.settings_index_never)
 }
 
-/** Petit indicateur de progression affiché en fin de ligne pendant l'indexation. */
+/** Small progress indicator shown at the end of the row during indexing. */
 @Composable
 fun IndexRunningIndicator(modifier: Modifier = Modifier) {
     CircularProgressIndicator(

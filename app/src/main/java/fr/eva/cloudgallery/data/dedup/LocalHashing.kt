@@ -34,11 +34,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Calcul des empreintes QuickXorHash des fichiers du téléphone (lecture seule, jamais
- * d'écriture dans un fichier) : par lots ([nextHashBatch] : doublons probables d'abord), sous un
- * budget de temps par passage, lecture en continu par le ContentResolver. Chaque empreinte est
- * enregistrée seulement si le fichier n'a pas changé pendant le calcul ; `media.contentHash`
- * suit. Après chaque lot : dédoublonnage ([MediaMerger]). Un seul passage à la fois.
+ * Computes the QuickXorHash of phone files (read-only, never writes to a file): in batches
+ * ([nextHashBatch]: likely duplicates first), within a time budget per pass, streaming through
+ * the ContentResolver. Each hash is stored only if the file did not change during the
+ * computation; `media.contentHash` follows. After each batch: deduplication ([MediaMerger]).
+ * One pass at a time.
  */
 @Singleton
 class LocalHasher @Inject constructor(
@@ -50,20 +50,20 @@ class LocalHasher @Inject constructor(
     private val dedupDao = db.dedupDao()
     private val running = Mutex()
 
-    /** Issue d'un passage. */
+    /** Outcome of a pass. */
     enum class Outcome { DONE, MORE_WORK, SKIPPED }
 
     /**
-     * Calcule des empreintes pendant au plus [budgetMs]. MORE_WORK : budget épuisé avec des
-     * fichiers restants ; SKIPPED : sans accès aux médias, ou un autre passage est en cours.
+     * Computes hashes for at most [budgetMs]. MORE_WORK: budget exhausted with files remaining;
+     * SKIPPED: no media access, or another pass is running.
      */
     suspend fun run(budgetMs: Long = PASS_BUDGET_MS): Outcome = withContext(io) {
         if (readMediaAccess(context) == MediaAccess.NONE) return@withContext Outcome.SKIPPED
         if (!running.tryLock()) return@withContext Outcome.SKIPPED
         try {
             val deadline = SystemClock.elapsedRealtime() + budgetMs
-            // Fichiers illisibles ou modifiés pendant le calcul : écartés pour la suite de ce
-            // passage (réessayés au prochain), jamais relus en boucle.
+            // Files unreadable or modified during the computation: set aside for the rest of this
+            // pass (retried on the next one), never re-read in a loop.
             val skipped = HashSet<Long>()
             var outcome = Outcome.DONE
             while (true) {
@@ -89,27 +89,27 @@ class LocalHasher @Inject constructor(
         }
     }
 
-    /** Empreinte du fichier, null s'il est illisible (supprimé, volume démonté, accès retiré). */
+    /** Hash of the file, null if it is unreadable (deleted, volume unmounted, access revoked). */
     private suspend fun hashOf(target: HashTarget): String? {
         val job = currentCoroutineContext().job
         return try {
             context.contentResolver.openInputStream(Uri.parse(target.uri))?.use { input ->
-                // Travail arrêté (charge débranchée) : lecture interrompue entre deux morceaux.
-                QuickXorHash.of(input) { if (!job.isActive) throw CancellationException("Calcul d'empreinte arrêté") }
+                // Work stopped (charger unplugged): read interrupted between two chunks.
+                QuickXorHash.of(input) { if (!job.isActive) throw CancellationException("Hash computation stopped") }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: FileNotFoundException) {
             null
         } catch (e: IOException) {
-            Log.w(TAG, "Lecture d'un fichier impossible pour son empreinte : ${e.javaClass.simpleName}")
+            Log.w(TAG, "Could not read a file to hash it: ${e.javaClass.simpleName}")
             null
         } catch (e: SecurityException) {
             null
         }
     }
 
-    /** Vrai si l'empreinte est enregistrée (fichier inchangé depuis la lecture de sa signature). */
+    /** True if the hash was stored (file unchanged since its signature was read). */
     private suspend fun record(target: HashTarget, hash: String): Boolean {
         if (dedupDao.setLocalHash(target.sourceId, hash, target.signature) == 0) return false
         dedupDao.setContentHash(target.mediaId, contentHashOf(hash))
@@ -119,7 +119,7 @@ class LocalHasher @Inject constructor(
     private companion object {
         const val TAG = "LocalHasher"
 
-        /** Passage borné sous les 10 min d'un travail WorkManager. */
+        /** Pass capped below the 10 min limit of a WorkManager job. */
         const val PASS_BUDGET_MS = 8L * 60 * 1000
         const val BATCH_COUNT = 100
         const val BATCH_BYTES = 1_000_000_000L
@@ -127,8 +127,8 @@ class LocalHasher @Inject constructor(
 }
 
 /**
- * Travail WorkManager du calcul des empreintes (en charge et batterie non faible, décision
- * utilisateur). S'il reste des fichiers à la fin du budget, un passage suivant est enchaîné.
+ * WorkManager job computing hashes (while charging and battery not low, user decision). If files
+ * remain at the end of the budget, a follow-up pass is chained.
  */
 @HiltWorker
 class LocalHashWorker @AssistedInject constructor(
@@ -144,7 +144,7 @@ class LocalHashWorker @AssistedInject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Calcul des empreintes interrompu", e)
+            Log.w(TAG, "Hash computation interrupted", e)
         }
         return Result.success()
     }
@@ -155,9 +155,9 @@ class LocalHashWorker @AssistedInject constructor(
 }
 
 /**
- * Planification du calcul des empreintes : passage unique dès qu'il y a des fichiers à traiter
- * (après une synchro MediaStore), plus un passage quotidien de rattrapage. Toujours en charge et
- * batterie non faible ; rien n'est planifié sans accès aux médias.
+ * Scheduling of hash computation: a one-off pass as soon as there are files to process (after a
+ * MediaStore sync), plus a daily catch-up pass. Always while charging and battery not low;
+ * nothing is scheduled without media access.
  */
 @Singleton
 class LocalHashScheduler @Inject constructor(
@@ -168,7 +168,7 @@ class LocalHashScheduler @Inject constructor(
     private val constraints: Constraints
         get() = Constraints.Builder().setRequiresCharging(true).setRequiresBatteryNotLow(true).build()
 
-    /** Après une synchro MediaStore réussie : travail planifié s'il reste des empreintes à calculer. */
+    /** After a successful MediaStore sync: work scheduled if hashes remain to be computed. */
     suspend fun onLocalIndexUpdated() = withContext(io) {
         if (readMediaAccess(context) == MediaAccess.NONE) return@withContext
         val work = WorkManager.getInstance(context)
@@ -180,7 +180,7 @@ class LocalHashScheduler @Inject constructor(
         if (db.dedupDao().hasStaleLocalHashes()) enqueue(ExistingWorkPolicy.KEEP)
     }
 
-    /** Passage suivant, enchaîné après le passage en cours (budget épuisé). */
+    /** Next pass, chained after the current pass (budget exhausted). */
     fun continueLater() = enqueue(ExistingWorkPolicy.APPEND_OR_REPLACE)
 
     private fun enqueue(policy: ExistingWorkPolicy) {

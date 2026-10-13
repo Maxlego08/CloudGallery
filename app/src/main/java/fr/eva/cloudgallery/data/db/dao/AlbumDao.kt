@@ -11,10 +11,10 @@ import fr.eva.cloudgallery.domain.model.AlbumType
 import kotlinx.coroutines.flow.Flow
 
 /*
- * members : couples (albumId, mediaId) des albums-dossiers (sources visibles, voir
- *           FOLDER_MEMBER_SOURCE) et des albums virtuels.
- * stats   : nombre de médias, date la plus récente et média le plus récent (colonne « nue »
- *           associée à MAX(), comportement documenté de SQLite) pour la couverture.
+ * members: (albumId, mediaId) pairs of folder albums (visible sources, see
+ *          FOLDER_MEMBER_SOURCE) and of virtual albums.
+ * stats  : media count, most recent date and most recent media (a "bare" column paired
+ *          with MAX(), documented SQLite behaviour) for the cover.
  */
 private const val ALBUM_ROWS = """
     WITH members AS (
@@ -46,7 +46,7 @@ interface AlbumDao {
     @Query("$ALBUM_ROWS WHERE a.isHidden = 0 AND (a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0)")
     fun observeAlbumRows(): Flow<List<AlbumRow>>
 
-    /** Tous les albums non vides, masqués compris (écran « Masquer des albums »). */
+    /** All non-empty albums, hidden ones included ("Hide albums" screen). */
     @Query("$ALBUM_ROWS WHERE a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0")
     fun observeAllAlbumRows(): Flow<List<AlbumRow>>
 
@@ -87,8 +87,8 @@ interface AlbumDao {
     suspend fun deleteVirtual(id: Long)
 
     /**
-     * Supprime des albums-dossiers sans aucune personnalisation de l'utilisateur (nom, épingle,
-     * masquage, couverture) : un dossier personnalisé est conservé même vide.
+     * Deletes folder albums without any user customization (name, pin, hiding, cover): a
+     * customized folder is kept even when empty.
      */
     @Query(
         """
@@ -98,14 +98,14 @@ interface AlbumDao {
     )
     suspend fun deleteUncustomizedFolders(ids: List<Long>, type: AlbumType)
 
-    /** Supprime tous les albums d'un type (ex. albums OneDrive lors de la déconnexion). */
+    /** Deletes all albums of a type (e.g. OneDrive albums on sign-out). */
     @Query("DELETE FROM album WHERE type = :type")
     suspend fun deleteByType(type: AlbumType)
 
     @Query("SELECT EXISTS(SELECT 1 FROM album WHERE type = :type)")
     suspend fun existsByType(type: AlbumType): Boolean
 
-    /** coverMediaId n'a pas de clé étrangère : on retire les couvertures qui pointent vers un média disparu. */
+    /** coverMediaId has no foreign key: clears covers that point to a media item that no longer exists. */
     @Query("UPDATE album SET coverMediaId = NULL WHERE coverMediaId IS NOT NULL AND coverMediaId NOT IN (SELECT id FROM media)")
     suspend fun clearDanglingCovers()
 

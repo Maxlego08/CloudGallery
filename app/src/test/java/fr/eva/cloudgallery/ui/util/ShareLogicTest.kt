@@ -19,7 +19,7 @@ class ShareLogicTest {
         assertEquals(listOf(3L), plan.offline)
         assertEquals(listOf(2L), plan.toDownload)
         assertEquals(listOf(4L), plan.unavailable)
-        // Seuls les téléchargements comptent dans le total (le fichier local n'est pas retéléchargé).
+        // Only downloads count toward the total (the local file is not downloaded again).
         assertEquals(1_000_000L, plan.downloadBytes)
         assertNull(plan.refusal)
     }
@@ -45,7 +45,7 @@ class ShareLogicTest {
         assertNull(planShare(exactly, cloudAllowed = true).refusal)
         val tooLarge = listOf(cloud(1, size = 400_000_000), cloud(2, size = 100_000_001))
         assertEquals(ShareRefusal.TOO_LARGE, planShare(tooLarge, cloudAllowed = true).refusal)
-        // Les fichiers locaux ne comptent pas dans les plafonds.
+        // Local files do not count toward the caps.
         val manyLocal = (1L..200L).map { local(it) } + cloud(500)
         assertNull(planShare(manyLocal, cloudAllowed = true).refusal)
     }

@@ -76,9 +76,9 @@ private val CropRectSaver = Saver<CropRect, List<Float>>(
 )
 
 /**
- * Editeur de recadrage plein écran. Enregistre toujours une COPIE (l'original n'est jamais modifié).
- * Le rectangle transmis à [onSave] est normalisé dans le repère de l'image pivotée de [rotationDegrees]
- * (sens horaire), orientation EXIF déjà appliquée.
+ * Fullscreen crop editor. Always saves a COPY (the original is never modified).
+ * The rectangle passed to [onSave] is normalized in the space of the image rotated by [rotationDegrees]
+ * (clockwise), with EXIF orientation already applied.
  */
 @Composable
 internal fun CropEditor(
@@ -115,11 +115,11 @@ internal fun CropEditor(
         Modifier
             .fillMaxSize()
             .background(ViewerColors.background)
-            .pointerInput(Unit) { blockPointersBelow() } // bloque les gestes vers la visionneuse dessous
+            .pointerInput(Unit) { blockPointersBelow() } // blocks gestures to the viewer underneath
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Column(Modifier.fillMaxSize()) {
-            // Barre supérieure : Annuler | Rogner | Enregistrer
+            // Top bar: Cancel | Crop | Save
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -148,7 +148,7 @@ internal fun CropEditor(
                 }
             }
 
-            // Zone d'image
+            // Image area
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -202,7 +202,7 @@ internal fun CropEditor(
                     .padding(horizontal = 24.dp),
             )
 
-            // Proportions + rotation
+            // Aspect ratios + rotation
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -247,8 +247,8 @@ private val CropAspect.labelRes: Int
     }
 
 /**
- * Cadre de recadrage : assombrit l'extérieur, grille des tiers, poignées d'angle.
- * La zone tactile déborde de [TouchPadding] autour de l'image pour attraper les poignées au bord.
+ * Crop frame: dims the outside, rule-of-thirds grid, corner handles.
+ * The touch area extends [TouchPadding] beyond the image to catch handles at the edge.
  */
 @Composable
 private fun CropOverlay(
@@ -302,12 +302,12 @@ private fun CropOverlay(
         val imgR = pad + fittedW
         val imgB = pad + fittedH
         val dim = Color(0xA6000000)
-        // Extérieur assombri (4 bandes).
+        // Dimmed outside (4 bands).
         drawRect(dim, Offset(imgL, imgT), Size(fittedW, t - imgT))
         drawRect(dim, Offset(imgL, b), Size(fittedW, imgB - b))
         drawRect(dim, Offset(imgL, t), Size(l - imgL, b - t))
         drawRect(dim, Offset(r, t), Size(imgR - r, b - t))
-        // Grille des tiers.
+        // Rule-of-thirds grid.
         val grid = Color(0x66FFFFFF)
         val thin = 1.dp.toPx()
         for (i in 1..2) {
@@ -316,7 +316,7 @@ private fun CropOverlay(
             drawLine(grid, Offset(x, t), Offset(x, b), thin)
             drawLine(grid, Offset(l, y), Offset(r, y), thin)
         }
-        // Cadre.
+        // Frame.
         drawRect(Color.White, Offset(l, t), Size(r - l, b - t), style = Stroke(1.5.dp.toPx()))
         drawCorners(l, t, r, b, active)
     }
@@ -325,8 +325,8 @@ private fun CropOverlay(
 private val TouchPadding = 24.dp
 
 /**
- * Rend la surface « touchable » : un nœud de saisie touché empêche le test d'atteinte des éléments frères
- * situés dessous (la visionneuse). Ne consomme rien pour ne pas annuler les clics des enfants.
+ * Makes the surface "touchable": a hit pointer-input node prevents hit testing of sibling elements
+ * underneath (the viewer). Consumes nothing so as not to cancel the children's clicks.
  */
 internal suspend fun PointerInputScope.blockPointersBelow() {
     awaitEachGesture {

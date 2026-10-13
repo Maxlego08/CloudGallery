@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Etat affiché par le lecteur. Les positions sont en millisecondes. */
+/** State displayed by the player. Positions are in milliseconds. */
 data class PlayerUiState(
     val loading: Boolean = true,
     val title: String = "",
@@ -58,14 +58,14 @@ data class PlayerUiState(
     val bufferedMs: Long = 0L,
     val speed: Float = 1f,
     val muted: Boolean = false,
-    /** Largeur / hauteur affichée de la vidéo, null tant qu'elle est inconnue. */
+    /** Displayed width / height of the video, null while unknown. */
     val aspectRatio: Float? = null,
     val error: PlaybackErrorKind? = null,
 )
 
 /**
- * Possède l'[ExoPlayer] (créé ici, libéré dans [onCleared]) : il survit ainsi aux changements
- * de configuration et à la rotation demandée par l'utilisateur.
+ * Owns the [ExoPlayer] (created here, released in [onCleared]) so that it survives
+ * configuration changes and the rotation requested by the user.
  */
 @OptIn(UnstableApi::class)
 @HiltViewModel
@@ -85,10 +85,10 @@ class VideoPlayerViewModel @Inject constructor(
     private val route: VideoPlayerRoute = savedStateHandle.toRoute<VideoPlayerRoute>()
     private val mediaId: Long = route.mediaId
 
-    /** Vidéo reçue d'une autre appli et absente de l'index : lue directement, sans position mémorisée. */
+    /** Video received from another app and absent from the index: played directly, without a saved position. */
     private val externalUri: Uri? = route.externalUri?.let(Uri::parse)
 
-    /** Exposé à l'UI pour PlayerSurface / ContentFrame et les state holders media3-ui-compose. */
+    /** Exposed to the UI for PlayerSurface / ContentFrame and the media3-ui-compose state holders. */
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -103,21 +103,21 @@ class VideoPlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    /** Durée connue par la base, utilisée tant qu'ExoPlayer ne l'a pas déterminée. */
+    /** Duration known by the database, used until ExoPlayer has determined it. */
     private var knownDurationMs: Long = 0L
     private var prepared = false
     private var lastSaveAt = 0L
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
 
-    /** Lecture en streaming OneDrive en cours (null pour un fichier local). */
+    /** Current OneDrive streaming playback (null for a local file). */
     private var remote: RemoteStream? = null
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _uiState.update { it.copy(isPlaying = isPlaying) }
             refreshProgress()
-            // Rafraîchissement périodique uniquement pendant la lecture (pas de réveil en pause / arrière-plan).
+            // Periodic refresh only during playback (no wake-ups while paused / in the background).
             if (isPlaying) startProgressTicker() else stopProgressTicker()
             if (!isPlaying && player.playbackState != Player.STATE_ENDED) savePosition()
         }
@@ -152,8 +152,8 @@ class VideoPlayerViewModel @Inject constructor(
 
         override fun onPlayerError(error: PlaybackException) {
             savePosition()
-            // Les échecs OneDrive (URL de lecture) sont dans la chaîne des causes ; l'URL de
-            // téléchargement n'apparaît jamais dans l'erreur (URI stable rapportée par Media3).
+            // OneDrive failures (playback URL) are in the cause chain; the download URL never
+            // appears in the error (stable URI reported by Media3).
             val cloudFailure = VideoPlayerLogic.cloudFailureOf(generateSequence(error.cause) { it.cause })
             _uiState.update {
                 it.copy(
@@ -198,16 +198,16 @@ class VideoPlayerViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     title = details.displayName,
-                    // « Ouvrir avec » : uniquement pour un fichier local (jamais un élément OneDrive).
+                    // "Open with": only for a local file (never a OneDrive item).
                     uri = details.localSource?.uri,
                     mimeType = details.mimeType,
                     durationMs = details.durationMs.coerceAtLeast(0L),
                     aspectRatio = it.aspectRatio ?: ratio,
                 )
             }
-            // Copie hors ligne vérifiée (présente, taille attendue) sur le dispatcher d'E/S.
+            // Offline copy checked (present, expected size) on the I/O dispatcher.
             val offlineOk = withContext(ioDispatcher) { PlaybackSourceResolver.isOfflineFileUsable(details.offlineCopy) }
-            // Accès OneDrive vérifié seulement si la lecture en dépend (compte, autre compte, build).
+            // OneDrive access checked only if playback depends on it (account, other account, build).
             val remoteAllowed = PlaybackSourceResolver.needsRemote(details, offlineOk) && cloudAccess.canAccess()
             when (val source = PlaybackSourceResolver.resolve(details, remoteAllowed, offlineOk)) {
                 is PlaybackSource.Local -> {
@@ -222,7 +222,7 @@ class VideoPlayerViewModel @Inject constructor(
 
                 is PlaybackSource.Offline -> {
                     val (start, autoPlay) = startParameters(details.durationMs)
-                    // « Ouvrir avec » : URI content:// du FileProvider (lecture seule), jamais file://.
+                    // "Open with": FileProvider content:// URI (read-only), never file://.
                     val openWithUri = try {
                         shareUris.uriFor(source.file.file, details.displayName)
                     } catch (e: CancellationException) {
@@ -240,11 +240,11 @@ class VideoPlayerViewModel @Inject constructor(
 
                 is PlaybackSource.Remote -> {
                     val (start, autoPlay) = startParameters(details.durationMs)
-                    // « Ouvrir avec » reste masqué : aucune URI partageable pour un flux OneDrive.
+                    // "Open with" stays hidden: no shareable URI for a OneDrive stream.
                     _uiState.update { it.copy(loading = false, uri = null, positionMs = start) }
                     val stream = cloudStreams.create(source.itemId, mediaId)
                     remote = stream
-                    // Réseau (URL temporaire puis HTTP Range) : uniquement sur le thread de chargement de Media3.
+                    // Network (temporary URL then HTTP Range): only on Media3's loading thread.
                     player.setMediaSource(stream.source, start)
                     player.playWhenReady = autoPlay
                     player.prepare()
@@ -261,7 +261,7 @@ class VideoPlayerViewModel @Inject constructor(
         }
     }
 
-    /** Position de reprise mémorisée et lecture automatique (réglage). */
+    /** Saved resume position and auto-play (setting). */
     private suspend fun startParameters(durationMs: Long): Pair<Long, Boolean> {
         val saved = withContext(ioDispatcher) {
             runCatching { positionRepository.get(mediaId) }.getOrDefault(0L)
@@ -281,7 +281,7 @@ class VideoPlayerViewModel @Inject constructor(
         prepared = true
     }
 
-    /** Rafraîchit la position (~200 ms) et sauvegarde périodiquement, seulement pendant la lecture. */
+    /** Refreshes the position (~200 ms) and saves periodically, only during playback. */
     private fun startProgressTicker() {
         if (tickerJob?.isActive == true) return
         tickerJob = viewModelScope.launch {
@@ -344,8 +344,8 @@ class VideoPlayerViewModel @Inject constructor(
     }
 
     /**
-     * Relance après une erreur : nouvelle préparation à la position courante (avec une nouvelle
-     * URL de téléchargement pour un flux OneDrive), ou rechargement complet.
+     * Restarts after an error: prepares again at the current position (with a new download URL
+     * for a OneDrive stream), or reloads completely.
      */
     fun retry() {
         _uiState.update { it.copy(error = null) }
@@ -359,14 +359,14 @@ class VideoPlayerViewModel @Inject constructor(
     }
 
     /**
-     * Retour sur le lecteur (par exemple après l'écran Compte) alors qu'une connexion OneDrive
-     * était demandée : nouvel essai, qui réussit si le compte est désormais connecté.
+     * Back on the player (for example after the Account screen) while a OneDrive sign-in was
+     * requested: new attempt, which succeeds if the account is now signed in.
      */
     fun retryIfSignInPending() {
         if (_uiState.value.error == PlaybackErrorKind.AUTH_REQUIRED) retry()
     }
 
-    /** Sauvegarde la position (portée applicative : survit à la fermeture de l'écran). */
+    /** Saves the position (application scope: survives the screen being closed). */
     fun savePosition() {
         if (!prepared || player.currentMediaItem == null || externalUri != null) return
         lastSaveAt = SystemClock.elapsedRealtime()

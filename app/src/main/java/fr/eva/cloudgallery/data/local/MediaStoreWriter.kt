@@ -28,8 +28,8 @@ import javax.inject.Singleton
 import kotlin.math.roundToInt
 
 /**
- * Écritures sur les fichiers locaux via MediaStore. Les opérations destructives passent
- * toujours par une demande système ([createDeleteRequest]) confirmée par l'utilisateur.
+ * Writes to local files through MediaStore. Destructive operations always go through a
+ * system request ([createDeleteRequest]) confirmed by the user.
  */
 @Singleton
 class MediaStoreWriter @Inject constructor(
@@ -65,7 +65,7 @@ class MediaStoreWriter @Inject constructor(
                 throw UnsupportedOperationException(context.getString(R.string.data_error_rotate_unsupported))
             }
             try {
-                // "rw" et surtout pas "rwt" : le fichier doit rester lisible par ExifInterface.
+                // "rw" and definitely not "rwt": the file must remain readable by ExifInterface.
                 val pfd = resolver.openFileDescriptor(uri, "rw")
                     ?: throw IOException(context.getString(R.string.data_error_save))
                 pfd.use {
@@ -97,7 +97,7 @@ class MediaStoreWriter @Inject constructor(
             val angle = normalizeRightAngle(rotationDegrees)
                 ?: throw IllegalArgumentException(context.getString(R.string.data_error_invalid_angle))
 
-            // Décodage borné (l'orientation EXIF est appliquée par ImageDecoder).
+            // Bounded decoding (the EXIF orientation is applied by ImageDecoder).
             val decoded = try {
                 ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, imageInfo, _ ->
                     decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -107,7 +107,7 @@ class MediaStoreWriter @Inject constructor(
                 throw IOException(context.getString(R.string.data_error_decode), e)
             }
 
-            // Recadrage dans le repère source puis rotation : un seul bitmap intermédiaire.
+            // Crop in the source frame, then rotate: a single intermediate bitmap.
             val rect = cropRectInSource(NormRect(left, top, right, bottom), angle)
             val bw = decoded.width
             val bh = decoded.height
@@ -160,7 +160,7 @@ class MediaStoreWriter @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Copie impossible : $source", e)
+                Log.w(TAG, "Copy failed: $source", e)
                 lastError = e
             }
         }
@@ -203,7 +203,7 @@ class MediaStoreWriter @Inject constructor(
         }
     }
 
-    /** Crée une entrée MediaStore en IS_PENDING=1 (invisible des autres apps tant qu'elle n'est pas publiée). */
+    /** Creates a MediaStore entry with IS_PENDING=1 (invisible to other apps until published). */
     private fun insertPending(
         collection: Uri,
         displayName: String,
@@ -222,7 +222,7 @@ class MediaStoreWriter @Inject constructor(
         val first = try {
             resolver.insert(collection, values(relativePath))
         } catch (e: IllegalArgumentException) {
-            // Dossier non autorisé pour ce type de média (ex. Download/ pour une image).
+            // Folder not allowed for this media type (e.g. Download/ for an image).
             if (fallbackRelativePath == null) throw e
             null
         }
@@ -236,7 +236,7 @@ class MediaStoreWriter @Inject constructor(
         resolver.update(uri, values, null, null)
     }
 
-    /** Reporte les dates de prise de vue et l'appareil (hors GPS) ; l'image produite est déjà droite. */
+    /** Carries over capture dates and camera info (not GPS); the output image is already upright. */
     private fun copyExifDates(from: Uri, to: Uri) {
         runCatching {
             val original = resolver.openInputStream(from)?.use { ExifInterface(it) } ?: return
@@ -248,7 +248,7 @@ class MediaStoreWriter @Inject constructor(
                 exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                 exif.saveAttributes()
             }
-        }.onFailure { Log.w(TAG, "Copie EXIF impossible", it) }
+        }.onFailure { Log.w(TAG, "EXIF copy failed", it) }
     }
 
     private data class SourceInfo(
@@ -284,17 +284,17 @@ class MediaStoreWriter @Inject constructor(
 
     private fun requestSync() {
         appScope.launch(io) {
-            runCatching { indexer.sync(full = false) }.onFailure { Log.w(TAG, "Synchronisation impossible", it) }
+            runCatching { indexer.sync(full = false) }.onFailure { Log.w(TAG, "Sync failed", it) }
         }
     }
 
-    /** Comme runCatching, mais sans avaler l'annulation de la coroutine. */
+    /** Like runCatching, but without swallowing coroutine cancellation. */
     private inline fun <T> catching(block: () -> T): Result<T> = try {
         Result.success(block())
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Opération sur fichier en échec", e)
+        Log.w(TAG, "File operation failed", e)
         Result.failure(e)
     }
 
@@ -306,7 +306,7 @@ class MediaStoreWriter @Inject constructor(
         const val DEFAULT_IMAGE_DIR = "Pictures/"
         const val COPY_BUFFER = 64 * 1024
 
-        /** Formats dont l'orientation EXIF est modifiable sans réencodage. */
+        /** Formats whose EXIF orientation can be changed without re-encoding. */
         val EXIF_WRITABLE_MIME_TYPES = setOf("image/jpeg", "image/jpg", "image/webp")
 
         val EXIF_TAGS_TO_COPY = listOf(

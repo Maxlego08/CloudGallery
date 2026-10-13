@@ -22,8 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Modèle Coil pour une miniature MediaStore. [version] (dateModified) invalide le cache
- * mémoire après une modification du fichier (rotation, recadrage…).
+ * Coil model for a MediaStore thumbnail. [version] (dateModified) invalidates the memory
+ * cache after a modification of the file (rotation, crop…).
  */
 data class LocalThumbnail(
     val uri: Uri,
@@ -31,12 +31,12 @@ data class LocalThumbnail(
     val version: Long,
 )
 
-/** Taille par défaut quand la taille demandée est inconnue / originale. */
+/** Default size when the requested size is unknown / original. */
 internal const val DEFAULT_THUMBNAIL_PX = 384
 
 /**
- * Arrondit la taille demandée à un palier, pour que de petites variations de taille de cellule
- * (zoom de la grille) réutilisent la même entrée de cache.
+ * Rounds the requested size to a step, so that small variations in cell size
+ * (grid zoom) reuse the same cache entry.
  */
 internal fun thumbnailBucket(options: Options): Int {
     val w = options.size.width.pxOrElse { DEFAULT_THUMBNAIL_PX }
@@ -47,15 +47,15 @@ internal fun thumbnailBucket(options: Options): Int {
 
 private val BUCKETS = intArrayOf(96, 192, 256, 384, 512, 768, 1024)
 
-/** Clé de cache mémoire : uri + version + palier de taille. */
+/** Memory cache key: uri + version + size step. */
 class LocalThumbnailKeyer : Keyer<LocalThumbnail> {
     override fun key(data: LocalThumbnail, options: Options): String =
         "thumb:${data.uri}:${data.version}:${thumbnailBucket(options)}"
 }
 
 /**
- * Charge la miniature via [android.content.ContentResolver.loadThumbnail] : MediaStore la
- * met en cache lui-même, il n'y a donc pas de cache disque Coil pour ces requêtes.
+ * Loads the thumbnail via [android.content.ContentResolver.loadThumbnail]: MediaStore caches
+ * it itself, so there is no Coil disk cache for these requests.
  */
 class LocalThumbnailFetcher(
     private val data: LocalThumbnail,
@@ -67,9 +67,9 @@ class LocalThumbnailFetcher(
         val signal = CancellationSignal()
         try {
             val bitmap = coroutineScope {
-                // Annulation dès le DÉBUT de l'annulation de la requête (cellule sortie de l'écran) :
-                // l'enfant est annulé immédiatement et interrompt loadThumbnail via le signal. Un
-                // invokeOnCompletion ne s'exécuterait qu'après le retour de l'appel bloquant.
+                // Cancel as soon as the request's cancellation STARTS (cell scrolled off screen):
+                // the child is cancelled immediately and interrupts loadThumbnail via the signal. An
+                // invokeOnCompletion would only run after the blocking call returns.
                 val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
                     try {
                         awaitCancellation()
@@ -88,7 +88,7 @@ class LocalThumbnailFetcher(
             // (image, isSampled, dataSource)
             return ImageFetchResult(bitmap.asImage(), true, DataSource.DISK)
         } catch (e: OperationCanceledException) {
-            throw CancellationException("Chargement de la miniature annulé").apply { initCause(e) }
+            throw CancellationException("Thumbnail loading cancelled").apply { initCause(e) }
         }
     }
 

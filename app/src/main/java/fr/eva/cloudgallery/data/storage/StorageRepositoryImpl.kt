@@ -23,9 +23,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Page Stockage : tailles mesurées sur le disque (dossiers des originaux et des copies hors
- * ligne, cache disque Coil), nombres d'éléments lus dans `cached_file`. Tout sur le dispatcher
- * d'E/S ; les originaux et copies sont créés paresseusement (dagger.Lazy).
+ * Storage page: sizes measured on disk (originals and offline copies folders, Coil disk cache),
+ * item counts read from `cached_file`. Everything on the I/O dispatcher; the originals and
+ * copies stores are created lazily (dagger.Lazy).
  */
 @Singleton
 class StorageRepositoryImpl @Inject constructor(
@@ -58,8 +58,8 @@ class StorageRepositoryImpl @Inject constructor(
 
     override suspend fun clearCache(): Unit = withContext(io) {
         thumbnails.clear()
-        // Mise en cache de tout OneDrive arrêtée et vidée ; « Garder à jour » désactivé, sans
-        // quoi tout serait retéléchargé à la synchro suivante.
+        // Caching of all of OneDrive stopped and cleared; "Keep up to date" turned off, otherwise
+        // everything would be downloaded again on the next sync.
         settings.setPrecacheKeepUpdated(false)
         precacheCleaner.clearAll()
         originals.get().clearCache()

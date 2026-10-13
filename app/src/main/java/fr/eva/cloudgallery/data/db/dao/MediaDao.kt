@@ -19,11 +19,11 @@ internal const val ROW_COLUMNS = """
 """
 
 /**
- * Source qui fait d'un média un membre du dossier de sa `bucketKey` : source visible, ou source
- * masquée d'un média qui n'a aucune source visible rattachée à un dossier (média à une seule
- * source, ou copie hors ligne d'un élément masqué : il reste dans son dossier tant qu'il est
- * affiché). Un média fusionné (fichier local + élément OneDrive) n'apparaît ainsi que dans les
- * dossiers de ses sources visibles. Même règle dans ALBUM_ROWS (AlbumDao).
+ * Source that makes a media item a member of the folder of its `bucketKey`: a visible source, or
+ * a hidden source of a media item that has no visible source attached to a folder (single-source
+ * media, or offline copy of a hidden item: it stays in its folder as long as it is displayed).
+ * A merged media item (local file + OneDrive item) thus only appears in the folders of its
+ * visible sources. Same rule in ALBUM_ROWS (AlbumDao).
  */
 internal const val FOLDER_MEMBER_SOURCE = """
     (s.missingSince IS NULL OR NOT EXISTS(
@@ -31,7 +31,7 @@ internal const val FOLDER_MEMBER_SOURCE = """
     ))
 """
 
-/** Membres d'un album : dossier (via media_source.bucketKey) ou album virtuel (album_media). */
+/** Members of an album: folder (via media_source.bucketKey) or virtual album (album_media). */
 private const val ALBUM_MEMBERS = """
     SELECT s.mediaId FROM media_source s JOIN album a ON a.sourceKey = s.bucketKey
     WHERE a.id = :albumId AND $FOLDER_MEMBER_SOURCE
@@ -42,14 +42,14 @@ private const val ALBUM_MEMBERS = """
 internal const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
 
 /**
- * Médias affichables : au moins une source présente. Un média dont toutes les sources sont
- * masquées (missingSince, voir MediaSourceEntity) reste en base avec favoris et albums.
+ * Displayable media: at least one source present. A media item whose sources are all hidden
+ * (missingSince, see MediaSourceEntity) stays in the database with its favorites and albums.
  */
 internal const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
 
 /**
- * Hors des albums masqués « dans Albums et Photos » (album.hideMedia) : dossier du téléphone ou
- * OneDrive (une des sources du média y est rangée) ou album personnalisé.
+ * Outside albums hidden "in Albums and Photos" (album.hideMedia): phone or OneDrive folder (one
+ * of the media's sources is stored there) or custom album.
  */
 internal const val NOT_IN_HIDDEN_ALBUM = """
     NOT EXISTS (
@@ -63,17 +63,16 @@ internal const val NOT_IN_HIDDEN_ALBUM = """
 """
 
 /**
- * Photos et Vidéos (réglage « Afficher les éléments OneDrive dans Photos ») : sans
- * `:includeCloudOnly`, seuls les médias présents sur l'appareil ou disponibles hors connexion y
- * figurent ; les éléments uniquement sur OneDrive restent dans leurs albums OneDrive, les
- * Favoris et les albums de l'utilisateur. Médias des albums masqués « dans Albums et Photos »
- * exclus ([NOT_IN_HIDDEN_ALBUM]). Sous-ensemble de [VISIBLE].
+ * Photos and Videos ("Show OneDrive items in Photos" setting): without `:includeCloudOnly`, only
+ * media present on the device or available offline are listed; OneDrive-only items stay in
+ * their OneDrive albums, Favorites and the user's albums. Media of albums hidden "in Albums and
+ * Photos" are excluded ([NOT_IN_HIDDEN_ALBUM]). Subset of [VISIBLE].
  */
 private const val LIBRARY = """
     (m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1)) AND $NOT_IN_HIDDEN_ALBUM
 """
 
-/** Eléments situés entre deux éléments de la liste triée (bornes incluses). */
+/** Items located between two items of the sorted list (bounds included). */
 internal const val BETWEEN = """
     (m.dateTaken < :newerDate OR (m.dateTaken = :newerDate AND m.id <= :newerId))
     AND (m.dateTaken > :olderDate OR (m.dateTaken = :olderDate AND m.id >= :olderId))
@@ -84,7 +83,7 @@ internal const val IN_PERIOD = "m.dateTaken >= :startMs AND m.dateTaken < :endMs
 @Dao
 interface MediaDao {
 
-    // --- Grilles paginées ---------------------------------------------------------------
+    // --- Paged grids --------------------------------------------------------------------
 
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE $LIBRARY $ORDER")
     fun pagingTimeline(includeCloudOnly: Boolean): PagingSource<Int, MediaRow>
@@ -98,7 +97,7 @@ interface MediaDao {
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) $ORDER")
     fun pagingAlbum(albumId: Long): PagingSource<Int, MediaRow>
 
-    // --- Identifiants ordonnés (visionneuse) --------------------------------------------
+    // --- Ordered ids (viewer) -----------------------------------------------------------
 
     @Query("SELECT m.id FROM media m WHERE $LIBRARY $ORDER")
     fun observeTimelineIds(includeCloudOnly: Boolean): Flow<List<Long>>
@@ -112,7 +111,7 @@ interface MediaDao {
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) $ORDER")
     fun observeAlbumIds(albumId: Long): Flow<List<Long>>
 
-    // --- Dates ordonnées (défilement rapide), même ordre que les grilles ------------------
+    // --- Ordered dates (fast scrolling), same order as the grids ------------------------
 
     @Query("SELECT m.dateTaken FROM media m WHERE $LIBRARY $ORDER")
     fun observeTimelineDates(includeCloudOnly: Boolean): Flow<List<Long>>
@@ -126,7 +125,7 @@ interface MediaDao {
     @Query("SELECT m.dateTaken FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) $ORDER")
     fun observeAlbumDates(albumId: Long): Flow<List<Long>>
 
-    // --- Comptages ----------------------------------------------------------------------
+    // --- Counts -------------------------------------------------------------------------
 
     @Query("SELECT COUNT(*) FROM media m WHERE $LIBRARY")
     fun observeTimelineCount(includeCloudOnly: Boolean): Flow<Int>
@@ -140,7 +139,7 @@ interface MediaDao {
     @Query("SELECT COUNT(*) FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS)")
     fun observeAlbumCount(albumId: Long): Flow<Int>
 
-    // --- Plages d'identifiants (sélection par jour / par glisser), même ordre que les grilles ---
+    // --- Id ranges (select by day / by drag), same order as the grids ---------------------
 
     @Query("SELECT m.id FROM media m WHERE $LIBRARY AND $IN_PERIOD $ORDER")
     suspend fun timelineIdsInPeriod(includeCloudOnly: Boolean, startMs: Long, endMs: Long): List<Long>
@@ -166,7 +165,7 @@ interface MediaDao {
     @Query("SELECT m.id FROM media m WHERE $VISIBLE AND m.id IN ($ALBUM_MEMBERS) AND $BETWEEN $ORDER")
     suspend fun albumIdsBetween(albumId: Long, newerDate: Long, newerId: Long, olderDate: Long, olderId: Long): List<Long>
 
-    // --- Accès unitaire -----------------------------------------------------------------
+    // --- Single-item access -------------------------------------------------------------
 
     @Query("SELECT * FROM media WHERE id = :id")
     suspend fun getById(id: Long): MediaEntity?
@@ -180,13 +179,13 @@ interface MediaDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorite WHERE mediaId = :id)")
     fun observeIsFavorite(id: Long): Flow<Boolean>
 
-    /** Médias parmi [ids] qui ont un fichier local utilisable (actions de partage, suppression, copie). */
+    /** Media among [ids] that have a usable local file (share, delete, copy actions). */
     @Query("SELECT COUNT(*) FROM media WHERE id IN (:ids) AND hasLocal = 1 AND primaryUri IS NOT NULL")
     suspend fun countWithLocalFile(ids: List<Long>): Int
 
     /**
-     * Médias partageables parmi [ids] : fichier local, copie hors ligne ou élément OneDrive
-     * visible (téléchargé au moment du partage). Lecture seule : rien d'autre n'est autorisé ainsi.
+     * Shareable media among [ids]: local file, offline copy or visible OneDrive item (downloaded
+     * at share time). Read-only: nothing else is allowed this way.
      */
     @Query(
         "SELECT COUNT(*) FROM media WHERE id IN (:ids) AND " +
@@ -195,9 +194,9 @@ interface MediaDao {
     suspend fun countShareable(ids: List<Long>): Int
 
     /**
-     * Eléments OneDrive visibles sans copie hors ligne parmi [ids] (« Conserver hors ligne »),
-     * hors éléments déjà en attente ou en cours de téléchargement (en pause ou en échec : comptés,
-     * « Conserver hors ligne » les relance).
+     * Visible OneDrive items without an offline copy among [ids] ("Keep offline"), excluding
+     * items already queued or downloading (paused or failed: counted, "Keep offline" restarts
+     * them).
      */
     @Query(
         "SELECT COUNT(*) FROM media m WHERE m.id IN (:ids) AND m.hasCloud = 1 AND m.hasOffline = 0 " +
@@ -205,19 +204,19 @@ interface MediaDao {
     )
     suspend fun countKeepableOffline(ids: List<Long>): Int
 
-    /** Médias parmi [ids] qui ont une copie hors ligne visible (« Libérer l'espace »). */
+    /** Media among [ids] that have a visible offline copy ("Free up space"). */
     @Query("SELECT COUNT(*) FROM media WHERE id IN (:ids) AND hasOffline = 1")
     suspend fun countWithOfflineCopy(ids: List<Long>): Int
 
-    /** Ligne de grille observable pour un seul média (contexte Single). */
+    /** Observable grid row for a single media item (Single context). */
     @Query("SELECT $ROW_COLUMNS FROM media m WHERE m.id = :id")
     fun observeRow(id: Long): Flow<MediaRow?>
 
-    /** Entités complètes par lot (indexation : conserver les champs non issus de MediaStore). */
+    /** Full entities in batch (indexing: keep the fields that do not come from MediaStore). */
     @Query("SELECT * FROM media WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<MediaEntity>
 
-    // --- Ecriture (indexation) ----------------------------------------------------------
+    // --- Writes (indexing) --------------------------------------------------------------
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(media: MediaEntity): Long
@@ -228,14 +227,14 @@ interface MediaDao {
     @Query("DELETE FROM media WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
 
-    /** Médias logiques qui n'ont plus aucune source. */
+    /** Logical media that no longer have any source. */
     @Query("DELETE FROM media WHERE id NOT IN (SELECT DISTINCT mediaId FROM media_source)")
     suspend fun deleteOrphans(): Int
 
     /**
-     * Recalcule les colonnes dénormalisées à partir des sources visibles : une source masquée
-     * (missingSince) ne compte plus, et `primaryUri` n'est renseignée que par un fichier local
-     * présent (uri non nulle = fichier local utilisable).
+     * Recomputes the denormalized columns from the visible sources: a hidden source
+     * (missingSince) no longer counts, and `primaryUri` is only filled in by a present local file
+     * (non-null uri = usable local file).
      */
     @Query(
         """
@@ -255,9 +254,9 @@ interface MediaDao {
     suspend fun refreshSourceFlags(ids: List<Long>)
 
     /**
-     * Médias dont la miniature et l'aperçu viennent de OneDrive (élément OneDrive visible, aucun
-     * fichier local) : mise en cache de tout OneDrive, par pages décroissantes d'identifiant
-     * (les plus récents d'abord), [beforeId] exclu.
+     * Media whose thumbnail and preview come from OneDrive (visible OneDrive item, no local
+     * file): caching of all of OneDrive, in pages of descending id (most recent first),
+     * [beforeId] excluded.
      */
     @Query(
         """
@@ -272,7 +271,7 @@ interface MediaDao {
     suspend fun countPrecacheCandidates(): Int
 }
 
-/** Média à mettre en cache (voir [MediaDao.precacheCandidates]). */
+/** Media item to cache (see [MediaDao.precacheCandidates]). */
 data class PrecacheRow(
     val id: Long,
     val mediaType: MediaType,

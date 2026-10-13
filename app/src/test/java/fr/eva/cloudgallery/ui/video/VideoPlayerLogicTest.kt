@@ -82,7 +82,7 @@ class VideoPlayerLogicTest {
 
     @Test
     fun `cloud failure in causes wins over error code`() {
-        // Echec du résolveur : Media3 le rapporte en ERROR_CODE_IO_UNSPECIFIED (2000).
+        // Resolver failure: Media3 reports it as ERROR_CODE_IO_UNSPECIFIED (2000).
         val code = PlaybackException.ERROR_CODE_IO_UNSPECIFIED
         assertEquals(PlaybackErrorKind.AUTH_REQUIRED, VideoPlayerLogic.classifyError(code, CloudStreamFailure.AUTH_REQUIRED))
         assertEquals(PlaybackErrorKind.CLOUD_THROTTLED, VideoPlayerLogic.classifyError(code, CloudStreamFailure.THROTTLED))

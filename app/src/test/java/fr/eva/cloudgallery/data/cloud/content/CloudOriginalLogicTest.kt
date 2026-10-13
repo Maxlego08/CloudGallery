@@ -5,7 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Nettoyage du cache des originaux OneDrive et nom de remplacement d'un original. */
+/** Trimming of the OneDrive originals cache and replacement name for an original. */
 class CloudOriginalLogicTest {
 
     private val day = 24L * 60 * 60 * 1000
@@ -43,7 +43,7 @@ class CloudOriginalLogicTest {
             maxBytes = 150,
             maxAgeMs = 7 * day,
         )
-        // 300 octets pour 150 autorisés : les deux moins récemment utilisés partent.
+        // 300 bytes for 150 allowed: the two least recently used go.
         assertEquals(listOf(1L, 3L), plan.drop.map { it.id }.sorted())
         assertEquals(listOf(2L), plan.keep.map { it.id })
     }
@@ -74,7 +74,7 @@ class CloudOriginalLogicTest {
             maxBytes = 100,
             maxAgeMs = 7 * day,
         )
-        // Lignes épinglées : ni trop vieilles, ni sans fichier, ni comptées ; 100 octets restants tiennent.
+        // Pinned rows: never too old, never missing a file, never counted; the remaining 100 bytes fit.
         assertTrue(plan.drop.isEmpty())
         assertEquals(listOf(1L, 2L, 3L), plan.keep.map { it.id }.sorted())
     }
@@ -92,7 +92,7 @@ class CloudOriginalLogicTest {
             maxBytes = 100,
             maxAgeMs = 7 * day,
         )
-        // Seul l'original inutilisé depuis plus de 30 min part ; le plafond reste dépassé un moment.
+        // Only the original unused for more than 30 min goes; the cap stays exceeded for a while.
         assertEquals(listOf(2L), plan.drop.map { it.id })
         assertEquals(listOf(1L, 3L), plan.keep.map { it.id }.sorted())
     }

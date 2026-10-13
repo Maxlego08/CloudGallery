@@ -42,7 +42,7 @@ class RemovalPlanTest {
 
     @Test
     fun fullAccess_hiddenItemsAreNeverDeleted() {
-        // Corbeille, en attente, volume démonté : favoris et albums conservés.
+        // Trashed, pending, unmounted volume: favorites and albums kept.
         val trashed = candidate(1, MissingVerdict.HIDDEN)
         val longTrashed = candidate(2, MissingVerdict.HIDDEN, missingSince = now - MISSING_GRACE_MS * 3)
         val plan = planRemovals(listOf(trashed, longTrashed), knownCount = 1_000, fullAccess = true, now = now)
@@ -71,10 +71,10 @@ class RemovalPlanTest {
 
     @Test
     fun massRemoval_needsBothFractionAndAbsoluteCount() {
-        // 300 sur 100 000 : pas massif (fraction faible).
+        // 300 out of 100,000: not mass removal (low fraction).
         val few = (1L..300L).map { candidate(it, MissingVerdict.GONE) }
         assertFalse(planRemovals(few, knownCount = 100_000, fullAccess = true, now = now).massRemovalBlocked)
-        // 150 sur 200 : fraction élevée mais nombre absolu faible (petite bibliothèque, dossier vidé).
+        // 150 out of 200: high fraction but low absolute count (small library, emptied folder).
         val small = (1L..150L).map { candidate(it, MissingVerdict.GONE) }
         val plan = planRemovals(small, knownCount = 200, fullAccess = true, now = now)
         assertFalse(plan.massRemovalBlocked)
@@ -85,7 +85,7 @@ class RemovalPlanTest {
     fun versionChange_detection() {
         assertTrue(mediaStoreVersionChanged("a", "b"))
         assertFalse(mediaStoreVersionChanged("a", "a"))
-        // Inconnu d'un côté : relecture complète, mais pas de ré-identification.
+        // Unknown on one side: full rescan, but no re-identification.
         assertFalse(mediaStoreVersionChanged(null, "b"))
         assertFalse(mediaStoreVersionChanged("a", null))
     }
@@ -124,7 +124,7 @@ class RemovalPlanTest {
         val older = summary(2, 1_000)
         assertEquals(newer to older, orderedByListPosition(newer, older))
         assertEquals(newer to older, orderedByListPosition(older, newer))
-        // Même date : id décroissant.
+        // Same date: descending id.
         val a = summary(5, 1_000)
         val b = summary(9, 1_000)
         assertEquals(b to a, orderedByListPosition(a, b))

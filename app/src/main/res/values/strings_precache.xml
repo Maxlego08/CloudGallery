@@ -1,37 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Mise en cache de tout OneDrive : page Stockage et notification (préfixe precache_). -->
+<!-- Caching all of OneDrive: Storage page and notification (prefix precache_). -->
 <resources>
-    <string name="precache_section">Navigation hors connexion</string>
-    <string name="precache_action">Mettre en cache tout OneDrive</string>
-    <string name="precache_idle_summary">Vignettes et aperçus de tous les éléments OneDrive, pour parcourir la galerie sans attente</string>
-    <string name="precache_size_summary">%1$s en cache · %2$s</string>
-    <string name="precache_waiting">En attente du Wi-Fi, d\'une batterie suffisante ou d\'une reprise…</string>
-    <string name="precache_preparing">Préparation…</string>
-    <string name="precache_progress">%1$d / %2$d · %3$s téléchargés</string>
-    <string name="precache_tap_to_cancel">Toucher pour arrêter</string>
-    <string name="precache_done">À jour : %1$s</string>
-    <string name="precache_low_space">Arrêtée pour garder de l\'espace libre sur l\'appareil</string>
-    <string name="precache_signed_out">Arrêtée : compte OneDrive déconnecté ou à reconnecter</string>
-    <string name="precache_keep_updated">Garder à jour</string>
-    <string name="precache_keep_updated_summary">Après chaque synchronisation, met en cache les nouveaux éléments en arrière-plan</string>
+    <string name="precache_section">Offline browsing</string>
+    <string name="precache_action">Cache all of OneDrive</string>
+    <string name="precache_idle_summary">Thumbnails and previews of every OneDrive item, to browse the gallery without waiting</string>
+    <string name="precache_size_summary">%1$s cached · %2$s</string>
+    <string name="precache_waiting">Waiting for Wi-Fi, enough battery or a retry…</string>
+    <string name="precache_preparing">Preparing…</string>
+    <string name="precache_progress">%1$d / %2$d · %3$s downloaded</string>
+    <string name="precache_tap_to_cancel">Tap to stop</string>
+    <string name="precache_done">Up to date: %1$s</string>
+    <string name="precache_low_space">Stopped to keep free space on the device</string>
+    <string name="precache_signed_out">Stopped: OneDrive account signed out or needs to sign in again</string>
+    <string name="precache_keep_updated">Keep up to date</string>
+    <string name="precache_keep_updated_summary">After each sync, caches new items in the background</string>
 
-    <!-- Boîtes -->
-    <string name="precache_estimating">Calcul de l\'espace nécessaire…</string>
-    <string name="precache_confirm_title">Mettre en cache tout OneDrive ?</string>
-    <string name="precache_confirm_message">%1$s à télécharger (sur %2$s), environ %3$s (espace libre : %4$s).\n\nVignettes de la grille et aperçus de la visionneuse sont enregistrés sur l\'appareil, hors du plafond des miniatures. Les vidéos et les originaux restent en ligne. Le téléchargement se fait en arrière-plan %5$s et reprend après une interruption.</string>
-    <string name="precache_network_wifi">en Wi-Fi</string>
-    <string name="precache_network_any">sur tout réseau</string>
-    <string name="precache_confirm_low_space">\n\nL\'espace libre risque de ne pas suffire : la mise en cache s\'arrêtera avant de remplir l\'appareil.</string>
-    <string name="precache_confirm">Mettre en cache</string>
-    <string name="precache_nothing_title">Tout est déjà en cache</string>
-    <string name="precache_nothing_message">Tous les éléments OneDrive (%1$s) ont déjà leur vignette et leur aperçu sur l\'appareil.</string>
-    <string name="precache_cancel_title">Arrêter la mise en cache ?</string>
-    <string name="precache_cancel_message">Ce qui est déjà en cache est conservé ; la mise en cache reprendra là où elle s\'est arrêtée.</string>
-    <string name="precache_cancel_confirm">Arrêter</string>
-    <string name="precache_estimate_failed">Estimation impossible</string>
+    <!-- Dialogs -->
+    <string name="precache_estimating">Calculating the space needed…</string>
+    <string name="precache_confirm_title">Cache all of OneDrive?</string>
+    <string name="precache_confirm_message">%1$s to download (of %2$s), about %3$s (free space: %4$s).\n\nGrid thumbnails and viewer previews are stored on the device, outside the thumbnail limit. Videos and originals stay online. The download runs in the background %5$s and resumes after an interruption.</string>
+    <string name="precache_network_wifi">on Wi-Fi</string>
+    <string name="precache_network_any">on any network</string>
+    <string name="precache_confirm_low_space">\n\nFree space may not be enough: caching will stop before the device fills up.</string>
+    <string name="precache_confirm">Cache</string>
+    <string name="precache_nothing_title">Everything is already cached</string>
+    <string name="precache_nothing_message">All OneDrive items (%1$s) already have their thumbnail and preview on the device.</string>
+    <string name="precache_cancel_title">Stop caching?</string>
+    <string name="precache_cancel_message">What is already cached is kept; caching will resume where it stopped.</string>
+    <string name="precache_cancel_confirm">Stop</string>
+    <string name="precache_estimate_failed">Could not estimate</string>
 
     <!-- Notification -->
-    <string name="precache_notification_channel">Mise en cache de OneDrive</string>
-    <string name="precache_notification_channel_description">Progression de la mise en cache de tout OneDrive</string>
-    <string name="precache_notification_title">Mise en cache de OneDrive</string>
+    <string name="precache_notification_channel">OneDrive caching</string>
+    <string name="precache_notification_channel_description">Progress of caching all of OneDrive</string>
+    <string name="precache_notification_title">Caching OneDrive</string>
 </resources>

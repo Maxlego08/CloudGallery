@@ -40,12 +40,12 @@ private val CellSize = 44.dp
 private val CellSpacing = 2.dp
 private val CellShape = RoundedCornerShape(6.dp)
 
-/** Nombre de cellules chargées de part et d'autre de la zone visible. */
+/** Number of cells loaded on either side of the visible area. */
 private const val PREFETCH = 15
 
 /**
- * Bande de miniatures au-dessus de la barre d'actions. L'élément courant est centré et entouré ;
- * les résumés sont chargés à la demande pour la fenêtre visible ([onRequestSummaries]).
+ * Thumbnail strip above the action bar. The current item is centered and outlined; summaries
+ * are loaded on demand for the visible window ([onRequestSummaries]).
  */
 @Composable
 internal fun Filmstrip(
@@ -60,7 +60,7 @@ internal fun Filmstrip(
     val currentIds by rememberUpdatedState(ids)
     val requestSummaries by rememberUpdatedState(onRequestSummaries)
 
-    // La bande suit le pager (l'élément courant reste centré grâce au contentPadding).
+    // The strip follows the pager (the current item stays centered thanks to the contentPadding).
     LaunchedEffect(currentIndex) {
         if (currentIndex < 0) return@LaunchedEffect
         val first = listState.firstVisibleItemIndex

@@ -55,11 +55,11 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import kotlinx.coroutines.launch
 
 /**
- * Panneau « Ajouter à l'album » : liste les albums personnalisés (VIRTUAL) et permet d'en créer un.
- * Les médias sont ajoutés par référence (aucune copie de fichier) — l'ajout lui-même est fait par l'appelant.
+ * "Add to album" sheet: lists the custom albums (VIRTUAL) and lets the user create one.
+ * Media items are added by reference (no file copy) — the adding itself is done by the caller.
  *
- * [onAlbumChosen] est appelé après l'animation de fermeture ; l'appelant retire alors le panneau
- * (sans recevoir [onDismiss]). [onDismiss] correspond à une fermeture sans choix.
+ * [onAlbumChosen] is called after the closing animation; the caller then removes the sheet
+ * (without receiving [onDismiss]). [onDismiss] means the sheet was closed without a choice.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +67,7 @@ fun AlbumPickerSheet(
     onDismiss: () -> Unit,
     onAlbumChosen: (albumId: Long) -> Unit,
     modifier: Modifier = Modifier,
-    /** Ouvert au-dessus d'un média plein écran (fond noir) : icônes de barre d'état claires. */
+    /** Opened over a full-screen media item (black background): light status bar icons. */
     overFullscreenMedia: Boolean = false,
 ) {
     val viewModel: AlbumPickerViewModel = hiltViewModel()

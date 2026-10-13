@@ -3,31 +3,31 @@ package fr.eva.cloudgallery.ui.navigation
 import fr.eva.cloudgallery.domain.model.MediaContext
 import kotlinx.serialization.Serializable
 
-/** Ecran principal à onglets (Photos / Albums / Menu). */
+/** Main tabbed screen (Photos / Albums / Menu). */
 @Serializable
 data object MainRoute
 
-/** Grille d'un album (dossier local, dossier cloud ou album virtuel). */
+/** Grid of an album (local folder, cloud folder or virtual album). */
 @Serializable
 data class AlbumRoute(val albumId: Long)
 
-/** Grille « Favoris ». */
+/** "Favorites" grid. */
 @Serializable
 data object FavoritesRoute
 
-/** Grille « Vidéos ». */
+/** "Videos" grid. */
 @Serializable
 data object VideosRoute
 
-/** Visionneuse plein écran, ouverte sur [mediaId] au sein d'un contexte. */
+/** Full-screen viewer, opened on [mediaId] within a context. */
 @Serializable
 data class ViewerRoute(
     val contextType: String,
     val contextArg: Long,
     val mediaId: Long,
-    /** Ouverte pour une autre appli (intent VIEW) : le retour lui rend la main. */
+    /** Opened for another app (VIEW intent): back hands control back to it. */
     val exitOnBack: Boolean = false,
-    /** Saisie d'une recherche ([MediaContext.Search]), vide pour les autres contextes. */
+    /** Search input ([MediaContext.Search]), empty for the other contexts. */
     val contextQuery: String = "",
 ) {
     val context: MediaContext get() = decodeContext(contextType, contextArg, mediaId, contextQuery)
@@ -41,9 +41,9 @@ data class ViewerRoute(
 }
 
 /**
- * Lecteur vidéo plein écran. [externalUri] : vidéo reçue d'une autre appli et non indexée
- * (FileProvider, sélection partielle…), lue directement depuis l'URI accordée ; [mediaId] vaut alors -1.
- * [exitOnBack] : ouverte pour une autre appli, le retour lui rend la main (fin de l'activité).
+ * Full-screen video player. [externalUri]: video received from another app and not indexed
+ * (FileProvider, partial selection…), played directly from the granted URI; [mediaId] is then -1.
+ * [exitOnBack]: opened for another app, back hands control back to it (finishes the activity).
  */
 @Serializable
 data class VideoPlayerRoute(
@@ -55,8 +55,8 @@ data class VideoPlayerRoute(
 )
 
 /**
- * Image reçue d'une autre appli et absente de l'index (URI FileProvider, sélecteur de photos,
- * accès partiel…) : affichée en lecture seule depuis l'URI accordée.
+ * Image received from another app and missing from the index (FileProvider URI, photo picker,
+ * partial access…): shown read-only from the granted URI.
  */
 @Serializable
 data class ExternalImageRoute(
@@ -69,23 +69,23 @@ data class ExternalImageRoute(
 @Serializable
 data object SettingsRoute
 
-/** Compte OneDrive (connexion, déconnexion). */
+/** OneDrive account (sign-in, sign-out). */
 @Serializable
 data object AccountRoute
 
-/** Stockage : espace occupé, plafonds des caches, vidage du cache. */
+/** Storage: space used, cache limits, cache clearing. */
 @Serializable
 data object StorageRoute
 
-/** Recherche plein texte (nom, dossier, album, date, type). */
+/** Full-text search (name, folder, album, date, type). */
 @Serializable
 data object SearchRoute
 
-/** « Masquer des albums » : affichage de chaque album dans Albums et Photos. */
+/** "Hide albums": visibility of each album in Albums and Photos. */
 @Serializable
 data object AlbumVisibilityRoute
 
-/** Economiseur d'espace : copies du téléphone déjà sur OneDrive, revues avant la corbeille. */
+/** Space saver: phone copies already on OneDrive, reviewed before the trash. */
 @Serializable
 data object SpaceSaverRoute
 
@@ -95,7 +95,7 @@ fun encodeContext(context: MediaContext): Pair<String, Long> = when (context) {
     MediaContext.Videos -> "videos" to 0L
     is MediaContext.Album -> "album" to context.albumId
     is MediaContext.Single -> "single" to context.mediaId
-    // La saisie suit à part (ViewerRoute.contextQuery).
+    // The search input is carried separately (ViewerRoute.contextQuery).
     is MediaContext.Search -> "search" to 0L
 }
 

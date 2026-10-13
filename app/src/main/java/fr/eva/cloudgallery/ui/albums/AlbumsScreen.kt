@@ -91,14 +91,14 @@ import fr.eva.cloudgallery.ui.components.OneUiTopBar
 import fr.eva.cloudgallery.ui.components.rememberCollapsedTitleAlpha
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Boîtes de dialogue de l'onglet Albums (enum => sauvegardable). */
+/** Dialogs of the Albums tab (enum => saveable). */
 private enum class AlbumsDialog { CREATE, SORT, RENAME, DELETE }
 
 /**
- * Onglet « Albums » façon Samsung Galerie (One UI 8) : grand titre, accès rapides Favoris / Vidéos,
- * grille d'albums (dossiers de l'appareil, dossiers OneDrive, albums personnalisés) et mode sélection.
+ * Samsung Gallery-style (One UI 8) "Albums" tab: large title, Favorites / Videos quick access,
+ * album grid (device folders, OneDrive folders, custom albums) and selection mode.
  *
- * @param contentPadding espace occupé par la barre d'onglets du shell (bas), masquée en mode sélection.
+ * @param contentPadding space taken by the shell's tab bar (bottom), hidden in selection mode.
  */
 @Composable
 fun AlbumsScreen(
@@ -116,7 +116,7 @@ fun AlbumsScreen(
     val colors = OneUiTheme.colors
     val dimens = OneUiTheme.dimens
 
-    // Remonte le mode sélection au shell (qui masque sa barre d'onglets) et le relâche en quittant l'écran.
+    // Reports selection mode up to the shell (which hides its tab bar) and releases it when leaving the screen.
     val currentOnSelectionModeChange by rememberUpdatedState(onSelectionModeChange)
     LaunchedEffect(state.selectionMode) { currentOnSelectionModeChange(state.selectionMode) }
     DisposableEffect(Unit) { onDispose { currentOnSelectionModeChange(false) } }
@@ -374,7 +374,7 @@ private fun albumBadges(
     }
 }
 
-/** Entrée « Favoris » / « Vidéos » présentée comme un album (non sélectionnable). */
+/** "Favorites" / "Videos" entry presented as an album (not selectable). */
 @Composable
 private fun QuickAccessCell(
     name: String,
@@ -452,8 +452,8 @@ private fun SortDialog(
 }
 
 /**
- * Renommage d'un album. Pour un album-dossier, seul le nom affiché change : le message l'explique.
- * La validation est ignorée tant que le champ est vide.
+ * Renames an album. For a folder album, only the display name changes: the message explains it.
+ * Confirmation is ignored while the field is blank.
  */
 @Composable
 private fun RenameAlbumDialog(

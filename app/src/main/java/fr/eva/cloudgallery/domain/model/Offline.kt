@@ -3,50 +3,50 @@ package fr.eva.cloudgallery.domain.model
 import java.io.File
 import java.util.UUID
 
-/** Etat « hors ligne » d'un élément OneDrive (visionneuse, panneau Détails). */
+/** "Offline" state of a OneDrive item (viewer, Details panel). */
 enum class OfflineStatus {
-    /** Pas de copie hors ligne et rien en cours. */
+    /** No offline copy and nothing in progress. */
     NONE,
 
-    /** En attente de téléchargement. */
+    /** Waiting to be downloaded. */
     QUEUED,
 
-    /** Téléchargement en cours. */
+    /** Download in progress. */
     DOWNLOADING,
 
-    /** Arrêté par l'utilisateur (Gestionnaire de tâches) : reprise à sa demande. */
+    /** Stopped by the user (Task manager): resumed on request. */
     PAUSED,
 
-    /** Echec ([OfflineItemState.error]) : nouvel essai à la demande. */
+    /** Failed ([OfflineItemState.error]): retried on request. */
     FAILED,
 
-    /** Copie disponible sur l'appareil. */
+    /** Copy available on the device. */
     AVAILABLE,
 
-    /** Copie disponible ; nouvelle version en attente ou en cours de téléchargement. */
+    /** Copy available; new version waiting or being downloaded. */
     UPDATING,
 
     /**
-     * Copie disponible (ancienne version) ; téléchargement de la nouvelle version en pause ou en
-     * échec ([OfflineItemState.error]) : reprise ou annulation à la demande.
+     * Copy available (old version); download of the new version paused or failed
+     * ([OfflineItemState.error]): resumed or cancelled on request.
      */
     UPDATE_STOPPED,
 }
 
-/** Etat hors ligne d'un média, progression comprise. */
+/** Offline state of a media item, including progress. */
 data class OfflineItemState(
     val status: OfflineStatus,
     val error: DownloadError? = null,
     val bytesDone: Long = 0L,
     val bytesTotal: Long = 0L,
-    /** Téléchargement en attente d'un réseau Wi-Fi (réglage « Wi-Fi uniquement »). */
+    /** Download waiting for a Wi-Fi network ("Wi-Fi only" setting). */
     val waitingForUnmetered: Boolean = false,
 ) {
-    /** Tâche en attente ou en cours (annulable). */
+    /** Task waiting or in progress (cancellable). */
     val active: Boolean get() = status == OfflineStatus.QUEUED || status == OfflineStatus.DOWNLOADING ||
         (status == OfflineStatus.UPDATING && error == null)
 
-    /** Tâche arrêtée, à reprendre (première copie ou mise à jour d'une copie présente). */
+    /** Task stopped, to be resumed (first copy or update of an existing copy). */
     val stopped: Boolean get() = status == OfflineStatus.PAUSED || status == OfflineStatus.FAILED ||
         status == OfflineStatus.UPDATE_STOPPED
 
@@ -55,52 +55,52 @@ data class OfflineItemState(
     }
 }
 
-/** File des copies hors ligne (écran Compte, notification). */
+/** Queue of offline copies (Account screen, notification). */
 data class OfflineQueueState(
     val queued: Int = 0,
     val running: Int = 0,
     val paused: Int = 0,
     val failed: Int = 0,
-    /** Octets restant à télécharger (tâches en attente ou en cours, tailles connues). */
+    /** Bytes left to download (tasks waiting or in progress, known sizes). */
     val remainingBytes: Long = 0L,
-    /** File en attente d'un réseau Wi-Fi (réglage « Wi-Fi uniquement », sans « Télécharger maintenant »). */
+    /** Queue waiting for a Wi-Fi network ("Wi-Fi only" setting, without "Download now"). */
     val waitingForUnmetered: Boolean = false,
-    /** Copies hors ligne présentes sur l'appareil. */
+    /** Offline copies present on the device. */
     val availableCount: Int = 0,
-    /** Taille totale des copies hors ligne présentes. */
+    /** Total size of the offline copies present. */
     val availableBytes: Long = 0L,
 ) {
     val pending: Int get() = queued + running
     val isEmpty: Boolean get() = pending == 0 && paused == 0 && failed == 0
 }
 
-/** Issue de « Conserver hors ligne ». */
+/** Outcome of "Keep offline". */
 sealed interface KeepOfflineResult {
-    /** Aucun compte OneDrive utilisable. */
+    /** No usable OneDrive account. */
     data object NotSignedIn : KeepOfflineResult
 
-    /** Rien à télécharger (déjà hors ligne, ou aucun élément OneDrive dans la sélection). */
+    /** Nothing to download (already offline, or no OneDrive item in the selection). */
     data object NothingToDo : KeepOfflineResult
 
-    /** Espace insuffisant : il manque [missingBytes] sur le volume [storageUuid]. */
+    /** Not enough space: [missingBytes] are missing on volume [storageUuid]. */
     data class NoSpace(val missingBytes: Long, val storageUuid: UUID?) : KeepOfflineResult
 
-    /** Gros lot : confirmation demandée avec la taille totale et l'espace libre. */
+    /** Large batch: confirmation requested with the total size and the free space. */
     data class NeedsConfirmation(val count: Int, val bytes: Long, val freeBytes: Long) : KeepOfflineResult
 
-    /** [count] éléments mis en file ([bytes] octets) ; [waitingForUnmetered] : attente du Wi-Fi. */
+    /** [count] items queued ([bytes] bytes); [waitingForUnmetered]: waiting for Wi-Fi. */
     data class Enqueued(val count: Int, val bytes: Long, val waitingForUnmetered: Boolean) : KeepOfflineResult
 
     /**
-     * Mis en file, mais le système refuse de lancer le travail maintenant (appli en arrière-plan,
-     * autorisation retirée) : il reprendra au prochain retour de l'appli au premier plan.
+     * Queued, but the system refuses to start the work now (app in the background, permission
+     * revoked): it will resume the next time the app comes back to the foreground.
      */
     data class SchedulingRefused(val count: Int) : KeepOfflineResult
 }
 
 /**
- * Copie hors ligne d'un élément supprimé de OneDrive dont le délai de grâce est écoulé, en
- * attente de la décision de l'utilisateur (décision D1).
+ * Offline copy of an item deleted from OneDrive whose grace period has elapsed, waiting for
+ * the user's decision (decision D1).
  */
 data class DeletedOnOneDriveCopy(
     val mediaId: Long,
@@ -111,16 +111,16 @@ data class DeletedOnOneDriveCopy(
 )
 
 /**
- * Modèle d'image (Coil) : miniature décodée depuis la copie hors ligne d'un média (fichier de
- * l'appli), quand ni fichier local ni miniature OneDrive ne sont disponibles. [version] invalide
- * le cache mémoire quand la copie change.
+ * Image model (Coil): thumbnail decoded from the offline copy of a media item (app file), when
+ * neither a local file nor a OneDrive thumbnail is available. [version] invalidates the memory
+ * cache when the copy changes.
  */
 data class OfflineThumbnail(val mediaId: Long, val version: String, val mimeType: String?)
 
-/** Copie hors ligne d'un média : fichier de l'appli (jamais un fichier de l'utilisateur). */
+/** Offline copy of a media item: an app file (never a user file). */
 data class OfflineFile(
     val file: File,
     val sizeBytes: Long,
-    /** Version du contenu copié (cTag OneDrive), null si inconnue. */
+    /** Version of the copied content (OneDrive cTag), null if unknown. */
     val version: String?,
 )

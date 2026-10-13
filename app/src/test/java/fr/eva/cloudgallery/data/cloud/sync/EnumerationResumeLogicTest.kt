@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Reprise d'une énumération complète OneDrive : journal des éléments vus et conditions de reprise. */
+/** Resuming a full OneDrive enumeration: journal of seen items and resume conditions. */
 class EnumerationResumeLogicTest {
 
     private val hour = 60L * 60 * 1000
@@ -35,11 +35,11 @@ class EnumerationResumeLogicTest {
     @Test
     fun journal_ignoresAnInterruptedLastBlock() {
         val complete = encodeSeenBlock(listOf(m("A")))
-        // Arrêt pendant l'écriture : bloc sans ligne de fin, puis ligne tronquée.
+        // Stopped while writing: block without an end line, then a truncated line.
         val replay = replaySeenJournal(complete + "M\tB\nM\tC")
         assertEquals(setOf("A"), replay!!.seen)
         assertEquals(1, replay.completeBlocks)
-        // Bloc entier sans ligne de fin : ignoré aussi.
+        // Whole block without an end line: ignored too.
         assertEquals(setOf("A"), replaySeenJournal(complete + "M\tB\n")!!.seen)
     }
 
@@ -80,25 +80,25 @@ class EnumerationResumeLogicTest {
     @Test
     fun resume_whenRecentSameDriveAndJournalComplete() {
         assertTrue(canResumeEnumeration(meta(), version, now, journal(3)))
-        // Une page appliquée de plus que le lien enregistré : rejouée sans dommage.
+        // One more applied page than the saved link: replayed harmlessly.
         assertTrue(canResumeEnumeration(meta(), version, now, journal(4)))
     }
 
     @Test
     fun noResume_whenStateIsStaleOrInconsistent() {
-        // Autre lecteur ou autre liste de champs.
+        // Different drive or different field list.
         assertFalse(canResumeEnumeration(meta(version = "drive2|s1"), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(version = null), version, now, journal(3)))
-        // Trop vieille, horloge reculée, jamais commencée.
+        // Too old, clock moved back, never started.
         assertFalse(canResumeEnumeration(meta(startedAt = now - 25 * hour), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(startedAt = now + hour), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(startedAt = 0L), version, now, journal(3)))
-        // Aucun lien, aucune page, lien hors Microsoft Graph.
+        // No link, no page, link outside Microsoft Graph.
         assertFalse(canResumeEnumeration(meta(nextLink = null), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(pages = 0), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(nextLink = "https://example.com/delta"), version, now, journal(3)))
         assertFalse(canResumeEnumeration(meta(nextLink = "http://graph.microsoft.com/v1.0/x"), version, now, journal(3)))
-        // Journal illisible ou en retard sur le lien enregistré.
+        // Journal unreadable or behind the saved link.
         assertFalse(canResumeEnumeration(meta(), version, now, null))
         assertFalse(canResumeEnumeration(meta(), version, now, journal(2)))
     }

@@ -90,7 +90,7 @@ import kotlin.math.roundToInt
 
 private val ScrimColor = Color.Black.copy(alpha = 0.6f)
 
-/** Commandes superposées : barre supérieure, commandes centrales, barre de progression et boutons. */
+/** Overlaid controls: top bar, center controls, progress bar and buttons. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VideoControlsOverlay(
@@ -112,7 +112,7 @@ internal fun VideoControlsOverlay(
     onOpenWith: () -> Unit,
     onRotate: () -> Unit,
 ) {
-    // Insets « ignorant la visibilité » : les barres ne sautent pas quand le système les masque.
+    // Insets "ignoring visibility": the bars don't jump when the system hides them.
     val topInsets = WindowInsets.statusBarsIgnoringVisibility
         .union(WindowInsets.displayCutout)
         .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
@@ -123,13 +123,13 @@ internal fun VideoControlsOverlay(
     var scrubPositionMs by remember { mutableStateOf<Long?>(null) }
     val currentOnScrubbingChange by rememberUpdatedState(onScrubbingChange)
 
-    // Overlay retiré en plein glissement (commandes masquées) : la barre ne signale jamais la fin
-    // du geste, on libère donc l'état de glissement du parent.
+    // Overlay removed mid-drag (controls hidden): the bar never reports the end of the gesture,
+    // so release the parent's scrubbing state.
     DisposableEffect(Unit) {
         onDispose { currentOnScrubbingChange(false) }
     }
-    // Barre de progression retirée en plein glissement (erreur de lecture) : même chose, et l'aperçu
-    // du temps ne doit pas rester figé au retour des commandes.
+    // Progress bar removed mid-drag (playback error): same thing, and the time preview must not
+    // stay frozen when the controls come back.
     LaunchedEffect(showCenterAndBottom) {
         if (!showCenterAndBottom && scrubPositionMs != null) {
             scrubPositionMs = null
@@ -138,7 +138,7 @@ internal fun VideoControlsOverlay(
     }
 
     Box(Modifier.fillMaxSize()) {
-        // Barre supérieure : retour, nom du fichier, menu.
+        // Top bar: back, file name, menu.
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -192,7 +192,7 @@ internal fun VideoControlsOverlay(
         }
 
         if (showCenterAndBottom) {
-            // Commandes centrales, remplacées par l'aperçu du temps pendant le glissement.
+            // Center controls, replaced by the time preview while scrubbing.
             val scrub = scrubPositionMs
             if (scrub != null) {
                 Text(
@@ -232,7 +232,7 @@ internal fun VideoControlsOverlay(
                 }
             }
 
-            // Bas : volume (optionnel), progression, boutons.
+            // Bottom: volume (optional), progress, buttons.
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -327,7 +327,7 @@ private fun TimeText(ms: Long) {
     )
 }
 
-/** Barre de progression : glissement fluide (aperçu local), seek au relâchement. */
+/** Progress bar: smooth dragging (local preview), seek on release. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeekBar(
@@ -404,7 +404,7 @@ private fun SeekTrack(played: Float, buffered: Float) {
     }
 }
 
-/** Indicateur de vitesse (« 1x », « 1.5x ») qui ouvre le choix de vitesse. */
+/** Speed indicator ("1x", "1.5x") that opens the speed picker. */
 @Composable
 private fun SpeedIndicator(speed: Float, onClick: () -> Unit) {
     val label = VideoPlayerLogic.speedLabel(speed)
@@ -415,7 +415,7 @@ private fun SpeedIndicator(speed: Float, onClick: () -> Unit) {
             .widthIn(min = 48.dp)
             .clip(RoundedCornerShape(50))
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = "$description : $label" }
+            .semantics { contentDescription = "$description: $label" }
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -431,7 +431,7 @@ private fun SpeedIndicator(speed: Float, onClick: () -> Unit) {
     }
 }
 
-/** Volume multimédia du système (STREAM_MUSIC) + coupure du son du lecteur. */
+/** System media volume (STREAM_MUSIC) + player mute. */
 @Composable
 private fun VolumePanel(muted: Boolean, onToggleMute: () -> Unit, onInteraction: () -> Unit) {
     val context = LocalContext.current
@@ -440,7 +440,7 @@ private fun VolumePanel(muted: Boolean, onToggleMute: () -> Unit, onInteraction:
     var volume by remember { mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0) }
     var dragging by remember { mutableStateOf(false) }
 
-    // Suit les touches de volume physiques pendant que le panneau est affiché.
+    // Follows the hardware volume keys while the panel is shown.
     LaunchedEffect(audioManager) {
         while (audioManager != null) {
             if (!dragging) volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -493,10 +493,10 @@ private fun VolumePanel(muted: Boolean, onToggleMute: () -> Unit, onInteraction:
     }
 }
 
-/** Demi-cercle translucide façon Samsung affiché lors d'un double appui (-/+ N s). */
+/** Samsung-style translucent half-circle shown on a double tap (-/+ N s). */
 @Composable
 internal fun BoxScope.SeekFeedbackIndicator(feedback: SeekFeedback?) {
-    // Garde le dernier contenu pour l'animation de disparition (pas un état observable).
+    // Keeps the last content for the exit animation (not observable state).
     val last = remember { LastFeedbackHolder() }
     if (feedback != null) last.value = feedback
     val shown = last.value ?: return
@@ -544,8 +544,8 @@ internal fun BoxScope.SeekFeedbackIndicator(feedback: SeekFeedback?) {
 }
 
 /**
- * Message d'erreur avec, selon le cas, les actions « Ouvrir avec une autre application »,
- * « Se connecter » (compte OneDrive) et « Réessayer ».
+ * Error message with, depending on the case, the "Open with another app", "Sign in" (OneDrive
+ * account) and "Retry" actions.
  */
 @Composable
 internal fun PlaybackErrorPanel(
@@ -622,7 +622,7 @@ private fun PillButton(text: String, onClick: () -> Unit) {
     }
 }
 
-/** Choix de la vitesse de lecture dans une boîte de dialogue One UI. */
+/** Playback speed picker in a One UI dialog. */
 @Composable
 internal fun PlaybackSpeedDialog(
     currentSpeed: Float,

@@ -31,23 +31,23 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Etat affiché par l'écran Compte. */
+/** State displayed by the Account screen. */
 data class AccountUiState(
     val account: CloudAccountState,
-    /** Page de connexion Microsoft ouverte. */
+    /** Microsoft sign-in page open. */
     val signInRunning: Boolean = false,
-    /** Retrait de données OneDrive en cours (session précédente ou autre compte). */
+    /** OneDrive data removal in progress (previous session or other account). */
     val purging: Boolean = false,
     val sync: CloudSyncState = CloudSyncState(),
-    /** Profil Graph du compte connecté (null tant qu'il n'est pas chargé). */
+    /** Graph profile of the signed-in account (null until loaded). */
     val profile: CloudProfile? = null,
-    /** Réglage « Afficher les éléments OneDrive dans Photos » (null avant lecture). */
+    /** "Show OneDrive items in Photos" setting (null before it is read). */
     val showCloudInPhotos: Boolean? = null,
-    /** File et copies hors ligne. */
+    /** Offline queue and copies. */
     val offlineQueue: OfflineQueueState = OfflineQueueState(),
-    /** Copies d'éléments supprimés de OneDrive en attente de décision (D1). */
+    /** Copies of items deleted from OneDrive awaiting a decision (D1). */
     val deletedCopies: List<DeletedOnOneDriveCopy> = emptyList(),
-    /** Décision D1 en cours d'application. */
+    /** D1 decision being applied. */
     val decidingCopies: Boolean = false,
 )
 
@@ -77,7 +77,7 @@ class AccountViewModel @Inject constructor(
     private val profile = MutableStateFlow<CloudProfile?>(null)
     private val decidingCopies = MutableStateFlow(false)
 
-    /** Etat hors ligne : file, copies en attente de décision, décision en cours. */
+    /** Offline state: queue, copies awaiting a decision, decision in progress. */
     private val offlineState: Flow<Triple<OfflineQueueState, List<DeletedOnOneDriveCopy>, Boolean>> =
         combine(offline.queue, offline.deletedOnOneDrive, decidingCopies) { queue, deleted, deciding ->
             Triple(queue, deleted, deciding)
@@ -117,7 +117,7 @@ class AccountViewModel @Inject constructor(
                 if (outcome is SignInOutcome.Failed) eventChannel.trySend(AccountEvent.SignInFailed(outcome.code))
             }
         }
-        // Profil (nom, adresse, quota) chargé à chaque connexion ; effacé hors connexion.
+        // Profile (name, address, quota) loaded on every sign-in; cleared when signed out.
         viewModelScope.launch {
             accounts.state.map { it is CloudAccountState.SignedIn }.distinctUntilChanged().collect { signedIn ->
                 if (signedIn) loadProfile() else profile.value = null
@@ -125,7 +125,7 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** Relit le compte (à chaque retour au premier plan de l'écran : compte persisté par MSAL entre-temps). */
+    /** Re-reads the account (each time the screen returns to the foreground: account persisted by MSAL in the meantime). */
     fun refresh() {
         viewModelScope.launch {
             accounts.refresh()
@@ -134,7 +134,7 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun loadProfile() {
-        // Echec (hors ligne…) : l'écran garde le nom du compte MSAL, sans quota.
+        // Failure (offline…): the screen keeps the MSAL account name, without quota.
         accounts.loadProfile().onSuccess { profile.value = it }
     }
 
@@ -149,8 +149,8 @@ class AccountViewModel @Inject constructor(
     }
 
     /**
-     * Copies hors ligne retirées par une déconnexion ou une purge (dont dernières copies) ;
-     * [PurgeImpactUi.Unknown] si la lecture échoue (la confirmation avertit alors prudemment).
+     * Offline copies removed by a sign-out or a purge (including last copies);
+     * [PurgeImpactUi.Unknown] if reading fails (the confirmation then warns cautiously).
      */
     internal suspend fun purgeImpact(): PurgeImpactUi = try {
         val impact: OfflinePurgeImpact = offline.purgeImpact()
@@ -162,13 +162,13 @@ class AccountViewModel @Inject constructor(
     }
 
     /**
-     * « Supprimer les copies » confirmé pour [mediaIds], la liste affichée et comptée dans la
-     * confirmation (jamais une liste relue au moment du clic).
+     * "Delete copies" confirmed for [mediaIds], the list displayed and counted in the
+     * confirmation (never a list re-read at click time).
      */
     fun deleteDeletedCopies(mediaIds: List<Long>) =
         decide { offline.deleteCopiesOfDeletedItems(mediaIds).let { AccountEvent.CopiesDeleted(it) } }
 
-    /** « Les conserver » pour [mediaIds] (liste affichée) : copies gardées comme seuls exemplaires, visibles. */
+    /** "Keep them" for [mediaIds] (displayed list): copies kept as the only instances, visible. */
     fun keepDeletedCopies(mediaIds: List<Long>) =
         decide { offline.keepCopiesOfDeletedItems(mediaIds).let { AccountEvent.CopiesKept(it) } }
 
@@ -188,13 +188,13 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** Reprend les téléchargements hors ligne en pause ou en échec. */
+    /** Resumes paused or failed offline downloads. */
     fun resumeOffline() = offlineAction(AccountEvent.OfflineResumed) { offline.resume() }
 
-    /** « Télécharger maintenant » (file en attente du Wi-Fi). */
+    /** "Download now" (queue waiting for Wi-Fi). */
     fun downloadOfflineNow() = offlineAction(null) { offline.downloadNow() }
 
-    /** Annule tous les téléchargements hors ligne (les copies présentes restent). */
+    /** Cancels all offline downloads (existing copies remain). */
     fun cancelOffline() = offlineAction(AccountEvent.OfflineCancelled) { offline.cancelAll() }
 
     private fun offlineAction(done: AccountEvent?, action: suspend () -> Unit) {
@@ -210,7 +210,7 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** Déconnexion confirmée par l'utilisateur (données OneDrive retirées de l'index). */
+    /** Sign-out confirmed by the user (OneDrive data removed from the index). */
     fun confirmSignOut() {
         viewModelScope.launch {
             accounts.signOutAndPurge()
@@ -222,14 +222,14 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** Retrait confirmé des données OneDrive d'une session précédente. */
+    /** Confirmed removal of OneDrive data from a previous session. */
     fun confirmPurgeLeftover() = runPurge(
         action = { accounts.purgeLeftoverData() },
         done = AccountEvent.PurgeDone,
         failed = AccountEvent.PurgeFailed,
     )
 
-    /** Remplacement confirmé des données d'un autre compte OneDrive par celles du compte connecté. */
+    /** Confirmed replacement of another OneDrive account's data with the signed-in account's. */
     fun confirmReplaceData() = runPurge(
         action = { accounts.replaceMismatchedData() },
         done = AccountEvent.ReplaceDone,

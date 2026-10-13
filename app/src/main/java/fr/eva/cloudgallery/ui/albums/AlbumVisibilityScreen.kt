@@ -70,8 +70,8 @@ private val VisibilityLabels = listOf(
 )
 
 /**
- * « Masquer des albums » (menu de l'onglet Albums) : chaque album, masqués compris, avec son
- * affichage (affiché, masqué dans Albums, masqué dans Albums et Photos). Rien n'est supprimé.
+ * "Hide albums" (Albums tab menu): every album, hidden ones included, with its visibility
+ * (shown, hidden in Albums, hidden in Albums and Photos). Nothing is deleted.
  */
 @Composable
 fun AlbumVisibilityScreen(
@@ -131,8 +131,8 @@ fun AlbumVisibilityScreen(
                     )
                 }
             } else if (list != null) {
-                // Une ligne par élément (des centaines de dossiers OneDrive possibles), carte
-                // reconstituée par les coins arrondis de la première et de la dernière ligne.
+                // One row per item (possibly hundreds of OneDrive folders), the card being
+                // rebuilt from the rounded corners of the first and last rows.
                 itemsIndexed(list, key = { _, album -> album.id }) { index, album ->
                     val radius = OneUiTheme.dimens.cardRadius
                     val shape = RoundedCornerShape(

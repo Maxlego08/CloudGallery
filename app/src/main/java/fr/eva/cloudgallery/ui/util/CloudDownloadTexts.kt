@@ -4,7 +4,7 @@ import androidx.annotation.StringRes
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.DownloadError
 
-/** Message affiché pour un échec de téléchargement OneDrive (un texte par cause). */
+/** Message shown for a failed OneDrive download (one text per cause). */
 @StringRes
 fun downloadErrorMessage(error: DownloadError): Int = when (error) {
     DownloadError.NETWORK -> R.string.cloud_download_error_network

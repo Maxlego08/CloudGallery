@@ -11,7 +11,7 @@ class NetworkLogicTest {
     @Test
     fun dataSaver_onlyWhenEnabledForTheApp() {
         assertTrue(isDataSaverOn(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED))
-        // Appli exemptée par l'utilisateur : l'économiseur ne s'applique pas à elle.
+        // App exempted by the user: Data Saver does not apply to it.
         assertFalse(isDataSaverOn(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_WHITELISTED))
         assertFalse(isDataSaverOn(ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED))
     }

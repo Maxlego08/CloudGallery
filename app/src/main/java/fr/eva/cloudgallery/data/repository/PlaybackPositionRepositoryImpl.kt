@@ -17,10 +17,10 @@ class PlaybackPositionRepositoryImpl @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : PlaybackPositionRepository {
 
-    /** Position mémorisée en ms, 0 si aucune. */
+    /** Saved position in ms, 0 if none. */
     override suspend fun get(mediaId: Long): Long = withContext(io) { dao.get(mediaId) ?: 0L }
 
-    /** Les positions proches du début ou de la fin (< 3 s) effacent la reprise au lieu de l'enregistrer. */
+    /** Positions close to the start or the end (< 3 s) clear the resume point instead of saving it. */
     override suspend fun save(mediaId: Long, positionMs: Long, durationMs: Long): Unit = withContext(io) {
         if (!shouldKeepPlaybackPosition(positionMs, durationMs)) {
             dao.delete(mediaId)
@@ -29,7 +29,7 @@ class PlaybackPositionRepositoryImpl @Inject constructor(
         try {
             dao.upsert(PlaybackPositionEntity(mediaId, positionMs, durationMs, System.currentTimeMillis()))
         } catch (_: SQLiteConstraintException) {
-            // Média supprimé entre-temps (clé étrangère) : rien à mémoriser.
+            // Media deleted in the meantime (foreign key): nothing to remember.
         }
     }
 

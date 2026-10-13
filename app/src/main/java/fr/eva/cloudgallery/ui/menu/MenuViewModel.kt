@@ -27,31 +27,31 @@ class MenuViewModel @Inject constructor(
 
     val indexState: StateFlow<IndexState> = indexer.state
 
-    /** Entrée OneDrive affichée uniquement si ce build embarque une configuration MSAL. */
+    /** OneDrive entry shown only if this build ships an MSAL configuration. */
     val cloudAvailable: Boolean = cloudAccounts.isAvailable
 
     val cloudState: StateFlow<CloudAccountState> = cloudAccounts.state
 
-    /** Etat de la synchronisation OneDrive (sous-titre de l'entrée OneDrive, compte connecté). */
+    /** OneDrive sync status (subtitle of the OneDrive entry, signed-in account). */
     val cloudSyncState: StateFlow<CloudSyncState> = cloudAccounts.syncState
 
     /**
-     * Copies hors ligne d'éléments supprimés de OneDrive en attente de décision : signalées sur
-     * l'entrée OneDrive (la décision se prend dans l'écran Compte).
+     * Offline copies of items deleted from OneDrive awaiting a decision: flagged on
+     * the OneDrive entry (the decision is made in the Account screen).
      */
     val deletedOfflineCopies: StateFlow<Int> = offline.deletedOnOneDrive
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init {
-        // Au démarrage du processus l'état est « chargement » : lecture du compte MSAL (E/S)
-        // pour que le sous-titre ne reste pas figé.
+        // At process start the state is "loading": the MSAL account is read (I/O)
+        // so that the subtitle does not stay frozen.
         val current = cloudAccounts.state.value
         if (cloudAvailable && (current is CloudAccountState.Loading || current is CloudAccountState.Error)) {
             viewModelScope.launch { cloudAccounts.refresh() }
         }
     }
 
-    /** Synchro incrémentale immédiate (portée applicative : survit à la sortie de l'écran). */
+    /** Immediate incremental sync (application scope: survives leaving the screen). */
     fun syncNow() = syncCoordinator.syncNow(full = false)
 }

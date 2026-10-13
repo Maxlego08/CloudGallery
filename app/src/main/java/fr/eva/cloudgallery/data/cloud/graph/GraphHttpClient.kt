@@ -23,18 +23,18 @@ import javax.inject.Singleton
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
 
-/** 410 Gone : le jeton delta a expiré, une énumération complète doit reprendre depuis [location]. */
-class GraphResyncRequiredException(val location: String?) : Exception("Jeton delta expiré (410)")
+/** 410 Gone: the delta token has expired, a full enumeration must restart from [location]. */
+class GraphResyncRequiredException(val location: String?) : Exception("Delta token expired (410)")
 
-/** Réponse Graph en échec (hors 401, 410 et limitations). Ni URL ni jeton dans le message. */
+/** Failed Graph response (other than 401, 410 and throttling). No URL or token in the message. */
 class GraphHttpException(val status: Int, val graphCode: String?) :
     CloudException(errorCodeForStatus(status)) {
-    override val message: String get() = "Microsoft Graph : HTTP $status (${graphCode ?: "?"})"
+    override val message: String get() = "Microsoft Graph: HTTP $status (${graphCode ?: "?"})"
 }
 
 /**
- * Pause globale demandée par Graph (« pause all further requests ») : toute requête attend la
- * fin du blocage le plus long annoncé (Retry-After ou attente exponentielle).
+ * Global pause requested by Graph ("pause all further requests"): every request waits for the
+ * end of the longest announced block (Retry-After or exponential backoff).
  */
 internal class ThrottleGate(private val clock: () -> Long) {
     @Volatile
@@ -50,20 +50,19 @@ internal class ThrottleGate(private val clock: () -> Long) {
 }
 
 /**
- * Boucle de requête GET authentifiée, indépendante d'OkHttpClient (le transport est injecté :
- * testable en JVM avec des réponses préparées) :
- * - jeton `Bearer` envoyé uniquement à https://graph.microsoft.com ;
- * - 401 : renouvellement forcé du jeton puis une seule nouvelle tentative ;
- * - 429/502/503/504 : Retry-After respecté (à défaut attente exponentielle), pause globale ;
- * - 410 : [GraphResyncRequiredException] avec l'URL de reprise ;
- * - erreur réseau : quelques nouvelles tentatives espacées, puis [CloudErrorCode.NETWORK].
- * Toute réponse est fermée après usage.
+ * Authenticated GET request loop, independent of OkHttpClient (the transport is injected:
+ * testable on the JVM with canned responses):
+ * - `Bearer` token sent only to https://graph.microsoft.com;
+ * - 401: forced token refresh, then a single retry;
+ * - 429/502/503/504: Retry-After honored (exponential backoff otherwise), global pause;
+ * - 410: [GraphResyncRequiredException] with the resume URL;
+ * - network error: a few spaced-out retries, then [CloudErrorCode.NETWORK].
+ * Every response is closed after use.
  *
- * [get] accepte un en-tête Accept et un nombre maximal de nouvelles tentatives par appel : les
- * miniatures (chargées pendant le défilement) abandonnent vite, mais la pause globale demandée
- * par Graph est toujours appliquée aux requêtes suivantes. Une pause plus longue que
- * [RETRY_AFTER_MAX_MS] n'est pas attendue : chaque appel échoue alors aussitôt, sans requête,
- * avec [CloudThrottledException].
+ * [get] accepts an Accept header and a maximum number of retries per call: thumbnails (loaded
+ * while scrolling) give up quickly, but the global pause requested by Graph is always applied
+ * to subsequent requests. A pause longer than [RETRY_AFTER_MAX_MS] is not waited out: each call
+ * then fails immediately, without a request, with [CloudThrottledException].
  */
 internal class GraphCaller(
     private val tokens: CloudTokenProvider,
@@ -80,14 +79,14 @@ internal class GraphCaller(
         block: suspend (Response) -> T,
     ): T {
         val httpUrl = url.toHttpUrlOrNull()?.takeIf { isTrustedGraphUrl(it) }
-            ?: throw CloudException(CloudErrorCode.SERVER, IllegalArgumentException("URL hors Microsoft Graph refusée"))
+            ?: throw CloudException(CloudErrorCode.SERVER, IllegalArgumentException("Non-Microsoft Graph URL rejected"))
         var forceRefresh = false
         var tokenRefreshed = false
         var retries = 0
         var ioRetries = 0
         while (true) {
             val paused = gate.remainingMs()
-            // Pause annoncée trop longue pour être attendue dans l'appel : abandon sans requête.
+            // Announced pause too long to wait out within the call: give up without a request.
             if (paused > RETRY_AFTER_MAX_MS) throw CloudThrottledException(paused)
             if (paused > 0) sleep(paused)
             val token = tokens.accessToken(forceRefresh)
@@ -105,8 +104,8 @@ internal class GraphCaller(
                         GraphStatusAction.SUCCESS -> return block(response)
                         GraphStatusAction.REFRESH_TOKEN -> {
                             if (tokenRefreshed) {
-                                // Jeton tout juste renouvelé et pourtant refusé (accès révoqué côté
-                                // service) : le compte doit être reconnecté.
+                                // Token just refreshed and yet rejected (access revoked on the
+                                // service side): the account must be signed in again.
                                 tokens.onTokenRejected(token)
                                 throw CloudAuthRequiredException(GraphHttpException(response.code, graphErrorCode(response)))
                             }
@@ -116,8 +115,8 @@ internal class GraphCaller(
                         GraphStatusAction.RETRY -> {
                             val retryAfter = parseRetryAfterMs(response.header("Retry-After"))
                             val wait = retryDelayMs(retries, retryAfter)
-                            // Pause globale toujours appliquée aux requêtes suivantes, même quand cet
-                            // appel abandonne (budget épuisé, Retry-After trop long pour être attendu).
+                            // Global pause always applied to subsequent requests, even when this
+                            // call gives up (budget exhausted, Retry-After too long to wait out).
                             gate.block(wait ?: retryAfter ?: BACKOFF_CAP_MS)
                             if (wait == null || retries >= maxRetries) {
                                 throw if (response.code == 429 || retryAfter != null) {
@@ -140,7 +139,7 @@ internal class GraphCaller(
         }
     }
 
-    /** Code d'erreur Graph (`error.code`) lu sans consommer le corps, ou null. */
+    /** Graph error code (`error.code`) read without consuming the body, or null. */
     private fun graphErrorCode(response: Response): String? = try {
         GraphJson.decodeFromString(GraphErrorEnvelope.serializer(), response.peekBody(ERROR_BODY_MAX_BYTES).string())
             .error?.code
@@ -157,8 +156,8 @@ internal class GraphCaller(
 }
 
 /**
- * Client HTTP de Microsoft Graph (OkHttp). L'OkHttpClient n'est créé qu'au premier appel, sur
- * le dispatcher d'E/S (initialisation TLS hors du thread principal).
+ * Microsoft Graph HTTP client (OkHttp). The OkHttpClient is only created on the first call, on
+ * the I/O dispatcher (TLS initialization off the main thread).
  */
 @Singleton
 class GraphHttpClient @Inject constructor(
@@ -173,7 +172,7 @@ class GraphHttpClient @Inject constructor(
         transport = { request -> client.get().newCall(request).await() },
     )
 
-    /** GET authentifié ; [block] lit la réponse (fermée ensuite). */
+    /** Authenticated GET; [block] reads the response (closed afterwards). */
     suspend fun <T> get(
         url: String,
         accept: String = GraphCaller.ACCEPT_JSON,
@@ -182,13 +181,13 @@ class GraphHttpClient @Inject constructor(
     ): T = withContext(io) { caller.get(url, accept, maxRetries, block) }
 }
 
-/** User-Agent de toutes les requêtes HTTP de l'appli (Graph et hôte de téléchargement OneDrive). */
+/** User-Agent of all the app's HTTP requests (Graph and the OneDrive download host). */
 internal val CLOUD_USER_AGENT: String = "CloudGallery/${BuildConfig.VERSION_NAME} (Android)"
 
 /**
- * Exécution asynchrone d'un appel OkHttp jusqu'aux en-têtes de la réponse, annulée avec la
- * coroutine. La lecture du corps qui suit n'est pas couverte : l'appelant qui lit un long corps
- * doit annuler l'appel lui-même (voir CdnDownloader).
+ * Asynchronous execution of an OkHttp call up to the response headers, cancelled with the
+ * coroutine. Reading the body afterwards is not covered: a caller reading a long body must
+ * cancel the call itself (see CdnDownloader).
  */
 internal suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
     cont.invokeOnCancellation { cancel() }
@@ -199,7 +198,7 @@ internal suspend fun Call.await(): Response = suspendCancellableCoroutine { cont
             }
 
             override fun onResponse(call: Call, response: Response) {
-                // Coroutine annulée entre-temps : la réponse est fermée.
+                // Coroutine cancelled in the meantime: the response is closed.
                 cont.resume(response) { _, value, _ -> value.close() }
             }
         },

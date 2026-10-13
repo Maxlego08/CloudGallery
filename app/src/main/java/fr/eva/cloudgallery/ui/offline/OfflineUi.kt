@@ -25,9 +25,9 @@ import fr.eva.cloudgallery.ui.components.OneUiDialog
 import fr.eva.cloudgallery.ui.util.downloadErrorMessage
 
 /**
- * Boîtes de dialogue des actions hors ligne : gros lot à confirmer, attente du Wi-Fi
- * (« Télécharger maintenant »), espace insuffisant (écran système « Libérer de l'espace »),
- * dernière copie à libérer (confirmation destructive).
+ * Dialogs for offline actions: large batch to confirm, waiting for Wi-Fi
+ * ("Download now"), insufficient space (system "Free up space" screen),
+ * last copy to release (destructive confirmation).
  */
 @Composable
 fun OfflinePromptDialog(
@@ -77,7 +77,7 @@ fun OfflinePromptDialog(
             dismissLabel = stringResource(R.string.common_cancel),
             onConfirm = {
                 onDismiss()
-                // Ecran système de gestion de l'espace, avec le volume et la taille demandée.
+                // System storage management screen, with the volume and the requested size.
                 val intent = Intent(StorageManager.ACTION_MANAGE_STORAGE).apply {
                     prompt.storageUuid?.let { putExtra(StorageManager.EXTRA_UUID, it) }
                     putExtra(StorageManager.EXTRA_REQUESTED_BYTES, prompt.missingBytes)
@@ -85,7 +85,7 @@ fun OfflinePromptDialog(
                 try {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
-                    // Pas d'écran de gestion sur cet appareil : l'information reste affichée.
+                    // No management screen on this device: the message stays displayed.
                 }
             },
             onDismiss = onDismiss,
@@ -106,9 +106,9 @@ fun OfflinePromptDialog(
 }
 
 /**
- * Autorisation des notifications demandée au premier « Conserver hors ligne » ([alreadyAsked]
- * faux), puis plus jamais ([onAsked] l'enregistre). L'action est exécutée dans tous les cas,
- * accordée ou non : les téléchargements fonctionnent sans notification.
+ * Notification permission requested on the first "Keep offline" ([alreadyAsked]
+ * false), then never again ([onAsked] records it). The action runs in every case,
+ * granted or not: downloads work without notifications.
  */
 @Composable
 fun rememberNotificationPermissionGate(alreadyAsked: Boolean, onAsked: () -> Unit): (action: () -> Unit) -> Unit {
@@ -140,7 +140,7 @@ fun rememberNotificationPermissionGate(alreadyAsked: Boolean, onAsked: () -> Uni
     }
 }
 
-/** Ligne d'état hors ligne d'un élément (visionneuse, Détails), null s'il n'y a rien à dire. */
+/** Offline status line of an item (viewer, Details), null if there is nothing to say. */
 @Composable
 fun offlineStatusText(state: OfflineItemState, deletedOnOneDrive: Boolean, offlineBytes: Long): String? {
     val context = LocalContext.current
@@ -169,7 +169,7 @@ fun offlineStatusText(state: OfflineItemState, deletedOnOneDrive: Boolean, offli
             stringResource(R.string.offline_status_available, Formatter.formatShortFileSize(context, offlineBytes))
         }
         OfflineStatus.UPDATING -> stringResource(R.string.offline_status_updating)
-        // Copie servie, mais la nouvelle version n'arrive pas : cause affichée (reprise possible).
+        // Copy served, but the new version is not arriving: cause shown (can be resumed).
         OfflineStatus.UPDATE_STOPPED -> if (state.error == null) {
             stringResource(R.string.offline_status_update_paused)
         } else {

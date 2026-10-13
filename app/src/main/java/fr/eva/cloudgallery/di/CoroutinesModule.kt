@@ -19,7 +19,7 @@ annotation class IoDispatcher
 @Retention(AnnotationRetention.BINARY)
 annotation class DefaultDispatcher
 
-/** Portée applicative pour le travail qui doit survivre aux écrans (indexation, observateurs). */
+/** Application-wide scope for work that must outlive screens (indexing, observers). */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ApplicationScope

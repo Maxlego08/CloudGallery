@@ -27,10 +27,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Etat du réseau par défaut ([NetworkState]), observé par un seul rappel pour toute l'appli
- * (le système limite le nombre de rappels réseau par appli). Le rappel n'est enregistré que
- * tant que [state] a des abonnés (puis 5 s de délai) ; chaque changement de capacités, de
- * blocage ou de l'économiseur de données relit l'état sur le dispatcher d'E/S.
+ * State of the default network ([NetworkState]), observed through a single callback for the
+ * whole app (the system limits the number of network callbacks per app). The callback is only
+ * registered while [state] has subscribers (plus a 5 s delay); every change of capabilities,
+ * blocked status or Data Saver re-reads the state on the I/O dispatcher.
  */
 @Singleton
 class NetworkStatus @Inject constructor(
@@ -43,13 +43,13 @@ class NetworkStatus @Inject constructor(
         context.getSystemService(ConnectivityManager::class.java)
     }
 
-    /** Capacités du réseau par défaut (null : aucun réseau par défaut). */
+    /** Capabilities of the default network (null: no default network). */
     private class Snapshot(val capabilities: NetworkCapabilities?)
 
     val state: StateFlow<NetworkState> = callbackFlow {
         val cm = connectivity
-        // Etat initial : le rappel ne se manifeste pas s'il n'y a aucun réseau par défaut.
-        // Rappels réseau et récepteur s'exécutent sur des threads différents.
+        // Initial state: the callback does not fire if there is no default network.
+        // Network callbacks and the receiver run on different threads.
         val latest = AtomicReference(cm.activeNetwork?.let(cm::getNetworkCapabilities))
         trySend(Snapshot(latest.get()))
         val callback = object : ConnectivityManager.NetworkCallback() {
@@ -59,7 +59,7 @@ class NetworkStatus @Inject constructor(
             }
 
             override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
-                // Peut accompagner un changement de l'économiseur de données : nouvelle lecture.
+                // May accompany a Data Saver change: read again.
                 trySend(Snapshot(latest.get()))
             }
 
@@ -68,8 +68,8 @@ class NetworkStatus @Inject constructor(
                 trySend(Snapshot(null))
             }
         }
-        // Economiseur de données activé/désactivé : diffusion système, reçue uniquement par un
-        // récepteur enregistré dynamiquement.
+        // Data Saver turned on/off: system broadcast, only received by a dynamically
+        // registered receiver.
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 trySend(Snapshot(latest.get()))
@@ -92,15 +92,15 @@ class NetworkStatus @Inject constructor(
         .flowOn(io)
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), NetworkState.UNKNOWN)
 
-    /** Etat courant, lu directement (sans attendre d'abonné). */
+    /** Current state, read directly (without waiting for a subscriber). */
     suspend fun current(): NetworkState = withContext(io) {
         val cm = connectivity
         stateOf(cm.activeNetwork?.let(cm::getNetworkCapabilities))
     }
 
     /**
-     * Le réseau [network] (celui qu'a choisi JobScheduler pour un travail) n'est pas facturé
-     * (NET_CAPABILITY_NOT_METERED). Faux s'il a disparu.
+     * The [network] (the one JobScheduler picked for a job) is not metered
+     * (NET_CAPABILITY_NOT_METERED). False if it has gone away.
      */
     suspend fun isUnmetered(network: Network): Boolean = withContext(io) {
         connectivity.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true

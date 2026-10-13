@@ -66,9 +66,9 @@ class CloudDownloadUrlProviderTest {
         accessAllowed = false
         try {
             urls.get("A")
-            fail("accès refusé attendu")
+            fail("access denied expected")
         } catch (_: CloudAuthRequiredException) {
-            // attendu
+            // expected
         }
         assertEquals(1, fetched.size)
     }
@@ -103,7 +103,7 @@ class CloudDownloadUrlProviderTest {
         gate.complete(Unit)
         val result = pending.await()
         assertTrue(result.exceptionOrNull() is CloudAuthRequiredException)
-        // Rien n'a été mis en cache : nouvelle requête au prochain appel.
+        // Nothing was cached: new request on the next call.
         urls.get("A")
         assertEquals(2, calls)
     }
@@ -112,7 +112,7 @@ class CloudDownloadUrlProviderTest {
     fun cache_isBounded_leastRecentlyUsedEvicted() = runTest {
         val urls = provider(dispatcher = StandardTestDispatcher(testScheduler))
         repeat(32) { urls.get("I$it") }
-        urls.get("I0") // I0 redevient le plus récent : I1 est le plus ancien.
+        urls.get("I0") // I0 becomes the most recent again: I1 is the oldest.
         urls.get("NEW")
         assertEquals(33, fetched.size)
         urls.get("I0")

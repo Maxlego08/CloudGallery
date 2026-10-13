@@ -34,7 +34,7 @@ import fr.eva.cloudgallery.ui.grid.GridExtraAction
 import fr.eva.cloudgallery.ui.grid.MediaGridPage
 import fr.eva.cloudgallery.ui.navigation.encodeContext
 
-/** Grille d'un album, des Favoris ou des Vidéos, avec la même sélection que l'onglet Photos. */
+/** Grid of an album, Favorites or Videos, with the same selection as the Photos tab. */
 @Composable
 fun MediaCollectionScreen(
     context: MediaContext,
@@ -76,7 +76,7 @@ fun MediaCollectionScreen(
         null
     }
 
-    // Album virtuel : « Retirer » remplace « Ajouter à l'album » (qui passe dans « Plus »).
+    // Virtual album: "Remove" replaces "Add to album" (which moves to "More").
     val isVirtualAlbum = album?.type == AlbumType.VIRTUAL
     val removeLabel = stringResource(R.string.collection_remove_from_album)
     val albumOverride = if (isVirtualAlbum) {
@@ -123,10 +123,10 @@ fun MediaCollectionScreen(
 }
 
 /**
- * Ouvre [url] (lien web du dossier OneDrive) dans un navigateur. L'appli OneDrive ne sait pas
- * ouvrir un dossier à partir d'un lien (testé sur l'appli 2026, compte personnel : « Cette page ne
- * peut pas s'ouvrir dans l'application OneDrive ») et intercepte ces liens : le navigateur est
- * visé explicitement (par défaut, sinon Chrome, sinon le premier trouvé).
+ * Opens [url] (web link of the OneDrive folder) in a browser. The OneDrive app cannot open a
+ * folder from a link (tested on the 2026 app, personal account: "This page can't be opened in the
+ * OneDrive app") and intercepts these links: the browser is targeted explicitly (the default one,
+ * otherwise Chrome, otherwise the first one found).
  */
 private fun openOneDriveLink(context: Context, url: String) {
     val view = Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -136,13 +136,13 @@ private fun openOneDriveLink(context: Context, url: String) {
             context.startActivity(intent)
             return
         } catch (_: ActivityNotFoundException) {
-            // Essai suivant.
+            // Try the next one.
         }
     }
     Toast.makeText(context, R.string.albums_open_onedrive_failed, Toast.LENGTH_SHORT).show()
 }
 
-/** Navigateur pour un lien web quelconque : celui par défaut, sinon Chrome, sinon le premier ; jamais OneDrive. */
+/** Browser for any web link: the default one, otherwise Chrome, otherwise the first one; never OneDrive. */
 private fun browserPackage(context: Context): String? {
     val pm = context.packageManager
     val probe = Intent(Intent.ACTION_VIEW, "https://example.com".toUri()).addCategory(Intent.CATEGORY_BROWSABLE)

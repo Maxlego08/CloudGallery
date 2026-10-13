@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Recherche plein texte (préfixe search_). -->
+<!-- Full-text search (prefix search_). -->
 <resources>
-    <string name="search_open">Rechercher</string>
-    <string name="search_hint">Rechercher</string>
-    <string name="search_clear">Effacer</string>
-    <string name="search_for">Rechercher « %1$s »</string>
+    <string name="search_open">Search</string>
+    <string name="search_hint">Search</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_for">Search for “%1$s”</string>
 
     <!-- Suggestions -->
     <string name="search_section_albums">Albums</string>
-    <string name="search_section_recent">Recherches récentes</string>
-    <string name="search_recent_remove">Retirer de l\'historique</string>
-    <string name="search_recent_clear">Effacer l\'historique</string>
-    <string name="search_empty_title">Rechercher dans la galerie</string>
-    <string name="search_empty_message">Par nom de fichier, dossier, album, mois, année, jour de la semaine ou type : « août 2026 », « vacances », « vidéo ».</string>
+    <string name="search_section_recent">Recent searches</string>
+    <string name="search_recent_remove">Remove from history</string>
+    <string name="search_recent_clear">Clear history</string>
+    <string name="search_empty_title">Search your gallery</string>
+    <string name="search_empty_message">By file name, folder, album, month, year, day of the week or type: “august 2026”, “holidays”, “video”.</string>
 
-    <!-- Résultats -->
-    <string name="search_no_results_title">Aucun résultat</string>
-    <string name="search_no_results_message">Aucune photo ni vidéo ne correspond à « %1$s ».</string>
+    <!-- Results -->
+    <string name="search_no_results_title">No results</string>
+    <string name="search_no_results_message">No photo or video matches “%1$s”.</string>
 </resources>

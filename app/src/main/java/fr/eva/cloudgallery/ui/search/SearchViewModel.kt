@@ -27,9 +27,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Saisie de la recherche et suggestions (albums correspondants, recherches récentes). La
- * recherche lancée ([submitted]) affiche les résultats ; la saisie et la recherche lancée
- * survivent à la recréation de l'écran.
+ * Search input and suggestions (matching albums, recent searches). The submitted search
+ * ([submitted]) shows the results; the input and the submitted search survive screen
+ * recreation.
  */
 @OptIn(FlowPreview::class)
 @HiltViewModel
@@ -41,7 +41,7 @@ class SearchViewModel @Inject constructor(
 
     val input: StateFlow<String> = savedState.getStateFlow(KEY_INPUT, "")
 
-    /** Recherche dont les résultats sont affichés, null pendant la saisie. */
+    /** Search whose results are shown, null while typing. */
     val submitted: StateFlow<String?> = savedState.getStateFlow<String?>(KEY_SUBMITTED, null)
 
     val recent: StateFlow<List<String>> = combine(history.recent, input) { list, text -> recentSuggestions(list, text) }
@@ -56,7 +56,7 @@ class SearchViewModel @Inject constructor(
         savedState[KEY_INPUT] = text
     }
 
-    /** Lance la recherche [text] (sans effet sans aucun mot) et l'ajoute à l'historique. */
+    /** Submits the search [text] (no effect without any word) and adds it to the history. */
     fun submit(text: String = input.value) {
         if (!canSubmitSearch(text)) return
         val query = submittedQuery(text)
@@ -65,7 +65,7 @@ class SearchViewModel @Inject constructor(
         guarded { history.add(query) }
     }
 
-    /** Retour à la saisie (toucher du champ pendant l'affichage des résultats). */
+    /** Back to typing (field tapped while results are shown). */
     fun edit() {
         savedState[KEY_SUBMITTED] = null
     }
@@ -81,8 +81,8 @@ class SearchViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // L'historique n'est qu'une commodité : la recherche fonctionne sans lui.
-                Log.w(TAG, "Historique de recherche indisponible", e)
+                // The history is only a convenience: search works without it.
+                Log.w(TAG, "Search history unavailable", e)
             }
         }
     }
@@ -96,8 +96,8 @@ class SearchViewModel @Inject constructor(
 }
 
 /**
- * Résultats d'une recherche ([MediaContext.Search]) dans la grille commune : sélection, partage,
- * favoris, albums… comme les autres grilles. Zoom partagé avec Photos.
+ * Results of a search ([MediaContext.Search]) in the shared grid: selection, sharing,
+ * favorites, albums… like the other grids. Zoom shared with Photos.
  */
 @HiltViewModel(assistedFactory = SearchResultsViewModel.Factory::class)
 class SearchResultsViewModel @AssistedInject constructor(

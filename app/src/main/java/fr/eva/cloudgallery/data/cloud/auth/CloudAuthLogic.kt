@@ -9,36 +9,36 @@ import kotlinx.serialization.json.putJsonObject
 import java.net.URLEncoder
 
 /**
- * Logique pure de l'authentification OneDrive (MSAL), testable sur la JVM.
+ * Pure logic of OneDrive authentication (MSAL), testable on the JVM.
  *
- * Portées Microsoft Graph demandées : lecture seule des fichiers et du profil. Ne jamais y
- * ajouter `openid`, `profile` ni `offline_access` : MSAL les ajoute lui-même à chaque requête.
+ * Requested Microsoft Graph scopes: read-only access to files and profile. Never add `openid`,
+ * `profile` or `offline_access` here: MSAL adds them itself to every request.
  */
 internal val GRAPH_SCOPES: List<String> = listOf("Files.Read", "User.Read")
 
-/** Marge avant expiration en deçà de laquelle un jeton en mémoire est renouvelé. */
+/** Margin before expiry below which an in-memory token is renewed. */
 internal const val TOKEN_EXPIRY_SKEW_MS = 5 * 60_000L
 
 private val CLIENT_ID_REGEX = Regex("^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 
-/** Empreinte SHA-1 du certificat de signature, en Base64 (28 caractères). */
+/** SHA-1 hash of the signing certificate, in Base64 (28 characters). */
 private val SIGNATURE_HASH_REGEX = Regex("^[A-Za-z0-9+/]{27}=$")
 
-/** Identifiant d'application Entra (GUID). */
+/** Entra application id (GUID). */
 internal fun isValidClientId(value: String): Boolean = CLIENT_ID_REGEX.matches(value)
 
 internal fun isValidSignatureHash(value: String): Boolean = SIGNATURE_HASH_REGEX.matches(value)
 
 /**
- * URI de redirection MSAL telle qu'enregistrée dans Entra : l'empreinte y est encodée en URL
- * (`+` -> `%2B`, `/` -> `%2F`, `=` -> `%3D`). Le manifeste, lui, utilise l'empreinte brute.
+ * MSAL redirect URI as registered in Entra: the hash is URL-encoded in it
+ * (`+` -> `%2B`, `/` -> `%2F`, `=` -> `%3D`). The manifest, on the other hand, uses the raw hash.
  */
 internal fun msalRedirectUri(packageName: String, signatureHash: String): String =
     "msauth://$packageName/${URLEncoder.encode(signatureHash, Charsets.UTF_8)}"
 
 /**
- * Configuration MSAL : compte unique, comptes Microsoft personnels uniquement (audience
- * `PersonalMicrosoftAccount`, locataire `consumers`), navigateur par défaut, sans broker.
+ * MSAL configuration: single account, personal Microsoft accounts only (audience
+ * `PersonalMicrosoftAccount`, tenant `consumers`), default browser, no broker.
  */
 internal fun buildMsalConfigJson(clientId: String, redirectUri: String): String =
     buildJsonObject {
@@ -59,25 +59,25 @@ internal fun buildMsalConfigJson(clientId: String, redirectUri: String): String 
         }
     }.toString()
 
-/** Vrai si un jeton expirant à [expiresAtMs] reste utilisable à [nowMs] avec la marge [skewMs]. */
+/** True if a token expiring at [expiresAtMs] is still usable at [nowMs] with the margin [skewMs]. */
 internal fun isTokenFresh(expiresAtMs: Long, nowMs: Long, skewMs: Long = TOKEN_EXPIRY_SKEW_MS): Boolean =
     expiresAtMs - skewMs > nowMs
 
-/** Famille d'exception MSAL (le type Java, réduit à ce qui compte pour la décision). */
+/** MSAL exception family (the Java type, reduced to what matters for the decision). */
 internal enum class MsalExceptionKind { USER_CANCEL, UI_REQUIRED, DECLINED_SCOPE, CLIENT, SERVICE, OTHER }
 
-/** Conduite à tenir après un échec MSAL. */
+/** What to do after an MSAL failure. */
 internal enum class MsalFailure {
-    /** L'utilisateur a fermé la page de connexion. */
+    /** The user closed the sign-in page. */
     CANCELLED,
 
-    /** Transitoire (réseau, E/S, commande en double, service momentanément indisponible) : la session reste valide. */
+    /** Transient (network, I/O, duplicate command, service temporarily unavailable): the session stays valid. */
     TRANSIENT,
 
-    /** Interaction nécessaire : la session reste connue, état « reconnexion requise ». */
+    /** Interaction needed: the session stays known, "sign-in required again" state. */
     UI_REQUIRED,
 
-    /** Plus de compte courant côté MSAL : relire l'état (déconnecté). */
+    /** No current account left on the MSAL side: re-read the state (signed out). */
     NO_ACCOUNT,
 
     DECLINED,
@@ -88,8 +88,8 @@ internal enum class MsalFailure {
 }
 
 /**
- * Classe un échec MSAL d'après son type et son code d'erreur. Hors ligne avec un jeton expiré,
- * MSAL renvoie `device_network_not_available` ou `io_error` : surtout pas une reconnexion.
+ * Classifies an MSAL failure from its type and error code. Offline with an expired token, MSAL
+ * returns `device_network_not_available` or `io_error`: definitely not a re-authentication.
  */
 internal fun classifyMsalError(kind: MsalExceptionKind, errorCode: String?): MsalFailure = when (kind) {
     MsalExceptionKind.USER_CANCEL -> MsalFailure.CANCELLED
@@ -113,7 +113,7 @@ internal fun classifyMsalError(kind: MsalExceptionKind, errorCode: String?): Msa
     MsalExceptionKind.OTHER -> MsalFailure.UNKNOWN
 }
 
-/** Code d'erreur présenté à l'UI ; null pour une annulation (aucun message). */
+/** Error code shown to the UI; null for a cancellation (no message). */
 internal fun MsalFailure.toErrorCode(): CloudErrorCode? = when (this) {
     MsalFailure.CANCELLED -> null
     MsalFailure.TRANSIENT -> CloudErrorCode.NETWORK

@@ -50,13 +50,13 @@ import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Insets à respecter par les barres du haut : barre d'état + encoches latérales. */
+/** Insets the top bars must respect: status bar + side cutouts. */
 private val TopBarInsets: WindowInsets
     @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
 
 /**
- * Barre d'application One UI réduite. Applique elle-même le padding de la barre d'état ;
- * [titleAlpha] permet de faire apparaître le titre quand le grand titre sort de l'écran.
+ * Collapsed One UI app bar. Applies the status bar padding itself;
+ * [titleAlpha] lets the title fade in when the large title scrolls off screen.
  */
 @Composable
 fun OneUiTopBar(
@@ -98,7 +98,7 @@ fun OneUiTopBar(
 }
 
 /**
- * Hauteur du grand titre étendu One UI (≈ 30 % de la hauteur d'écran, bornée par les jetons).
+ * Height of the expanded One UI large title (≈ 30 % of the screen height, clamped by the tokens).
  */
 @Composable
 fun rememberLargeTitleHeight(): Dp {
@@ -110,9 +110,9 @@ fun rememberLargeTitleHeight(): Dp {
 }
 
 /**
- * Bloc de grand titre One UI, à placer comme premier élément pleine largeur d'une liste/grille,
- * sous un [OneUiTopBar] dont le titre réapparaît (titleAlpha) quand ce bloc défile hors champ
- * (voir [rememberCollapsedTitleAlpha]). N'inclut pas l'inset de la barre d'état.
+ * One UI large title block, to be placed as the first full-width item of a list/grid,
+ * below a [OneUiTopBar] whose title reappears (titleAlpha) when this block scrolls out of view
+ * (see [rememberCollapsedTitleAlpha]). Does not include the status bar inset.
  */
 @Composable
 fun OneUiLargeTitleHeader(
@@ -150,7 +150,7 @@ fun OneUiLargeTitleHeader(
     }
 }
 
-/** Opacité du petit titre de barre en fonction du défilement d'une liste dont l'élément 0 est le grand titre. */
+/** Opacity of the small bar title based on the scroll of a list whose item 0 is the large title. */
 @Composable
 fun rememberCollapsedTitleAlpha(state: LazyListState): State<Float> {
     val headerPx = with(LocalDensity.current) { rememberLargeTitleHeight().toPx() }
@@ -159,7 +159,7 @@ fun rememberCollapsedTitleAlpha(state: LazyListState): State<Float> {
     }
 }
 
-/** Variante pour une grille dont l'élément 0 (pleine largeur) est le grand titre. */
+/** Variant for a grid whose item 0 (full width) is the large title. */
 @Composable
 fun rememberCollapsedTitleAlpha(state: LazyGridState): State<Float> {
     val headerPx = with(LocalDensity.current) { rememberLargeTitleHeight().toPx() }
@@ -168,7 +168,7 @@ fun rememberCollapsedTitleAlpha(state: LazyGridState): State<Float> {
     }
 }
 
-/** Le petit titre apparaît sur les derniers 35 % du défilement du grand titre. */
+/** The small title appears over the last 35 % of the large title's scroll. */
 fun collapsedTitleAlpha(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int, headerHeightPx: Float): Float {
     if (firstVisibleItemIndex > 0) return 1f
     if (headerHeightPx <= 0f) return 1f
@@ -177,7 +177,7 @@ fun collapsedTitleAlpha(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset
     return ((firstVisibleItemScrollOffset - start) / (end - start)).coerceIn(0f, 1f)
 }
 
-/** Bouton icône One UI : zone tactile 48 dp, ondulation circulaire. */
+/** One UI icon button: 48 dp touch target, circular ripple. */
 @Composable
 fun OneUiIconButton(
     icon: ImageVector,
@@ -217,8 +217,8 @@ fun OneUiBackButton(
 }
 
 /**
- * En-tête du mode sélection One UI : case ronde « Tout » à gauche, puis « N sélectionné(s) »
- * (ou « Sélectionner des éléments » quand rien n'est coché). Gère l'inset de la barre d'état.
+ * One UI selection mode header: round "All" checkbox on the left, then "N selected"
+ * (or "Select items" when nothing is checked). Handles the status bar inset.
  */
 @Composable
 fun OneUiSelectionTopBar(
@@ -272,7 +272,7 @@ fun OneUiSelectionTopBar(
     }
 }
 
-/** Formes réutilisées par les composants One UI. */
+/** Shapes shared by the One UI components. */
 internal object ComponentShapes {
     val small = RoundedCornerShape(12.dp)
     val medium = RoundedCornerShape(18.dp)

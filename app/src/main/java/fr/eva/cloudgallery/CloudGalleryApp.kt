@@ -28,33 +28,33 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
     lateinit var syncCoordinator: MediaSyncCoordinator
 
     /**
-     * Miniatures OneDrive pour Coil. Fabrique légère : le client Graph, OkHttp et MSAL ne sont
-     * créés qu'au premier téléchargement, sur le dispatcher d'E/S (dagger.Lazy).
+     * OneDrive thumbnails for Coil. Lightweight factory: the Graph client, OkHttp and MSAL are
+     * only created on the first download, on the I/O dispatcher (dagger.Lazy).
      */
     @Inject
     lateinit var cloudThumbnails: CloudThumbnailFetcher.Factory
 
-    /** Miniatures tirées des copies hors ligne (fichiers de l'appli, lus sur le dispatcher d'E/S). */
+    /** Thumbnails taken from offline copies (app files, read on the I/O dispatcher). */
     @Inject
     lateinit var offlineThumbnails: OfflineThumbnailFetcher.Factory
 
-    /** Plafond du cache disque Coil (réglage), lu dès le démarrage. */
+    /** Coil disk cache limit (setting), read at startup. */
     @Inject
     lateinit var thumbnailCacheLimit: ThumbnailCacheLimit
 
-    /** Workers WorkManager créés par Hilt (initialiseur par défaut retiré du manifeste). */
+    /** WorkManager workers created by Hilt (default initializer removed from the manifest). */
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
-    /** Synchro OneDrive périodique tenue à jour d'après le réglage et le compte. */
+    /** Periodic OneDrive sync kept up to date based on the setting and the account. */
     @Inject
     lateinit var backgroundSync: BackgroundSyncScheduler
 
-    /** Index de recherche tenu à jour d'après la base (toutes les écritures, quelle qu'en soit l'origine). */
+    /** Search index kept up to date from the database (all writes, whatever their origin). */
     @Inject
     lateinit var searchIndexer: SearchIndexer
 
-    /** Mise en cache de tout OneDrive tenue à jour (ou nettoyée) après chaque synchronisation. */
+    /** Caching of all of OneDrive kept up to date (or cleaned up) after each sync. */
     @Inject
     lateinit var precacheScheduler: OneDrivePrecacheScheduler
 
@@ -63,14 +63,14 @@ class CloudGalleryApp : Application(), SingletonImageLoader.Factory, Configurati
 
     override fun onCreate() {
         super.onCreate()
-        // Journal Media3 sans URL (une URL de téléchargement OneDrive vaut un jeton), quel que
-        // soit le build : aucune entrée de logcat ne doit la contenir.
+        // Media3 logging without URLs (a OneDrive download URL is as good as a token), whatever
+        // the build: no logcat entry may contain one.
         RedactingMedia3Logger.install()
         thumbnailCacheLimit.preload()
         backgroundSync.start()
         searchIndexer.start()
         precacheScheduler.start()
-        // Synchro incrémentale MediaStore -> Room à chaque retour de l'appli au premier plan.
+        // Incremental MediaStore -> Room sync each time the app returns to the foreground.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 syncCoordinator.onForeground()

@@ -60,7 +60,7 @@ import fr.eva.cloudgallery.ui.components.OneUiTopBar
 import fr.eva.cloudgallery.ui.components.rememberCollapsedTitleAlpha
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Ecran Paramètres One UI : grand titre puis cartes groupées sur fond gris clair. */
+/** One UI Settings screen: large title, then grouped cards on a light gray background. */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -193,7 +193,7 @@ private fun SettingsContent(
 ) {
     val indent = OneUiTheme.dimens.cardPadding
     Column(Modifier.fillMaxWidth()) {
-        // Compte OneDrive : absent des builds sans configuration MSAL (cloudState null).
+        // OneDrive account: absent from builds without an MSAL configuration (cloudState null).
         if (cloudState != null) {
             OneUiCategoryHeader(stringResource(R.string.settings_section_account))
             OneUiCard {
@@ -202,7 +202,7 @@ private fun SettingsContent(
                     subtitle = cloudAccountSummary(cloudState),
                     onClick = onOpenAccount,
                 )
-                // Etat de la synchronisation (information) : compte connecté ou session à renouveler.
+                // Sync status (informational): account signed in or session to renew.
                 if (cloudState is CloudAccountState.SignedIn || cloudState is CloudAccountState.NeedsReauth) {
                     OneUiDivider(startIndent = indent)
                     OneUiListItem(
@@ -249,7 +249,7 @@ private fun SettingsContent(
                 )
             }
 
-            // Stockage : caches et copies OneDrive (rien à y voir sans OneDrive).
+            // Storage: caches and OneDrive copies (nothing to see there without OneDrive).
             OneUiCategoryHeader(stringResource(R.string.storage_title))
             OneUiCard {
                 OneUiListItem(
@@ -343,7 +343,7 @@ private fun syncIntervalLabel(interval: BackgroundSyncInterval): String = when (
     BackgroundSyncInterval.DAILY -> stringResource(R.string.settings_background_sync_daily)
 }
 
-/** Fréquence de la synchro en arrière-plan : un toucher sur une option l'applique et ferme la boîte. */
+/** Background sync frequency: tapping an option applies it and closes the dialog. */
 @Composable
 private fun SyncIntervalDialog(
     selected: BackgroundSyncInterval,
@@ -360,7 +360,7 @@ private fun SyncIntervalDialog(
     )
 }
 
-/** Choix du thème : un toucher sur une option l'applique et ferme la boîte. */
+/** Theme choice: tapping an option applies it and closes the dialog. */
 @Composable
 private fun ThemeDialog(
     selected: ThemeMode,
@@ -377,7 +377,7 @@ private fun ThemeDialog(
     )
 }
 
-/** Liste d'options à boutons radio dans une boîte One UI (« Annuler » seul bouton). */
+/** List of radio-button options in a One UI dialog ("Cancel" as the only button). */
 @Composable
 private fun <T> ChoiceDialog(
     title: String,

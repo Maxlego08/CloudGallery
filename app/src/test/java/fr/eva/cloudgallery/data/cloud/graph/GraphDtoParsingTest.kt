@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Echantillons inspirés de la documentation Microsoft Graph (driveItem: delta, driveItem, drive). */
+/** Samples based on the Microsoft Graph documentation (driveItem: delta, driveItem, drive). */
 class GraphDtoParsingTest {
 
     private fun page(json: String): DeltaPage = GraphJson.decodeFromString(DeltaPage.serializer(), json)

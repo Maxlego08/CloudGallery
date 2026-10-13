@@ -31,9 +31,9 @@ import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.ui.theme.ViewerColors
 
 /**
- * Surface vidéo letterboxée : [ContentFrame] (media3-ui-compose) combine PlayerSurface,
- * le redimensionnement selon le ratio (ContentScale.Fit) et un obturateur noir tant que la
- * première image n'est pas rendue.
+ * Letterboxed video surface: [ContentFrame] (media3-ui-compose) combines PlayerSurface,
+ * aspect-ratio-based resizing (ContentScale.Fit) and a black shutter until the first frame
+ * has been rendered.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -50,8 +50,8 @@ internal fun VideoSurface(player: Player, modifier: Modifier = Modifier) {
 }
 
 /**
- * Grand bouton lecture/pause central. L'état vient de `rememberPlayPauseButtonState`, qui gère
- * aussi la relecture depuis le début quand la vidéo est terminée.
+ * Large central play/pause button. Its state comes from `rememberPlayPauseButtonState`, which
+ * also handles replaying from the start once the video has ended.
  */
 @OptIn(UnstableApi::class)
 @Composable

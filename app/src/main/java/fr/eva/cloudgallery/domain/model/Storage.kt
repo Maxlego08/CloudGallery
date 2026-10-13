@@ -1,29 +1,29 @@
 package fr.eva.cloudgallery.domain.model
 
 /**
- * Espace occupé par l'appli sur l'appareil, par niveau (page Stockage). Tailles mesurées sur le
- * disque (fichiers partiels et fichiers en attente de nettoyage compris), en octets.
+ * Space used by the app on the device, per tier (Storage page). Sizes measured on disk
+ * (including partial files and files awaiting cleanup), in bytes.
  */
 data class StorageUsage(
-    /** Cache disque Coil : miniatures et aperçus OneDrive. */
+    /** Coil disk cache: OneDrive thumbnails and previews. */
     val thumbnailBytes: Long,
-    /** Plafond du cache des miniatures en vigueur (ouvert au démarrage), null s'il est inconnu. */
+    /** Thumbnail cache cap in effect (opened at startup), null if unknown. */
     val thumbnailMaxBytes: Long?,
     /**
-     * Mise en cache de tout OneDrive : vignettes et aperçus gardés hors du plafond ci-dessus
-     * ([precacheFiles] fichiers).
+     * Caching of all of OneDrive: thumbnails and previews kept outside the cap above
+     * ([precacheFiles] files).
      */
     val precacheBytes: Long,
     val precacheFiles: Int,
-    /** Originaux OneDrive temporaires (zoom profond, partage). */
+    /** Temporary OneDrive originals (deep zoom, share). */
     val originalBytes: Long,
     val originalCount: Int,
-    /** Copies hors ligne (épinglées : jamais vidées avec le cache). */
+    /** Offline copies (pinned: never cleared with the cache). */
     val offlineBytes: Long,
     val offlineCount: Int,
-    /** Espace encore libre sur le volume de l'appli. */
+    /** Space still free on the app's volume. */
     val freeBytes: Long,
 ) {
-    /** Cache vidable (miniatures, aperçus, mise en cache de tout OneDrive et originaux). */
+    /** Clearable cache (thumbnails, previews, caching of all of OneDrive and originals). */
     val cacheBytes: Long get() = thumbnailBytes + precacheBytes + originalBytes
 }

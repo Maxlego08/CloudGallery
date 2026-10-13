@@ -56,8 +56,8 @@ class AlbumRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Album virtuel : change son nom. Album-dossier : définit un nom personnalisé (le dossier
-     * n'est pas renommé sur le disque) ; un nom vide rétablit le nom du dossier.
+     * Virtual album: changes its name. Folder album: sets a custom name (the folder is not
+     * renamed on disk); an empty name restores the folder name.
      */
     override suspend fun renameAlbum(albumId: Long, name: String): Unit = withContext(io) {
         val album = albumDao.getById(albumId) ?: return@withContext
@@ -72,11 +72,11 @@ class AlbumRepositoryImpl @Inject constructor(
 
     override suspend fun deleteVirtualAlbum(albumId: Long): Unit = withContext(io) { albumDao.deleteVirtual(albumId) }
 
-    /** N'ajoute que des références, et uniquement dans un album virtuel. */
+    /** Only adds references, and only to a virtual album. */
     override suspend fun addToAlbum(albumId: Long, mediaIds: Collection<Long>): Unit = withContext(io) {
         val album = albumDao.getById(albumId) ?: return@withContext
         if (album.type != AlbumType.VIRTUAL) {
-            Log.w(TAG, "addToAlbum ignoré : l'album $albumId n'est pas virtuel")
+            Log.w(TAG, "addToAlbum ignored: album $albumId is not virtual")
             return@withContext
         }
         val now = System.currentTimeMillis()

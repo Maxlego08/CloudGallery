@@ -6,7 +6,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/** Mesure de l'espace occupé par un dossier de l'appli. */
+/** Measuring the space used by an app folder. */
 class StorageLogicTest {
 
     @get:Rule
@@ -26,7 +26,7 @@ class StorageLogicTest {
     fun directoryBytes_isZeroForMissingOrEmptyDirectories() {
         assertEquals(0L, directoryBytes(File(tmp.root, "absent")))
         assertEquals(0L, directoryBytes(tmp.newFolder("empty")))
-        // Un fichier n'est pas un dossier de cache.
+        // A file is not a cache folder.
         assertEquals(0L, directoryBytes(tmp.newFile("file.bin").apply { writeBytes(ByteArray(5)) }))
     }
 }

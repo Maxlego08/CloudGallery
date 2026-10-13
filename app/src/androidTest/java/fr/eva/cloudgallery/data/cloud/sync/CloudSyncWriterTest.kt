@@ -57,7 +57,7 @@ class CloudSyncWriterTest {
         db.close()
     }
 
-    // --- Eléments delta ------------------------------------------------------------------
+    // --- Delta items ---------------------------------------------------------------------
 
     private fun root() = DriveItemDto(id = "ROOT", name = "root", root = JsonObject(emptyMap()), folder = FolderFacetDto())
 
@@ -90,7 +90,7 @@ class CloudSyncWriterTest {
 
     private fun deleted(id: String) = DriveItemDto(id = id, deleted = DeletedFacetDto())
 
-    /** Passage complet : pages appliquées puis fin de synchro. */
+    /** Full run: pages applied, then end of sync. */
     private suspend fun sync(full: Boolean, vararg pages: List<DriveItemDto>, now: Long = t0): CloudSyncRun {
         val run = CloudSyncRun(full)
         for (page in pages) writer.applyPage(page, run, now)
@@ -103,7 +103,7 @@ class CloudSyncWriterTest {
 
     private suspend fun timeline(includeCloudOnly: Boolean) = db.mediaDao().observeTimelineIds(includeCloudOnly).first()
 
-    /** Média local existant : jamais modifié par la synchronisation OneDrive. */
+    /** Existing local media: never modified by the OneDrive sync. */
     private suspend fun seedLocal(): Long {
         val id = db.mediaDao().insert(
             MediaEntity(
@@ -149,7 +149,7 @@ class CloudSyncWriterTest {
         assertEquals(MediaType.VIDEO, v.mediaType)
         assertEquals(5_000L, v.durationMs)
 
-        // Réglage « Afficher les éléments OneDrive dans Photos » : désactivé, seul le local apparaît.
+        // "Show OneDrive items in Photos" setting: off, only the local media appears.
         assertEquals(listOf(local), timeline(includeCloudOnly = false))
         assertEquals(setOf(local, a.id, v.id), timeline(includeCloudOnly = true).toSet())
         assertEquals(0, db.mediaDao().observeVideoCount(includeCloudOnly = false).first())
@@ -194,7 +194,7 @@ class CloudSyncWriterTest {
         assertFalse(hidden.hasCloud)
         assertNull(hidden.cloudItemId)
         assertFalse(id in timeline(includeCloudOnly = true))
-        // Masqué, pas supprimé : le favori est conservé pendant le délai de grâce.
+        // Hidden, not deleted: the favorite is kept during the grace period.
         assertTrue(db.favoriteDao().isFavorite(id))
         assertNotNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A"))
 
@@ -223,10 +223,10 @@ class CloudSyncWriterTest {
             full = true,
             listOf(root(), folder("PH", "Photos"), folder("Y24", "2024", parent = "PH"), image("A", "PH"), image("B", "Y24"), image("C", "ROOT")),
         )
-        // Elément supprimé sans facette folder : reconnu comme dossier grâce à l'index.
+        // Deleted item without a folder facet: recognized as a folder thanks to the index.
         val run = CloudSyncRun(full = false)
         writer.applyPage(listOf(deleted("PH")), run, t0)
-        // Avant la fin du passage, rien n'est encore masqué.
+        // Before the end of the run, nothing is hidden yet.
         assertTrue(mediaOf("A")!!.hasCloud)
         assertEquals(setOf("PH"), run.removedFolders)
         writer.finishSync(run, t0, labels)
@@ -235,7 +235,7 @@ class CloudSyncWriterTest {
         assertFalse(mediaOf("B")!!.hasCloud)
         assertTrue(mediaOf("C")!!.hasCloud)
         assertEquals(setOf("ROOT"), liveFolders())
-        // Dossiers supprimés gardés comme marqueurs : leurs éléments masqués peuvent être restaurés.
+        // Deleted folders kept as markers: their hidden items can be restored.
         assertEquals(setOf("PH", "Y24"), markedFolders())
         val albumKeys = db.albumDao().getByType(AlbumType.CLOUD_FOLDER).map { it.sourceKey }.toSet()
         assertEquals(setOf("onedrive:ROOT"), albumKeys)
@@ -261,14 +261,14 @@ class CloudSyncWriterTest {
         writer.applyPage(listOf(folder("PH", "Photos")), run, t0)
         assertTrue(run.restoredFolderWithHiddenItems)
 
-        // L'énumération complète renvoie l'élément : il redevient visible.
+        // The full enumeration returns the item: it becomes visible again.
         run.restartFull()
         writer.applyPage(listOf(root(), folder("PH", "Photos"), image("A", "PH")), run, t0)
         writer.finishSync(run, t0, labels)
         assertTrue(mediaOf("A")!!.hasCloud)
     }
 
-    /** Curseur d'un passage incrémental réussi (deltaLink enregistré). */
+    /** Cursor of a successful incremental run (deltaLink saved). */
     private suspend fun seedCursor(link: String = "https://graph.microsoft.com/v1.0/delta?token=old") {
         db.syncCursorDao().upsert(
             SyncCursorEntity(provider = ONEDRIVE_PROVIDER, cursor = link, version = "D1|$DELTA_SELECT_VERSION", lastSyncAt = t0, lastFullSyncAt = t0),
@@ -281,22 +281,22 @@ class CloudSyncWriterTest {
         sync(full = false, listOf(deleted("PH")))
         seedCursor()
 
-        // Le dossier restauré arrive sur une page qui n'est pas la dernière, puis le passage est
-        // interrompu (réseau, processus tué) avant la fin du flux delta.
+        // The restored folder arrives on a page that is not the last one, then the run is
+        // interrupted (network, process killed) before the end of the delta stream.
         val run = CloudSyncRun(full = false)
         writer.applyPage(listOf(folder("PH", "Photos")), run, t0)
         assertTrue(run.restoredFolderWithHiddenItems)
 
-        // Décision enregistrée avec la page : le deltaLink est effacé, le lecteur reste lié.
+        // Decision saved with the page: the deltaLink is cleared, the drive stays bound.
         val cursor = db.syncCursorDao().get(ONEDRIVE_PROVIDER)!!
         assertNull(cursor.cursor)
         assertEquals("D1|$DELTA_SELECT_VERSION", cursor.version)
-        // Le passage suivant ne peut plus reprendre depuis l'ancien deltaLink.
+        // The next run can no longer resume from the old deltaLink.
         assertEquals(
             SyncStart.Full,
             planSyncStart(cursor.cursor, cursor.version, "D1", DELTA_SELECT_VERSION, writer.hasIndexedData()),
         )
-        // Rejoué en incrémental, le dossier est déjà connu : la détection seule ne suffirait pas.
+        // Replayed incrementally, the folder is already known: detection alone would not be enough.
         val replay = CloudSyncRun(full = false)
         writer.applyPage(listOf(folder("PH", "Photos")), replay, t0)
         assertFalse(replay.restoredFolderWithHiddenItems)
@@ -304,15 +304,15 @@ class CloudSyncWriterTest {
 
     @Test
     fun restoredParentFolder_detectsHiddenItemsInItsSubfolders() = runTest {
-        // P ne contient que le sous-dossier C, qui contient les photos.
+        // P only contains subfolder C, which contains the photos.
         sync(full = true, listOf(root(), folder("P", "Parent"), folder("C", "Enfant", parent = "P"), image("A", "C")))
         sync(full = false, listOf(deleted("P")))
         assertFalse(mediaOf("A")!!.hasCloud)
-        // Les deux dossiers sont marqués : P (sans élément) rattache C, qui a des éléments masqués.
+        // Both folders are marked: P (no items) links C, which has hidden items.
         assertEquals(setOf("P", "C"), markedFolders())
         seedCursor()
 
-        // Seul P est renvoyé par la requête delta.
+        // Only P is returned by the delta request.
         val run = CloudSyncRun(full = false)
         writer.applyPage(listOf(folder("P", "Parent")), run, t0)
         assertTrue(run.restoredFolderWithHiddenItems)
@@ -323,15 +323,15 @@ class CloudSyncWriterTest {
         writer.finishSync(run, t0, labels)
         assertTrue(mediaOf("A")!!.hasCloud)
         assertNotNull(db.albumDao().getBySourceKey("onedrive:C"))
-        // Restaurés : de nouveau présents, plus aucun marqueur.
+        // Restored: present again, no markers left.
         assertTrue(markedFolders().isEmpty())
         assertTrue(liveFolders().containsAll(setOf("P", "C")))
     }
 
-    /** Dossiers présents (non marqués supprimés). */
+    /** Live folders (not marked as deleted). */
     private suspend fun liveFolders() = db.cloudFolderDao().getAll().filter { it.deletedAt == null }.map { it.itemId }.toSet()
 
-    /** Dossiers marqués supprimés. */
+    /** Folders marked as deleted. */
     private suspend fun markedFolders() = db.cloudFolderDao().getAll().filter { it.deletedAt != null }.map { it.itemId }.toSet()
 
     @Test
@@ -342,8 +342,8 @@ class CloudSyncWriterTest {
         assertEquals(setOf("PH"), markedFolders())
         seedCursor()
 
-        // Nouveau dossier (aucun marqueur) : pas d'énumération complète, malgré les éléments
-        // masqués du dossier supprimé (avant la v5, chaque nouveau dossier en déclenchait une).
+        // New folder (no marker): no full enumeration, despite the hidden items
+        // of the deleted folder (before v5, every new folder triggered one).
         val run = CloudSyncRun(full = false)
         writer.applyPage(listOf(folder("NEW", "Nouveau"), image("B", "NEW")), run, t0)
         assertFalse(run.restoredFolderWithHiddenItems)
@@ -351,7 +351,7 @@ class CloudSyncWriterTest {
         writer.finishSync(run, t0, labels)
         assertTrue(mediaOf("B")!!.hasCloud)
         assertFalse(mediaOf("A")!!.hasCloud)
-        // Le marqueur n'est jamais montré : pas d'album pour le dossier supprimé.
+        // The marker is never shown: no album for the deleted folder.
         assertNull(db.albumDao().getBySourceKey("onedrive:PH"))
     }
 
@@ -364,13 +364,13 @@ class CloudSyncWriterTest {
         sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS - 1)
         assertEquals(setOf("PH", "Y24"), markedFolders())
 
-        // Délai de grâce écoulé : éléments purgés, plus rien à restaurer, marqueurs retirés.
+        // Grace period elapsed: items purged, nothing left to restore, markers removed.
         sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS)
         assertNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A"))
         assertTrue(markedFolders().isEmpty())
         assertEquals(setOf("ROOT"), liveFolders())
 
-        // Le dossier revenu ensuite est un dossier ordinaire : pas d'énumération complète.
+        // The folder that comes back afterwards is an ordinary folder: no full enumeration.
         val run = CloudSyncRun(full = false)
         writer.applyPage(listOf(folder("PH", "Photos")), run, t0 + MISSING_GRACE_MS)
         assertFalse(run.restoredFolderWithHiddenItems)
@@ -386,7 +386,7 @@ class CloudSyncWriterTest {
 
     @Test
     fun hiddenItemsWithoutAnyFolderRow_stillRequestFullEnumeration() = runTest {
-        // Données d'avant la v5 : dossier supprimé sans marqueur, éléments masqués orphelins.
+        // Pre-v5 data: deleted folder without a marker, orphaned hidden items.
         sync(full = true, listOf(root(), folder("PH", "Photos"), image("A", "PH")))
         sync(full = false, listOf(deleted("PH")))
         db.cloudFolderDao().deleteByIds(listOf("PH"))
@@ -400,7 +400,7 @@ class CloudSyncWriterTest {
     @Test
     fun newFolder_withoutHiddenItems_keepsIncrementalSync() = runTest {
         sync(full = true, listOf(root(), folder("PH", "Photos"), image("A", "PH")))
-        // Elément supprimé dans un dossier toujours présent : pas une restauration de dossier.
+        // Item deleted in a folder that still exists: not a folder restore.
         sync(full = false, listOf(deleted("A")))
         seedCursor()
         val run = CloudSyncRun(full = false)
@@ -417,8 +417,8 @@ class CloudSyncWriterTest {
         assertTrue(mediaOf("A")!!.hasCloud)
         val b = mediaOf("B")!!
         assertFalse(b.hasCloud)
-        // Dossier non vu : marqué supprimé (son élément masqué peut revenir), son album sans
-        // personnalisation est retiré.
+        // Unseen folder: marked as deleted (its hidden item may come back), its album without
+        // customization is removed.
         assertEquals(setOf("OLD"), markedFolders())
         assertNull(db.albumDao().getBySourceKey("onedrive:OLD"))
         assertLocalUntouched(local)
@@ -442,7 +442,7 @@ class CloudSyncWriterTest {
         sync(full = false, listOf(image("A", "TR")))
         val trAlbum = db.albumDao().getBySourceKey("onedrive:TR")!!
         assertEquals(listOf(mediaOf("A")!!.id), db.mediaDao().observeAlbumIds(trAlbum.id).first())
-        // L'ancien dossier n'a plus d'élément : son album sans personnalisation disparaît.
+        // The old folder has no items left: its uncustomized album disappears.
         assertNull(db.albumDao().getBySourceKey("onedrive:PH"))
     }
 
@@ -451,15 +451,15 @@ class CloudSyncWriterTest {
         val pdf = image("DOC", "ROOT").copy(file = FileFacetDto(mimeType = "application/pdf"), image = null)
         sync(full = true, listOf(root(), pdf))
         assertNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "DOC"))
-        // Seul le dossier racine est indexé : aucune donnée de l'utilisateur à protéger.
+        // Only the root folder is indexed: no user data to protect.
         assertEquals(1, db.cloudFolderDao().getAll().size)
         assertFalse(writer.hasIndexedData())
         assertEquals(0, writer.visibleCount())
     }
 
-    // --- Copies hors ligne ---------------------------------------------------------------
+    // --- Offline copies ------------------------------------------------------------------
 
-    /** Copie hors ligne enregistrée pour l'élément [itemId] (comme le moteur la crée). */
+    /** Offline copy saved for item [itemId] (as the engine creates it). */
     private suspend fun pinOffline(itemId: String, cTag: String = "c1"): Long {
         val mediaId = mediaOf(itemId)!!.id
         db.mediaSourceDao().insert(
@@ -488,19 +488,19 @@ class CloudSyncWriterTest {
         assertTrue(a in timeline(includeCloudOnly = false))
 
         sync(full = false, listOf(deleted("A"), deleted("B")))
-        // Masquée avec son élément OneDrive : plus dans Photos.
+        // Hidden along with its OneDrive item: no longer in Photos.
         assertNotNull(offlineCopyOf("A")!!.missingSince)
         assertFalse(db.mediaDao().getById(a)!!.hasOffline)
         assertFalse(a in timeline(includeCloudOnly = false))
 
-        // Délai de grâce écoulé : sans copie, purgé ; avec copie, gardé (masqué) en attente de décision.
+        // Grace period elapsed: without a copy, purged; with a copy, kept (hidden) awaiting a decision.
         sync(full = false, emptyList(), now = t0 + MISSING_GRACE_MS)
         assertNull(db.mediaDao().getById(b))
         assertNotNull(db.mediaDao().getById(a))
         assertNotNull(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A"))
         assertNotNull(db.cachedFileDao().get(a, CacheKind.OFFLINE))
         assertEquals(listOf(a), db.mediaSourceDao().awaitingDecisionMediaIds(t0 + 1))
-        // Passages suivants : toujours en attente, jamais purgé automatiquement.
+        // Later runs: still awaiting, never purged automatically.
         sync(full = false, emptyList(), now = t0 + 2 * MISSING_GRACE_MS)
         assertNotNull(db.mediaDao().getById(a))
     }
@@ -552,7 +552,7 @@ class CloudSyncWriterTest {
         assertEquals(a, task.mediaId)
         assertEquals("c2", task.cTag)
         assertEquals(DownloadState.QUEUED, task.state)
-        // L'ancienne copie reste servie jusqu'au remplacement.
+        // The old copy keeps being served until it is replaced.
         assertTrue(db.mediaDao().getById(a)!!.hasOffline)
         assertEquals("c1", offlineCopyOf("A")!!.cTag)
         assertNull(db.cachedFileDao().get(a, CacheKind.ORIGINAL))
@@ -571,14 +571,14 @@ class CloudSyncWriterTest {
         sync(full = true, listOf(root(), image("A", "ROOT")))
         val a = pinOffline("A")
         db.favoriteDao().insertAll(listOf(FavoriteEntity(a, 1)))
-        // « Les conserver » : plus de source OneDrive, la copie reste seule et visible.
+        // "Keep them": no OneDrive source anymore, the copy stays alone and visible.
         db.mediaSourceDao().deleteForMedia(SourceKind.ONEDRIVE, listOf(a))
         db.mediaSourceDao().syncOfflineCopyVisibility(listOf(a))
         db.mediaDao().refreshSourceFlags(listOf(a))
         assertTrue(a in timeline(includeCloudOnly = false))
 
         sync(full = false, listOf(image("A", "ROOT", cTag = "c1")))
-        // Même média (favori conservé), aucun doublon.
+        // Same media (favorite kept), no duplicate.
         assertEquals(a, mediaOf("A")!!.id)
         assertTrue(db.favoriteDao().isFavorite(a))
         assertEquals(1, timeline(includeCloudOnly = true).count { it == a })

@@ -19,7 +19,7 @@ class FastScrollLogicTest {
 
     private fun month(y: Int, m: Int): Long = LocalDate.of(y, m, 1).toEpochDay()
 
-    /** Ordre de la grille : du plus récent au plus ancien, dates égales possibles. */
+    /** Grid order: newest to oldest, equal dates possible. */
     private val index = FastScrollIndex(
         longArrayOf(
             ms(2026, 10, 12, 18), // 0
@@ -57,7 +57,7 @@ class FastScrollLogicTest {
 
     @Test
     fun periodStartRank_emptyPeriod_returnsFirstOlderMedia() {
-        // Aucun média en mars 2025 : le premier média plus ancien (janvier 2025).
+        // No media in March 2025: the first older media (January 2025).
         assertEquals(5, index.periodStartRank(month(2025, 3), GridGrouping.MONTH, paris))
     }
 
@@ -101,7 +101,7 @@ class FastScrollLogicTest {
 
     @Test
     fun trackFraction_pointer_centersThumbOnFinger() {
-        // Piste 100..300, poignée 40 : plage utile 160 (centre de 120 à 280).
+        // Track 100..300, thumb 40: usable range 160 (center from 120 to 280).
         assertEquals(0f, trackFraction(50f, 100f, 300f, 40f), 0f)
         assertEquals(0f, trackFraction(120f, 100f, 300f, 40f), 0f)
         assertEquals(0.5f, trackFraction(200f, 100f, 300f, 40f), 1e-6f)

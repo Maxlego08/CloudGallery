@@ -12,23 +12,23 @@ import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Résultat de la mise en cache d'un fichier. */
+/** Result of caching one file. */
 sealed interface PrecacheFileResult {
-    /** Déjà en cache : rien téléchargé. */
+    /** Already cached: nothing downloaded. */
     data object Present : PrecacheFileResult
 
-    /** Téléchargé et enregistré ([bytes] octets). */
+    /** Downloaded and saved ([bytes] bytes). */
     data class Saved(val bytes: Long) : PrecacheFileResult
 
-    /** Graph n'a pas de miniature pour cet élément (404) : pas une panne réseau. */
+    /** Graph has no thumbnail for this item (404): not a network failure. */
     data object NoThumbnail : PrecacheFileResult
 }
 
 /**
- * Téléchargement d'une vignette ou d'un aperçu vers [CloudPrecacheStore], avec les mêmes tailles
- * Microsoft Graph et les mêmes replis que l'affichage ([CloudThumbnailFetcher]) : les réglages
- * appris par l'affichage (taille personnalisée refusée, grand aperçu refusé) sont partagés.
- * À appeler sur le dispatcher d'E/S, compte vérifié par l'appelant ([fr.eva.cloudgallery.data.cloud.CloudAccessGuard]).
+ * Downloads a thumbnail or a preview into [CloudPrecacheStore], with the same Microsoft Graph
+ * sizes and the same fallbacks as the display path ([CloudThumbnailFetcher]): settings learned by
+ * the display path (custom size rejected, large preview rejected) are shared.
+ * To be called on the I/O dispatcher, account checked by the caller ([fr.eva.cloudgallery.data.cloud.CloudAccessGuard]).
  */
 @Singleton
 class CloudPrecacher @Inject constructor(
@@ -37,26 +37,26 @@ class CloudPrecacher @Inject constructor(
     private val thumbs: CloudThumbnailFetcher.Factory,
 ) {
 
-    /** Vignette de grille au palier [bucket] de [ref]. */
+    /** Grid thumbnail of [ref] at the [bucket] tier. */
     suspend fun grid(ref: CloudThumbRef, bucket: Int, token: CloudPrecacheStore.WriteToken): PrecacheFileResult {
         if (gridPresent(ref, bucket)) return PrecacheFileResult.Present
         return download(ref, PrecacheKind.GRID, bucket, token)
     }
 
-    /** Aperçu de [ref] au côté [side] (voir [previewPresent]). */
+    /** Preview of [ref] with side [side] (see [previewPresent]). */
     suspend fun preview(ref: CloudThumbRef, side: Int, token: CloudPrecacheStore.WriteToken): PrecacheFileResult {
         if (previewPresent(ref, side)) return PrecacheFileResult.Present
         return download(ref, PrecacheKind.PREVIEW, thumbs.effectivePreviewSide(side) ?: side, token)
     }
 
-    /** Vignette déjà enregistrée à ce palier ou plus grand (disque). */
+    /** Thumbnail already saved at this tier or larger (disk). */
     fun gridPresent(ref: CloudThumbRef, bucket: Int): Boolean =
         store.find(ref, PrecacheKind.GRID, bucket, allowLower = false) != null
 
     /**
-     * Aperçu déjà enregistré à ce côté ou plus grand (disque). Un aperçu au palier de base
-     * ([CLOUD_PREVIEW_PX]) suffit quand le grand palier a été refusé par Graph lors d'un passage
-     * précédent : il n'est pas redemandé à chaque passage.
+     * Preview already saved at this side or larger (disk). A preview at the base tier
+     * ([CLOUD_PREVIEW_PX]) is enough when the large tier was rejected by Graph during a previous
+     * pass: it is not requested again on every pass.
      */
     fun previewPresent(ref: CloudThumbRef, side: Int): Boolean {
         val wanted = thumbs.effectivePreviewSide(side) ?: side
@@ -76,8 +76,8 @@ class CloudPrecacher @Inject constructor(
                 if (e.status == HTTP_NOT_FOUND) return PrecacheFileResult.NoThumbnail
                 throw e
             }
-            // Grand aperçu refusé : palier de base, enregistré comme tel. Sinon, taille standard
-            // enregistrée au palier demandé (comme le cache de l'affichage).
+            // Large preview rejected: base tier, saved as such. Otherwise, standard size saved at
+            // the requested tier (like the display cache).
             val savedSide = if (previewSide != null && previewSide > CLOUD_PREVIEW_PX) CLOUD_PREVIEW_PX else side
             try {
                 fetch(ref, fallback, kind, savedSide, token).also {

@@ -19,9 +19,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Recherches récentes ([MAX_RECENT_SEARCHES] au plus, la plus récente en tête), gardées sur
- * l'appareil seulement : préférences dédiées `search_history.xml`, exclues des sauvegardes,
- * lues et écrites sur le dispatcher d'E/S.
+ * Recent searches (at most [MAX_RECENT_SEARCHES], most recent first), kept on the device only:
+ * dedicated `search_history.xml` preferences, excluded from backups, read and written on the
+ * I/O dispatcher.
  */
 @Singleton
 class SearchHistoryStore @Inject constructor(
@@ -29,7 +29,7 @@ class SearchHistoryStore @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : SearchHistoryRepository {
 
-    /** Ouvert au premier usage, sur le dispatcher d'E/S. */
+    /** Opened on first use, on the I/O dispatcher. */
     private val prefs: SharedPreferences by lazy { context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE) }
 
     private val mutex = Mutex()
@@ -67,7 +67,7 @@ class SearchHistoryStore @Inject constructor(
         const val FILE_NAME = "search_history"
         const val KEY_RECENT = "recent"
 
-        /** Une recherche ne contient jamais de saut de ligne (espaces normalisés par withRecentSearch). */
+        /** A search never contains a line break (whitespace is normalized by withRecentSearch). */
         const val SEPARATOR = "\n"
     }
 }

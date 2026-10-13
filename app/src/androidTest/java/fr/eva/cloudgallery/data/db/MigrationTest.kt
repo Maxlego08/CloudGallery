@@ -11,7 +11,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Migrations validées contre les schémas exportés (app/schemas, assets androidTest). */
+/** Migrations validated against the exported schemas (app/schemas, androidTest assets). */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
 
@@ -45,7 +45,7 @@ class MigrationTest {
             assertTrue(c.moveToFirst())
             assertEquals(1, c.getInt(0))
         }
-        // Nouvelle table vide, utilisable.
+        // New empty table, usable.
         execSQL("INSERT INTO cloud_folder (itemId, parentId, name, isRoot, updatedAt) VALUES ('ROOT', NULL, 'root', 1, 0)")
         query("SELECT name FROM cloud_folder WHERE itemId = 'ROOT'").use { c ->
             assertTrue(c.moveToFirst())
@@ -93,7 +93,7 @@ class MigrationTest {
                 assertTrue(c.moveToFirst())
                 assertTrue(c.isNull(0))
             }
-            // MIGRATION_1_2 force une relecture complète de MediaStore.
+            // MIGRATION_1_2 forces a full MediaStore rescan.
             db.query("SELECT cursor FROM sync_cursor WHERE provider = 'mediastore'").use { c ->
                 assertTrue(c.moveToFirst())
                 assertNull(c.getString(0))
@@ -101,7 +101,7 @@ class MigrationTest {
         }
     }
 
-    /** Ligne de cache et tâche de téléchargement telles qu'en v3 (avant les colonnes de version). */
+    /** Cache row and download task as in v3 (before the version columns). */
     private fun SupportSQLiteDatabase.insertV3CacheRows() {
         execSQL(
             "INSERT INTO cached_file (id, mediaId, sourceId, kind, path, sizeBytes, createdAt, lastAccessAt, pinned) VALUES " +
@@ -119,7 +119,7 @@ class MigrationTest {
             assertEquals("a_b.jpg", c.getString(0))
             assertEquals(5L, c.getLong(1))
             assertEquals(0, c.getInt(2))
-            // Version inconnue : jamais considérée à jour.
+            // Unknown version: never considered up to date.
             assertTrue(c.isNull(3))
         }
         query("SELECT state, bytesTotal, cloudItemId, cTag, attempts FROM download_task WHERE id = 1").use { c ->
@@ -130,7 +130,7 @@ class MigrationTest {
             assertTrue(c.isNull(3))
             assertEquals(0, c.getInt(4))
         }
-        // Valeur par défaut de la nouvelle colonne pour une insertion qui ne la précise pas.
+        // Default value of the new column for an insert that does not specify it.
         execSQL(
             "INSERT INTO download_task (id, mediaId, sourceId, state, bytesDownloaded, bytesTotal, keepOffline, createdAt, updatedAt) VALUES " +
                 "(2, 1, NULL, 'QUEUED', 0, 5, 1, 1, 1)",
@@ -203,13 +203,13 @@ class MigrationTest {
         }
     }
 
-    /** Dossier OneDrive tel qu'en v4 (avant le marqueur de suppression). */
+    /** OneDrive folder as in v4 (before the deletion marker). */
     private fun SupportSQLiteDatabase.insertV4Folder() {
         execSQL("INSERT INTO cloud_folder (itemId, parentId, name, isRoot, updatedAt) VALUES ('PH', 'ROOT', 'Photos', 0, 7)")
     }
 
     private fun SupportSQLiteDatabase.assertMigratedTo5() {
-        // Dossier existant : présent (aucun marqueur).
+        // Existing folder: live (no marker).
         query("SELECT name, parentId, deletedAt FROM cloud_folder WHERE itemId = 'PH'").use { c ->
             assertTrue(c.moveToFirst())
             assertEquals("Photos", c.getString(0))
@@ -298,7 +298,7 @@ class MigrationTest {
         }
     }
 
-    /** Source locale telle qu'en v5 (avant la signature d'empreinte). */
+    /** Local source as in v5 (before the hash signature). */
     private fun SupportSQLiteDatabase.insertV5LocalSource() {
         execSQL(
             "INSERT INTO media_source (id, mediaId, kind, externalId, uri, bucketKey, bucketName, relativePath, " +
@@ -308,13 +308,13 @@ class MigrationTest {
     }
 
     private fun SupportSQLiteDatabase.assertMigratedTo6() {
-        // Empreinte locale jamais calculée : signature nulle.
+        // Local hash never computed: null signature.
         query("SELECT externalId, hashSignature FROM media_source WHERE id = 1").use { c ->
             assertTrue(c.moveToFirst())
             assertEquals("7", c.getString(0))
             assertTrue(c.isNull(1))
         }
-        // Index de recherche vide, utilisable (accents et casse ignorés par unicode61).
+        // Empty search index, usable (accents and case ignored by unicode61).
         query("SELECT COUNT(*) FROM media_fts").use { c ->
             assertTrue(c.moveToFirst())
             assertEquals(0, c.getInt(0))

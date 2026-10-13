@@ -30,18 +30,18 @@ class SettingsViewModel @Inject constructor(
     private val offline: dagger.Lazy<OfflineRepository>,
 ) : ViewModel() {
 
-    /** null tant que les réglages ne sont pas chargés (évite d'afficher des valeurs par défaut erronées). */
+    /** null until the settings are loaded (avoids showing misleading default values). */
     val settings: StateFlow<AppSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val indexState: StateFlow<IndexState> = indexer.state
 
-    /** Catégorie « Compte » affichée uniquement si ce build embarque une configuration MSAL. */
+    /** "Account" category shown only if this build ships an MSAL configuration. */
     val cloudAvailable: Boolean = cloudAccounts.isAvailable
 
     val cloudState: StateFlow<CloudAccountState> = cloudAccounts.state
 
-    /** Etat de la synchronisation OneDrive (ligne d'état de la catégorie « Compte »). */
+    /** OneDrive sync status (status row of the "Account" category). */
     val cloudSyncState: StateFlow<CloudSyncState> = cloudAccounts.syncState
 
     init {
@@ -59,12 +59,12 @@ class SettingsViewModel @Inject constructor(
     fun setShowCloudInPhotos(enabled: Boolean) = update { settingsRepository.setShowCloudInPhotos(enabled) }
     fun setLoadOriginalsOnMobileData(enabled: Boolean) = update { settingsRepository.setLoadOriginalsOnMobileData(enabled) }
 
-    /** Synchro de fond : le travail périodique suit le réglage (BackgroundSyncScheduler). */
+    /** Background sync: the periodic work follows the setting (BackgroundSyncScheduler). */
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) = update { settingsRepository.setBackgroundSyncInterval(interval) }
     fun setBackgroundSyncWifiOnly(enabled: Boolean) = update { settingsRepository.setBackgroundSyncWifiOnly(enabled) }
     /**
-     * « Wi-Fi uniquement » : le travail de téléchargement en cours ou planifié est aussitôt adapté
-     * (appli visible : replanification acceptée par le système).
+     * "Wi-Fi only": the running or scheduled download work is adjusted right away
+     * (app visible: rescheduling accepted by the system).
      */
     fun setOfflineWifiOnly(enabled: Boolean) = update {
         settingsRepository.setOfflineWifiOnly(enabled)
@@ -73,11 +73,11 @@ class SettingsViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            // Repris au prochain retour au premier plan ou à la prochaine action hors ligne.
+            // Resumed on the next return to the foreground or the next offline action.
         }
     }
 
-    /** Relecture complète de MediaStore (portée applicative). */
+    /** Full MediaStore reload (application scope). */
     fun reindexAll() = syncCoordinator.syncNow(full = true)
 
     private fun update(block: suspend () -> Unit) {

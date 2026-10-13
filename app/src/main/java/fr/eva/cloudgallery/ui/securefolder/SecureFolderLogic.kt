@@ -1,40 +1,40 @@
 package fr.eva.cloudgallery.ui.securefolder
 
 /*
- * Logique pure de « Déplacer vers le Dossier sécurisé » (testée en JVM). Le Dossier sécurisé
- * Samsung n'a pas d'API publique : les fichiers du téléphone sont envoyés par la feuille de
- * partage Android à une appli du Dossier sécurisé, puis, seulement si l'utilisateur confirme que
- * l'ajout a réussi, les originaux vont à la corbeille Android (confirmée par le système). Un
- * élément uniquement sur OneDrive n'est jamais concerné (OneDrive en lecture seule).
+ * Pure logic of "Move to Secure Folder" (tested on the JVM). Samsung Secure Folder
+ * has no public API: phone files are sent through the Android share sheet to an app
+ * inside Secure Folder, then, only if the user confirms that the addition succeeded, the
+ * originals go to the Android trash (confirmed by the system). An item only on OneDrive
+ * is never involved (OneDrive is read-only).
  */
 
 /**
- * Éléments envoyés en une fois : un seul partage, puis une vérification par l'utilisateur dans le
- * Dossier sécurisé avant la corbeille. Au-delà, la vérification devient peu réaliste.
+ * Items sent at once: a single share, then a check by the user in Secure Folder
+ * before the trash. Beyond that, the check becomes unrealistic.
  */
 internal const val MAX_SECURE_FOLDER_ITEMS = 100
 
-/** Un média de la sélection, réduit à ce qui décide de son envoi. */
+/** A media item of the selection, reduced to what decides whether it is sent. */
 internal data class SecureFolderCandidate(
     val id: Long,
-    /** Fichier du téléphone avec une URI MediaStore. */
+    /** Phone file with a MediaStore URI. */
     val hasLocalFile: Boolean,
-    /** Également sur OneDrive (média regroupé) : la copie OneDrive reste dans l'appli. */
+    /** Also on OneDrive (grouped media): the OneDrive copy stays in the app. */
     val hasCloud: Boolean,
 )
 
-/** Résultat de l'analyse d'une sélection. */
+/** Result of analyzing a selection. */
 internal sealed interface SecureFolderPlan {
     /**
-     * Envoi possible : [ids] dans l'ordre de la sélection ; [alsoOnOneDrive] parmi eux restent
-     * visibles via OneDrive ; [skippedCloudOnly] éléments uniquement sur OneDrive ignorés.
+     * Sending possible: [ids] in selection order; [alsoOnOneDrive] of them stay
+     * visible via OneDrive; [skippedCloudOnly] OneDrive-only items ignored.
      */
     data class Ready(val ids: List<Long>, val alsoOnOneDrive: Int, val skippedCloudOnly: Int) : SecureFolderPlan
 
-    /** Aucun fichier du téléphone dans la sélection. */
+    /** No phone file in the selection. */
     data object NothingLocal : SecureFolderPlan
 
-    /** Trop de fichiers du téléphone pour un seul envoi ([max] au plus). */
+    /** Too many phone files for a single send ([max] at most). */
     data class TooMany(val max: Int) : SecureFolderPlan
 }
 
@@ -54,17 +54,17 @@ internal fun planSecureFolderMove(
     }
 }
 
-/** L'action est proposée : appli Dossier sécurisé installée et au moins un fichier du téléphone. */
+/** The action is offered: Secure Folder app installed and at least one phone file. */
 internal fun secureFolderActionVisible(secureFolderInstalled: Boolean, localCount: Int): Boolean =
     secureFolderInstalled && localCount > 0
 
 /**
- * Étapes du déplacement. INTRO : explications avant la feuille de partage ; SHARING : feuille
- * de partage ouverte, en attente du retour dans l'appli ; CONFIRM_TRASH : l'utilisateur dit si
- * l'ajout a réussi, et seulement alors les originaux vont à la corbeille.
+ * Steps of the move. INTRO: explanations before the share sheet; SHARING: share sheet
+ * open, waiting for the return to the app; CONFIRM_TRASH: the user says whether
+ * the addition succeeded, and only then do the originals go to the trash.
  */
 enum class SecureFolderStep { INTRO, SHARING, CONFIRM_TRASH }
 
-/** Étape suivante au retour de la feuille de partage (ignoré si elle n'avait pas été ouverte). */
+/** Next step on returning from the share sheet (ignored if it had not been opened). */
 internal fun stepAfterShareReturn(current: SecureFolderStep?): SecureFolderStep? =
     if (current == SecureFolderStep.SHARING) SecureFolderStep.CONFIRM_TRASH else current

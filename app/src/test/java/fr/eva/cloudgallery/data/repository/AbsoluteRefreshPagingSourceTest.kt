@@ -23,25 +23,25 @@ class AbsoluteRefreshPagingSourceTest {
         PagingState(pages.toList(), anchor, config, leadingPlaceholderCount = 0)
 
     @Test
-    fun `ancre relative aux pages chargées ramenée au rang absolu`() {
-        // Pages lâchées en haut : la première page en mémoire commence au rang 30 000.
+    fun `anchor relative to loaded pages is converted to the absolute position`() {
+        // Pages dropped at the top: the first page in memory starts at position 30,000.
         val s = state(300, page(30_000, 150), page(30_150, 150), page(30_300, 150))
         assertEquals(30_075, absoluteRefreshKey(s))
     }
 
     @Test
-    fun `en haut de liste, clé bornée à zéro`() {
+    fun `at the top of the list, key is clamped to zero`() {
         assertEquals(0, absoluteRefreshKey(state(10, page(0, 450))))
     }
 
     @Test
-    fun `sans ancre ni page, rechargement en haut`() {
+    fun `without anchor or page, reload from the top`() {
         assertNull(absoluteRefreshKey(state(null, page(1_000, 150))))
         assertNull(absoluteRefreshKey(state(5)))
     }
 
     @Test
-    fun `rang inconnu, rechargement en haut`() {
+    fun `unknown position, reload from the top`() {
         val unknown = Page(data = listOf(1, 2), prevKey = null, nextKey = 2)
         assertNull(absoluteRefreshKey(state(1, unknown)))
     }

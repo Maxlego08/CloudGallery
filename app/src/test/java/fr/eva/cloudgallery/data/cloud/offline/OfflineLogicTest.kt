@@ -12,7 +12,7 @@ import org.junit.Test
 
 class OfflineLogicTest {
 
-    // --- Tailles, espace, gros lots ---------------------------------------------------------
+    // --- Sizes, space, large batches --------------------------------------------------------
 
     @Test
     fun estimateBytes_ignoresUnknownSizes() {
@@ -26,7 +26,7 @@ class OfflineLogicTest {
         assertEquals(0L, missingSpace(allocatable = 1_000, requested = 900, margin = margin))
         assertEquals(1L, missingSpace(allocatable = 1_000, requested = 901, margin = margin))
         assertEquals(200L, missingSpace(allocatable = 0, requested = 100, margin = margin))
-        // Valeurs incohérentes (négatives) : jamais de « manque » négatif.
+        // Inconsistent (negative) values: never a negative "shortfall".
         assertEquals(0L, missingSpace(allocatable = 5_000, requested = -10, margin = margin))
         assertEquals(OFFLINE_SPACE_MARGIN_BYTES, missingSpace(allocatable = 0, requested = 0))
     }
@@ -39,7 +39,7 @@ class OfflineLogicTest {
         assertFalse(isLargeBatch(1, 0L))
     }
 
-    // --- Réseau du travail -------------------------------------------------------------------
+    // --- Job network -------------------------------------------------------------------------
 
     @Test
     fun jobNetwork_wifiOnlyUnlessDownloadNow() {
@@ -49,16 +49,16 @@ class OfflineLogicTest {
         assertEquals(JobNetwork.ANY, jobNetworkFor(wifiOnly = false, overrideNow = true))
     }
 
-    // --- Nouvelle version sur OneDrive ---------------------------------------------------------
+    // --- New version on OneDrive -------------------------------------------------------------
 
     @Test
     fun cTagChange_requeuesOnlyKeptItems() {
         assertTrue(requeueOnCTagChange(hasOfflineCopy = true, oldCTag = "c1", newCTag = "c2"))
         assertFalse(requeueOnCTagChange(hasOfflineCopy = true, oldCTag = "c1", newCTag = "c1"))
         assertFalse(requeueOnCTagChange(hasOfflineCopy = false, oldCTag = "c1", newCTag = "c2"))
-        // Version inconnue de la copie : nouvelle version connue -> téléchargement.
+        // Unknown version of the copy: known new version -> download.
         assertTrue(requeueOnCTagChange(hasOfflineCopy = true, oldCTag = null, newCTag = "c2"))
-        // Nouvelle version inconnue : rien à comparer, la copie est gardée.
+        // Unknown new version: nothing to compare, the copy is kept.
         assertFalse(requeueOnCTagChange(hasOfflineCopy = true, oldCTag = "c1", newCTag = null))
     }
 
@@ -66,14 +66,14 @@ class OfflineLogicTest {
     fun contentMatches_usesCTagWhenBothKnown_elseSizeAndETag() {
         assertTrue(contentMatches("c1", 10, "e1", "c1", 99, "e9"))
         assertFalse(contentMatches("c1", 10, "e1", "c2", 10, "e1"))
-        // Une version inconnue n'est jamais « identique » par défaut (P1-11) : taille exigée.
+        // An unknown version is never "identical" by default (P1-11): size required.
         assertTrue(contentMatches(null, 10, null, "c1", 10, null))
         assertFalse(contentMatches(null, 10, null, "c1", 11, null))
         assertTrue(contentMatches("c1", 10, "e1", null, 10, "e1"))
         assertFalse(contentMatches("c1", 10, "e1", null, 10, "e2"))
     }
 
-    // --- Etat affiché ----------------------------------------------------------------------------
+    // --- Displayed state -------------------------------------------------------------------------
 
     @Test
     fun status_withoutTask_dependsOnCopy() {
@@ -90,9 +90,9 @@ class OfflineLogicTest {
         val running = offlineStatus(TaskState.RUNNING, null, 40, 100, hasOffline = false, waitingForUnmetered = true)
         assertEquals(OfflineStatus.DOWNLOADING, running.status)
         assertEquals(40L, running.bytesDone)
-        // En cours de téléchargement : pas « en attente du Wi-Fi ».
+        // Downloading: not "waiting for Wi-Fi".
         assertFalse(running.waitingForUnmetered)
-        // Copie présente : mise à jour.
+        // Copy present: updating.
         assertEquals(OfflineStatus.UPDATING, offlineStatus(TaskState.QUEUED, null, 0, 1, hasOffline = true, waitingForUnmetered = false).status)
     }
 
@@ -104,10 +104,10 @@ class OfflineLogicTest {
         val failed = offlineStatus(TaskState.FAILED, DownloadError.NOT_FOUND, 0, 10, hasOffline = false, waitingForUnmetered = false)
         assertEquals(OfflineStatus.FAILED, failed.status)
         assertEquals(DownloadError.NOT_FOUND, failed.error)
-        // Echec sans code lisible : erreur générique.
+        // Failure without a readable code: generic error.
         assertEquals(DownloadError.SERVER, offlineStatus(TaskState.FAILED, null, 0, 0, false, false).error)
-        // Mise à jour arrêtée : la copie présente reste servie, mais l'arrêt est signalé (avec sa
-        // cause) et l'élément peut être repris ou annulé.
+        // Update stopped: the existing copy is still served, but the stop is reported (with its
+        // cause) and the item can be resumed or cancelled.
         val updatePaused = offlineStatus(TaskState.PAUSED, null, 3, 10, hasOffline = true, waitingForUnmetered = false)
         assertEquals(OfflineStatus.UPDATE_STOPPED, updatePaused.status)
         assertNull(updatePaused.error)
@@ -120,7 +120,7 @@ class OfflineLogicTest {
         assertEquals(DownloadError.SERVER, offlineStatus(TaskState.FAILED, null, 0, 0, true, false).error)
     }
 
-    // --- Echecs ----------------------------------------------------------------------------------
+    // --- Failures --------------------------------------------------------------------------------
 
     @Test
     fun failureAction_transientErrorsRetryThenFail() {
@@ -157,11 +157,11 @@ class OfflineLogicTest {
     @Test
     fun downloadError_parsedTolerantly() {
         assertEquals(DownloadError.NO_SPACE, downloadErrorOrNull("NO_SPACE"))
-        assertNull(downloadErrorOrNull("http://exemple"))
+        assertNull(downloadErrorOrNull("http://example"))
         assertNull(downloadErrorOrNull(null))
     }
 
-    // --- Arrêt du travail ------------------------------------------------------------------------
+    // --- Job stop --------------------------------------------------------------------------------
 
     @Test
     fun stopReason_userPauses_appCancels_otherReschedules() {
@@ -171,7 +171,7 @@ class OfflineLogicTest {
         assertEquals(StopAction.RESCHEDULE, stopActionFor(JobParameters.STOP_REASON_TIMEOUT))
     }
 
-    // --- Décision D1 : fin du délai de grâce -------------------------------------------------------
+    // --- Decision D1: end of the grace period -----------------------------------------------------
 
     @Test
     fun graceExpiry_keepsItemsWithOfflineCopyForUserDecision() {
@@ -196,7 +196,7 @@ class OfflineLogicTest {
         assertTrue(releaseNeedsConfirmation(1))
     }
 
-    // --- Noms de fichiers ------------------------------------------------------------------------
+    // --- File names ------------------------------------------------------------------------------
 
     @Test
     fun storeNames_rejectPathTraversal() {
@@ -209,20 +209,20 @@ class OfflineLogicTest {
         assertFalse(OfflineStore.isSafeName("a\\b.jpg"))
     }
 
-    // --- Espace disque ---------------------------------------------------------------------------
+    // --- Disk space ------------------------------------------------------------------------------
 
     @Test
     fun spaceAction_allocatesOnlyWhenFreeSpaceIsShortButObtainable() {
         val margin = 100L
-        // Espace libre suffisant : aucune demande au système.
+        // Enough free space: no request to the system.
         assertEquals(SpaceAction.ENOUGH, spaceAction(usable = 1_000, allocatable = 4_000, needed = 900, margin = margin))
-        // 1 Go libre, 3 Go de cache d'autres applis, 2 Go demandés : allocateBytes nécessaire.
+        // 1 GB free, 3 GB of other apps' cache, 2 GB requested: allocateBytes needed.
         assertEquals(SpaceAction.ALLOCATE, spaceAction(usable = 1_000, allocatable = 4_000, needed = 2_000, margin = margin))
-        // Même en libérant le cache, l'espace manque : jamais d'appel voué à l'échec.
+        // Even after freeing the cache, space is short: never make a call doomed to fail.
         assertEquals(SpaceAction.NO_SPACE, spaceAction(usable = 1_000, allocatable = 2_000, needed = 2_000, margin = margin))
     }
 
-    // --- Réseau (« Wi-Fi uniquement », « Télécharger maintenant ») -------------------------------
+    // --- Network ("Wi-Fi only", "Download now") -----------------------------------------------
 
     @Test
     fun allowedOnNetwork_overrideIsLimitedToItsTasks() {
@@ -249,12 +249,12 @@ class OfflineLogicTest {
         assertFalse(jobCovers(active = JobNetwork.ANY, required = JobNetwork.UNMETERED))
     }
 
-    // --- Reprise au démarrage ---------------------------------------------------------------------
+    // --- Recovery at startup ---------------------------------------------------------------------
 
     @Test
     fun startupRecovery_pausesOnlyAfterAUserStopDuringADownload() {
         assertEquals(StartupRecovery.PAUSE, startupRecovery(firstStart = true, userRequestedExit = true, hadRunningTasks = true))
-        // Balayage depuis les applis récentes sans téléchargement en cours.
+        // Swiped away from recent apps with no download in progress.
         assertEquals(StartupRecovery.REQUEUE, startupRecovery(firstStart = true, userRequestedExit = true, hadRunningTasks = false))
         assertEquals(StartupRecovery.REQUEUE, startupRecovery(firstStart = true, userRequestedExit = false, hadRunningTasks = true))
         assertEquals(StartupRecovery.REQUEUE, startupRecovery(firstStart = false, userRequestedExit = true, hadRunningTasks = true))

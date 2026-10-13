@@ -19,9 +19,9 @@ import androidx.compose.ui.unit.dp
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Case de sélection ronde One UI posée sur les miniatures : anneau blanc sur voile sombre
- * quand non cochée, disque d'accent avec coche blanche quand cochée.
- * Purement visuelle (la sémantique est portée par la cellule).
+ * One UI round selection checkbox laid over thumbnails: white ring on a dark scrim
+ * when unchecked, accent disc with a white tick when checked.
+ * Purely visual (semantics are carried by the cell).
  */
 @Composable
 fun OneUiCheckCircle(
@@ -36,7 +36,7 @@ fun OneUiCheckCircle(
     )
 }
 
-/** Variante pour fond clair/sombre de l'appli (barre de sélection « Tout »). */
+/** Variant for the app's light/dark background (selection bar "All"). */
 @Composable
 internal fun SelectAllCircle(checked: Boolean, modifier: Modifier = Modifier) {
     CheckCircleImpl(

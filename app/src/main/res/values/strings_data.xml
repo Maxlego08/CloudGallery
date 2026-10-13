@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Couche données : messages d'erreur d'indexation et d'écriture. -->
+<!-- Data layer: indexing and write error messages. -->
 <resources>
-    <string name="data_error_no_permission">Autorisez l\'accès aux photos et vidéos pour afficher votre galerie.</string>
-    <string name="data_error_sync_failed">Échec de l\'indexation des médias : %1$s</string>
-    <string name="data_warning_mass_removal">De nombreux médias ont disparu d\'un coup : ils sont masqués mais conservés (favoris et albums inclus) pendant 30 jours.</string>
-    <string name="data_folder_unnamed">Sans nom</string>
-    <string name="data_error_invalid_angle">Angle de rotation invalide (multiple de 90° attendu).</string>
-    <string name="data_error_rotate_unsupported">La rotation sans perte n\'est possible que pour les images JPEG et WebP.</string>
-    <string name="data_error_write_denied">Autorisation de modification du fichier refusée.</string>
-    <string name="data_error_not_image">Seules les images peuvent être recadrées.</string>
-    <string name="data_error_decode">Impossible de lire le fichier.</string>
-    <string name="data_error_save">Impossible d\'enregistrer le fichier.</string>
-    <string name="data_error_copy_failed">Aucun fichier n\'a pu être copié.</string>
+    <string name="data_error_no_permission">Allow access to photos and videos to show your gallery.</string>
+    <string name="data_error_sync_failed">Media indexing failed: %1$s</string>
+    <string name="data_warning_mass_removal">Many items disappeared at once: they are hidden but kept (with favourites and albums) for 30 days.</string>
+    <string name="data_folder_unnamed">Unnamed</string>
+    <string name="data_error_invalid_angle">Invalid rotation angle (multiple of 90° expected).</string>
+    <string name="data_error_rotate_unsupported">Lossless rotation is only possible for JPEG and WebP images.</string>
+    <string name="data_error_write_denied">Permission to modify the file was denied.</string>
+    <string name="data_error_not_image">Only images can be cropped.</string>
+    <string name="data_error_decode">Unable to read the file.</string>
+    <string name="data_error_save">Unable to save the file.</string>
+    <string name="data_error_copy_failed">No file could be copied.</string>
 
     <!-- OneDrive -->
-    <string name="data_cloud_error_network">Pas de connexion à Internet. Réessayez plus tard.</string>
-    <string name="data_cloud_error_auth">Reconnexion à OneDrive requise.</string>
-    <string name="data_cloud_error_throttled">OneDrive limite temporairement les requêtes. Réessayez dans quelques minutes.</string>
-    <string name="data_cloud_error_server">Le service Microsoft ne répond pas correctement. Réessayez plus tard.</string>
-    <string name="data_cloud_error_config">Configuration OneDrive invalide dans cette version de l\'application.</string>
-    <string name="data_cloud_error_declined">Les autorisations nécessaires n\'ont pas été accordées.</string>
-    <string name="data_cloud_error_no_browser">Aucun navigateur compatible n\'est installé pour la connexion Microsoft.</string>
-    <string name="data_cloud_error_unknown">Erreur OneDrive inattendue.</string>
+    <string name="data_cloud_error_network">No Internet connection. Try again later.</string>
+    <string name="data_cloud_error_auth">You need to sign in to OneDrive again.</string>
+    <string name="data_cloud_error_throttled">OneDrive is temporarily limiting requests. Try again in a few minutes.</string>
+    <string name="data_cloud_error_server">The Microsoft service isn\'t responding properly. Try again later.</string>
+    <string name="data_cloud_error_config">Invalid OneDrive configuration in this version of the app.</string>
+    <string name="data_cloud_error_declined">The required permissions weren\'t granted.</string>
+    <string name="data_cloud_error_no_browser">No compatible browser is installed for Microsoft sign-in.</string>
+    <string name="data_cloud_error_unknown">Unexpected OneDrive error.</string>
 </resources>

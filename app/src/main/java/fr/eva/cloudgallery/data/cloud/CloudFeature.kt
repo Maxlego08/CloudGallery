@@ -8,9 +8,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Disponibilité de OneDrive dans ce build : l'identifiant d'application Entra et l'empreinte
- * de signature viennent de local.properties (BuildConfig). Absents ou invalides, toute la
- * fonction est masquée (aucune entrée de menu inopérante). Aucun accès disque ni MSAL ici.
+ * OneDrive availability in this build: the Entra application id and the signature hash come
+ * from local.properties (BuildConfig). If missing or invalid, the whole feature is hidden (no
+ * dead menu entry). No disk or MSAL access here.
  */
 @Singleton
 class CloudFeature @Inject constructor() {
@@ -19,7 +19,7 @@ class CloudFeature @Inject constructor() {
 
     val enabled: Boolean = isValidClientId(clientId) && isValidSignatureHash(BuildConfig.MSAL_SIGNATURE_HASH)
 
-    /** URI de redirection encodée, identique à celle enregistrée dans Entra. */
+    /** Encoded redirect URI, identical to the one registered in Entra. */
     val redirectUri: String
         get() = msalRedirectUri(BuildConfig.APPLICATION_ID, BuildConfig.MSAL_SIGNATURE_HASH)
 }

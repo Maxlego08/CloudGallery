@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Signature des fichiers locaux, appariement local / OneDrive, défusion et lots d'empreintes. */
+/** Local file signature, local / OneDrive pairing, unmerging and hash batches. */
 class DedupLogicTest {
 
     @Test
@@ -15,7 +15,7 @@ class DedupLogicTest {
         assertTrue(localHashSignature(5, 10, 3) != localHashSignature(6, 10, 3))
         assertTrue(localHashSignature(5, 10, 3) != localHashSignature(5, 11, 3))
         assertTrue(localHashSignature(5, 10, 3) != localHashSignature(5, 10, 4))
-        // Même forme que l'expression SQL `sizeBytes || ':' || dateModified || ':' || generation`.
+        // Same form as the SQL expression `sizeBytes || ':' || dateModified || ':' || generation`.
         assertEquals("(sizeBytes || ':' || dateModified || ':' || generation)", LOCAL_HASH_SIGNATURE_SQL)
     }
 
@@ -35,7 +35,7 @@ class DedupLogicTest {
 
     @Test
     fun planMerges_duplicates_pairInSourceOrder_extrasStaySeparate() {
-        // Deux fichiers locaux identiques, trois éléments OneDrive identiques : 6 couples candidats.
+        // Two identical local files, three identical OneDrive items: 6 candidate pairs.
         val rows = listOf(11L to 1L, 12L to 2L).flatMap { (ls, lm) ->
             listOf(23L to 6L, 21L to 4L, 22L to 5L).map { (cs, cm) -> candidate(ls, lm, cs, cm) }
         }
@@ -51,7 +51,7 @@ class DedupLogicTest {
             listOf(
                 candidate(10, 1, 20, 2, hash = "A"),
                 candidate(11, 3, 21, 4, hash = "B"),
-                // Donnée incohérente : le même média local dans un autre groupe.
+                // Inconsistent data: the same local media in another group.
                 candidate(10, 1, 22, 5, hash = "C"),
             ),
         )
@@ -69,9 +69,9 @@ class DedupLogicTest {
         assertTrue(shouldSplit(merged(localSize = 101)))
         assertTrue(shouldSplit(merged(cloudHash = "X")))
         assertTrue(shouldSplit(merged(localHash = "X")))
-        // Empreinte locale périmée, même taille : gardée jusqu'au prochain calcul.
+        // Stale local hash, same size: kept until the next computation.
         assertFalse(shouldSplit(merged(localHash = "X", current = false)))
-        // Empreinte inconnue d'un côté : gardée.
+        // Hash unknown on one side: kept.
         assertFalse(shouldSplit(merged(cloudHash = null)))
         assertFalse(shouldSplit(merged(localHash = null)))
     }
@@ -83,9 +83,9 @@ class DedupLogicTest {
         val targets = listOf(target(1, 10), target(2, 500), target(3, 20), target(4, 500), target(5, 30))
         val batch = nextHashBatch(targets, cloudSizes = setOf(500L), maxCount = 3, maxBytes = 10_000)
         assertEquals(listOf(2L, 4L, 1L), batch.map { it.sourceId })
-        // Budget d'octets : arrêt avant de le dépasser.
+        // Byte budget: stops before exceeding it.
         assertEquals(listOf(2L), nextHashBatch(targets, setOf(500L), maxCount = 10, maxBytes = 600).map { it.sourceId })
-        // Un fichier plus gros que le budget passe quand même seul (sinon jamais calculé).
+        // A file larger than the budget still goes through alone (otherwise it would never be hashed).
         assertEquals(listOf(2L), nextHashBatch(targets, setOf(500L), maxCount = 10, maxBytes = 100).map { it.sourceId })
         assertTrue(nextHashBatch(emptyList(), emptySet(), 10, 100).isEmpty())
     }

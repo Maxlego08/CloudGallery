@@ -12,17 +12,16 @@ import fr.eva.cloudgallery.MainActivity
 import fr.eva.cloudgallery.R
 
 /**
- * Notification du service de premier plan de la mise en cache de tout OneDrive (progression et
- * bouton « Annuler »). Canal de faible importance, sans son. Aucun nom de fichier ni de compte.
- * Sans l'autorisation d'afficher des notifications, le système la montre au moins dans le
- * Gestionnaire de tâches.
+ * Notification of the foreground service that caches all of OneDrive (progress and "Cancel"
+ * button). Low-importance channel, no sound. No file or account name. Without permission to
+ * post notifications, the system still shows it at least in the Task Manager.
  */
 internal object PrecacheNotifications {
 
     const val CHANNEL_ID = "onedrive_precache"
     const val PROGRESS_ID = 4101
 
-    /** Crée (ou renomme, après un changement de langue) le canal. Appel Binder court. */
+    /** Creates (or renames, after a language change) the channel. Short Binder call. */
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channel = NotificationChannel(
@@ -36,7 +35,7 @@ internal object PrecacheNotifications {
         manager.createNotificationChannel(channel)
     }
 
-    /** Progression : [done] éléments sur [total] (0 : préparation), [bytes] téléchargés. */
+    /** Progress: [done] items out of [total] (0: preparing), [bytes] downloaded. */
     fun progress(context: Context, done: Int, total: Int, bytes: Long, cancel: PendingIntent): Notification {
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)

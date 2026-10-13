@@ -56,7 +56,7 @@ class AlbumSortingTest {
 
     @Test
     fun name_isLocaleAwareAndCaseInsensitive() {
-        // « Éclairs » se classe avec les E, « vacances » minuscule avec les V.
+        // "Éclairs" sorts with the E's, lowercase "vacances" with the V's.
         assertEquals(listOf(1L, 4L, 2L, 5L, 3L), sorted(AlbumSort.NAME))
     }
 

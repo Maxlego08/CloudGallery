@@ -6,31 +6,31 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Calculs purs du zoom de la visionneuse (testables sans Android).
+ * Pure zoom calculations for the viewer (testable without Android).
  *
- * Convention : le contenu ajusté (« fit ») est centré dans le conteneur ; le zoom s'applique
- * autour du centre du contenu, puis la translation `offset` (en px écran) est ajoutée.
- * Les points focaux sont exprimés relativement au centre du conteneur.
+ * Convention: the fitted ("fit") content is centered in the container; the zoom is applied
+ * around the content's center, then the `offset` translation (in screen px) is added.
+ * Focal points are expressed relative to the container's center.
  */
 object ZoomMath {
     const val MIN_SCALE = 1f
     const val MAX_SCALE = 5f
     const val DOUBLE_TAP_SCALE = 2.5f
 
-    /** Au-delà de ce zoom, on recharge l'image avec une résolution plus grande. */
+    /** Beyond this zoom level, the image is reloaded at a higher resolution. */
     const val HI_RES_THRESHOLD = 2.5f
 
-    /** Plafond de taille du décodage de base. */
+    /** Size cap for the base decode. */
     const val BASE_MAX_SIDE = 4096
 
     /**
-     * Plafond de pixels pour le rechargement haute résolution (~24 MP) : un bitmap ARGB_8888 de
-     * 24 MP pèse ~96 Mo, sous la limite de 100 Mio au-delà de laquelle le Canvas refuse de le dessiner
-     * (« trying to draw too large bitmap »), et évite un OOM.
+     * Pixel cap for the high-resolution reload (~24 MP): a 24 MP ARGB_8888 bitmap weighs ~96 MB,
+     * below the 100 MiB limit beyond which Canvas refuses to draw it ("trying to draw too large
+     * bitmap"), and avoids an OOM.
      */
     const val HI_RES_MAX_PIXELS = 24_000_000L
 
-    /** Taille du contenu ajusté (ContentScale.Fit) dans le conteneur, sur un axe donné. Renvoie (w, h). */
+    /** Size of the fitted content (ContentScale.Fit) in the container, on a given axis. Returns (w, h). */
     fun fitSize(contentW: Float, contentH: Float, containerW: Float, containerH: Float): Pair<Float, Float> {
         if (contentW <= 0f || contentH <= 0f || containerW <= 0f || containerH <= 0f) {
             return containerW.coerceAtLeast(0f) to containerH.coerceAtLeast(0f)
@@ -39,7 +39,7 @@ object ZoomMath {
         return contentW * ratio to contentH * ratio
     }
 
-    /** Translation maximale (valeur absolue) sur un axe pour que le contenu reste dans le cadre. */
+    /** Maximum translation (absolute value) on an axis so the content stays within the frame. */
     fun maxOffset(fitted: Float, container: Float, scale: Float): Float =
         max(0f, (fitted * scale - container) / 2f)
 
@@ -49,8 +49,8 @@ object ZoomMath {
     }
 
     /**
-     * Nouvelle translation après un changement d'échelle [scale] -> [newScale] en gardant fixe le point
-     * situé sous [focal] (relatif au centre du conteneur).
+     * New translation after a scale change [scale] -> [newScale], keeping the point under [focal]
+     * (relative to the container's center) fixed.
      */
     fun zoomAround(offset: Float, scale: Float, newScale: Float, focal: Float): Float {
         if (scale <= 0f) return offset
@@ -60,17 +60,12 @@ object ZoomMath {
 
     fun clampScale(scale: Float): Float = scale.coerceIn(MIN_SCALE, MAX_SCALE)
 
-    /** Côté maximal du décodage de base : 2 x le grand côté de l'écran, plafonné à [BASE_MAX_SIDE]. */
+    /** Maximum side of the base decode: 2 x the screen's long side, capped at [BASE_MAX_SIDE]. */
     fun baseMaxSide(screenLongSidePx: Int): Int = min(BASE_MAX_SIDE, max(1, screenLongSidePx * 2))
 
     /**
-     * Côté maximal pour le rechargement haute résolution : pleine résolution de l'image, réduite si
-     * nécessaire pour ne pas dépasser [maxPixels]. Renvoie null si l'image n'est pas plus grande
-     * que le décodage de base (aucun rechargement utile) ou si ses dimensions sont inconnues.
-     */
-    /**
-     * Dimensions de l'image pour le rechargement haute résolution : celles de l'index si elles
-     * sont connues, sinon celles lues dans le fichier ([fileBounds]), sinon 0 x 0 (inconnues).
+     * Image dimensions for the high-resolution reload: those from the index if known, otherwise
+     * those read from the file ([fileBounds]), otherwise 0 x 0 (unknown).
      */
     fun imageDimensions(metaW: Int, metaH: Int, fileBounds: Pair<Int, Int>?): Pair<Int, Int> = when {
         metaW > 0 && metaH > 0 -> metaW to metaH
@@ -78,6 +73,11 @@ object ZoomMath {
         else -> 0 to 0
     }
 
+    /**
+     * Maximum side for the high-resolution reload: the image's full resolution, reduced if needed
+     * so as not to exceed [maxPixels]. Returns null if the image is not larger than the base
+     * decode (no useful reload) or if its dimensions are unknown.
+     */
     fun hiResMaxSide(imageW: Int, imageH: Int, baseMaxSide: Int, maxPixels: Long = HI_RES_MAX_PIXELS): Int? {
         if (imageW <= 0 || imageH <= 0) return null
         val longSide = max(imageW, imageH)
@@ -91,8 +91,8 @@ object ZoomMath {
     }
 
     /**
-     * Page cible après un glissement transmis au pager depuis une image zoomée.
-     * [position] = page courante + fraction de décalage ; [velocityX] = vitesse du doigt (px/s, > 0 vers la droite).
+     * Target page after a drag forwarded to the pager from a zoomed image.
+     * [position] = current page + offset fraction; [velocityX] = finger velocity (px/s, > 0 to the right).
      */
     fun pagerSettleTarget(position: Float, fromPage: Int, velocityX: Float, velocityThreshold: Float, pageCount: Int): Int {
         val target = when {
@@ -104,9 +104,9 @@ object ZoomMath {
     }
 
     /**
-     * Répartit un déplacement horizontal [dx] entre la page voisine (pager) déjà entraînée de
-     * [pagerAccum] px et l'image. Renvoie (part rendue au pager, part restant pour l'image, nouvel accumulé).
-     * Tant que le pager est décalé, le doigt le ramène d'abord à zéro avant de déplacer l'image.
+     * Splits a horizontal move [dx] between the neighbouring page (pager), already dragged by
+     * [pagerAccum] px, and the image. Returns (share given to the pager, share left for the image, new accumulated).
+     * While the pager is offset, the finger first brings it back to zero before moving the image.
      */
     fun splitPagerDelta(dx: Float, pagerAccum: Float): Triple<Float, Float, Float> {
         if (pagerAccum == 0f) return Triple(0f, dx, 0f)

@@ -1,17 +1,17 @@
 package fr.eva.cloudgallery.ui.storage
 
 /*
- * Logique pure de la page Stockage (testée en JVM).
+ * Pure logic of the Storage page (JVM-tested).
  */
 
 /**
- * Plafond des miniatures modifié depuis l'ouverture du cache Coil : le nouveau plafond ne
- * s'applique qu'au prochain démarrage. [effectiveBytes] null (cache pas encore ouvert) : le
- * réglage sera lu à l'ouverture, rien n'est en attente.
+ * Thumbnail limit changed since the Coil cache was opened: the new limit only
+ * applies on the next launch. [effectiveBytes] null (cache not opened yet): the
+ * setting will be read when it opens, nothing is pending.
  */
 internal fun thumbnailCapPendingRestart(settingBytes: Long, effectiveBytes: Long?): Boolean =
     effectiveBytes != null && effectiveBytes != settingBytes
 
-/** « Vider le cache » proposé seulement s'il y a quelque chose à vider et rien en cours. */
+/** "Clear cache" offered only if there is something to clear and nothing in progress. */
 internal fun canClearCache(cacheBytes: Long?, clearing: Boolean): Boolean =
     !clearing && cacheBytes != null && cacheBytes > 0

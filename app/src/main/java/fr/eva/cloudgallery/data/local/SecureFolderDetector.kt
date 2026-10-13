@@ -10,16 +10,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Présence de l'appli Dossier sécurisé Samsung, lue avec le PackageManager (paquet déclaré dans
- * `<queries>` du manifeste). Aucune API Knox n'est utilisée : l'envoi passe par la feuille de
- * partage Android.
+ * Presence of the Samsung Secure Folder app, read with the PackageManager (package declared in
+ * the manifest's `<queries>`). No Knox API is used: sending goes through the Android share
+ * sheet.
  */
 @Singleton
 class SecureFolderDetector @Inject constructor(
     @param:ApplicationContext private val context: Context,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) {
-    /** Appli installée et activée pour cet utilisateur. Thread d'E/S. */
+    /** App installed and enabled for this user. I/O thread. */
     suspend fun isInstalled(): Boolean = withContext(io) {
         try {
             context.packageManager

@@ -19,24 +19,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Déplacement en cours vers le Dossier sécurisé : fichiers du téléphone envoyés et étape. */
+/** Move to Secure Folder in progress: phone files sent and current step. */
 @Immutable
 data class SecureFolderPrompt(
     val step: SecureFolderStep,
     val uris: List<Uri>,
     val mimeTypes: List<String?>,
-    /** Fichiers également sur OneDrive : la copie OneDrive reste visible dans l'appli. */
+    /** Files also on OneDrive: the OneDrive copy stays visible in the app. */
     val alsoOnOneDrive: Int,
-    /** Éléments uniquement sur OneDrive de la sélection, non envoyés. */
+    /** OneDrive-only items of the selection, not sent. */
     val skippedCloudOnly: Int,
 )
 
-/** État du déplacement, tenu par le ViewModel de l'écran (grille ou visionneuse). */
+/** State of the move, held by the screen's ViewModel (grid or viewer). */
 class SecureFolderMoveState {
     private val _prompt = MutableStateFlow<SecureFolderPrompt?>(null)
     val prompt: StateFlow<SecureFolderPrompt?> = _prompt.asStateFlow()
 
-    /** Prépare l'envoi des fichiers du téléphone d'un [plan] prêt, dans l'ordre de ses identifiants. */
+    /** Prepares sending the phone files of a ready [plan], in the order of its ids. */
     internal fun start(plan: SecureFolderPlan.Ready, uriOf: (Long) -> Uri?, mimeTypeOf: (Long) -> String?) {
         val ids = plan.ids.filter { uriOf(it) != null }
         if (ids.isEmpty()) return
@@ -57,7 +57,7 @@ class SecureFolderMoveState {
         _prompt.update { p -> p?.let { stepAfterShareReturn(it.step) }?.let { p.copy(step = it) } }
     }
 
-    /** Termine le déplacement et rend les fichiers à mettre à la corbeille (confirmation reçue). */
+    /** Finishes the move and returns the files to move to the trash (confirmation received). */
     fun takeForTrash(): SecureFolderPrompt? =
         _prompt.value?.takeIf { it.step == SecureFolderStep.CONFIRM_TRASH }.also { _prompt.value = null }
 
@@ -67,13 +67,13 @@ class SecureFolderMoveState {
 }
 
 /**
- * Boîtes du déplacement vers le Dossier sécurisé : explications puis feuille de partage
- * (étape [SecureFolderStep.INTRO]), puis au retour dans l'appli, question « ajout réussi ? »
- * ([SecureFolderStep.CONFIRM_TRASH]). Les originaux ne vont à la corbeille que sur [onTrash], et la
- * demande système de corbeille est encore confirmée par l'utilisateur.
+ * Dialogs for moving to Secure Folder: explanations then the share sheet
+ * ([SecureFolderStep.INTRO] step), then on returning to the app, the "added successfully?" question
+ * ([SecureFolderStep.CONFIRM_TRASH]). The originals only go to the trash on [onTrash], and the
+ * system trash request is still confirmed by the user.
  *
- * @param onCancel abandon avant l'envoi (sélection conservée).
- * @param onKeep originaux gardés après l'envoi.
+ * @param onCancel abort before sending (selection kept).
+ * @param onKeep originals kept after sending.
  */
 @Composable
 fun SecureFolderDialogs(
@@ -86,8 +86,8 @@ fun SecureFolderDialogs(
 ) {
     val context = LocalContext.current
     val currentOnShareReturned by rememberUpdatedState(onShareReturned)
-    // Code de résultat sans signification fiable (la cible peut être dans un autre profil) : seul
-    // le retour dans l'appli compte, et l'utilisateur dit lui-même si l'ajout a réussi.
+    // Result code with no reliable meaning (the target may be in another profile): only
+    // the return to the app matters, and the user says whether the addition succeeded.
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         currentOnShareReturned()
     }

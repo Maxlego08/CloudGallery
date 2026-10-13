@@ -11,8 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 
 /**
- * Lance un [IntentSender] système (confirmation de suppression / d'écriture MediaStore…)
- * et rapporte `granted = resultCode == RESULT_OK`.
+ * Launches a system [IntentSender] (MediaStore delete / write confirmation…)
+ * and reports `granted = resultCode == RESULT_OK`.
  */
 @Composable
 fun rememberIntentSenderLauncher(onResult: (granted: Boolean) -> Unit): (IntentSender) -> Unit {

@@ -11,7 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Bande de miniatures : résumé en cache rafraîchi depuis le média affiché. */
+/** Thumbnail strip: cached summary refreshed from the displayed media. */
 class ViewerSummaryTest {
 
     private val cached = MediaSummary(

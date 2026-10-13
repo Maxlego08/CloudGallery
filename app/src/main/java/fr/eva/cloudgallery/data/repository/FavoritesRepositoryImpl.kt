@@ -34,7 +34,7 @@ class FavoritesRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Inverse l'état favori et renvoie le nouvel état. */
+    /** Toggles the favorite state and returns the new state. */
     override suspend fun toggle(mediaId: Long): Boolean = withContext(io) {
         db.withTransaction {
             val newState = !favoriteDao.isFavorite(mediaId)

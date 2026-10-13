@@ -37,14 +37,14 @@ import fr.eva.cloudgallery.ui.components.OneUiCheckCircle
 import fr.eva.cloudgallery.ui.image.ThumbnailImage
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
-/** Petit badge rond affiché sur une couverture (cloud, album personnalisé, épinglé). */
+/** Small round badge shown on a cover (cloud, custom album, pinned). */
 @Immutable
 internal data class AlbumBadge(val icon: ImageVector, val contentDescription: String)
 
 /**
- * Cellule de la grille d'albums façon One UI : couverture carrée arrondie, nom sur une ligne,
- * nombre d'éléments en dessous. Sans couverture, affiche [emptyIcon] sur le fond de chargement.
- * Couverture : fichier local ([coverUri]) ou, à défaut, miniature OneDrive ([coverCloud]).
+ * One UI-style album grid cell: rounded square cover, single-line name, item count below.
+ * Without a cover, shows [emptyIcon] on the placeholder background.
+ * Cover: local file ([coverUri]) or, failing that, OneDrive thumbnail ([coverCloud]).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

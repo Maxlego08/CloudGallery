@@ -1,33 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lecteur vidéo (zone VIDEO). -->
+<!-- Video player (VIDEO area). -->
 <resources>
-    <string name="video_play">Lire</string>
+    <string name="video_play">Play</string>
     <string name="video_pause">Pause</string>
-    <string name="video_replay">Revoir</string>
-    <string name="video_rewind_10">Reculer de 10 secondes</string>
-    <string name="video_forward_10">Avancer de 10 secondes</string>
+    <string name="video_replay">Replay</string>
+    <string name="video_rewind_10">Rewind 10 seconds</string>
+    <string name="video_forward_10">Forward 10 seconds</string>
     <string name="video_seek_back_seconds">-%d s</string>
     <string name="video_seek_forward_seconds">+%d s</string>
-    <string name="video_seekbar">Position de lecture</string>
-    <string name="video_position_desc">%1$s sur %2$s</string>
+    <string name="video_seekbar">Playback position</string>
+    <string name="video_position_desc">%1$s of %2$s</string>
     <string name="video_volume">Volume</string>
-    <string name="video_mute">Couper le son</string>
-    <string name="video_unmute">Activer le son</string>
-    <string name="video_rotate">Pivoter l\'écran</string>
-    <string name="video_speed">Vitesse de lecture</string>
-    <string name="video_speed_normal">%s (normale)</string>
-    <string name="video_open_with_other_app">Ouvrir avec une autre application</string>
-    <string name="video_error_unsupported">Ce format vidéo n\'est pas pris en charge par le lecteur intégré</string>
-    <string name="video_error_corrupted">Cette vidéo semble endommagée et ne peut pas être lue par le lecteur intégré.</string>
-    <string name="video_error_not_accessible">Le fichier vidéo est introuvable ou inaccessible. Il a peut-être été déplacé ou supprimé.</string>
-    <string name="video_error_io">Impossible de lire le fichier vidéo.</string>
-    <string name="video_error_not_found">Cette vidéo n\'existe plus dans la galerie.</string>
-    <string name="video_error_cloud_only">Cette vidéo est uniquement sur OneDrive, et OneDrive n\'est pas disponible dans cette version de l\'application.</string>
-    <string name="video_error_network">Connexion impossible. Vérifiez votre connexion à Internet, puis réessayez.</string>
-    <string name="video_error_server_link">OneDrive n\'a pas pu fournir la vidéo. Réessayez dans quelques instants.</string>
-    <string name="video_error_auth_required">Pour lire cette vidéo, connectez-vous au compte OneDrive auquel elle appartient.</string>
-    <string name="video_error_cloud_throttled">OneDrive limite temporairement les requêtes. Réessayez dans quelques minutes.</string>
-    <string name="video_error_cloud_not_found">Cette vidéo est introuvable sur OneDrive. Elle a peut-être été déplacée ou supprimée.</string>
-    <string name="video_action_sign_in">Se connecter</string>
-    <string name="video_error_other">La lecture de cette vidéo a échoué.</string>
+    <string name="video_mute">Mute</string>
+    <string name="video_unmute">Unmute</string>
+    <string name="video_rotate">Rotate screen</string>
+    <string name="video_speed">Playback speed</string>
+    <string name="video_speed_normal">%s (normal)</string>
+    <string name="video_open_with_other_app">Open with another app</string>
+    <string name="video_error_unsupported">This video format isn\'t supported by the built-in player</string>
+    <string name="video_error_corrupted">This video seems to be damaged and can\'t be played by the built-in player.</string>
+    <string name="video_error_not_accessible">The video file can\'t be found or accessed. It may have been moved or deleted.</string>
+    <string name="video_error_io">Couldn\'t read the video file.</string>
+    <string name="video_error_not_found">This video is no longer in the gallery.</string>
+    <string name="video_error_cloud_only">This video is only on OneDrive, and OneDrive isn\'t available in this version of the app.</string>
+    <string name="video_error_network">Couldn\'t connect. Check your Internet connection, then try again.</string>
+    <string name="video_error_server_link">OneDrive couldn\'t provide the video. Try again in a moment.</string>
+    <string name="video_error_auth_required">To play this video, sign in to the OneDrive account it belongs to.</string>
+    <string name="video_error_cloud_throttled">OneDrive is temporarily limiting requests. Try again in a few minutes.</string>
+    <string name="video_error_cloud_not_found">This video can\'t be found on OneDrive. It may have been moved or deleted.</string>
+    <string name="video_action_sign_in">Sign in</string>
+    <string name="video_error_other">Playback of this video failed.</string>
 </resources>

@@ -36,9 +36,9 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Moteur des copies hors ligne avec un téléchargeur factice : enregistrement, revérifications au
- * moment d'enregistrer (purge, libération, nouvelle version), reprise après arrêt, passages
- * successifs. Fichiers dans un dossier propre au test (jamais ceux de l'appli installée).
+ * Offline copy engine with a fake downloader: commit, re-checks at
+ * commit time (purge, release, new version), resume after a stop, successive
+ * drains. Files live in a test-specific folder (never those of the installed app).
  */
 @RunWith(AndroidJUnit4::class)
 class OfflineDownloadEngineTest {
@@ -49,7 +49,7 @@ class OfflineDownloadEngineTest {
     private val generation = CloudDataGeneration()
     private val content = ByteArray(10) { it.toByte() }
 
-    /** Comportement du téléchargeur factice pour le prochain appel. */
+    /** Behavior of the fake downloader for the next call. */
     private var fetch: suspend (itemId: String, part: File) -> CdnResult = { _, part ->
         part.writeBytes(content)
         CdnResult(content.size.toLong(), "c1", "e1")
@@ -73,7 +73,7 @@ class OfflineDownloadEngineTest {
         dir.deleteRecursively()
     }
 
-    /** Progression signalée par le téléchargeur factice (null : aucune). */
+    /** Progress reported by the fake downloader (null: none). */
     private var reportProgress: (suspend (suspend (Long, Long) -> Unit) -> Unit)? = null
 
     private fun engine(canAccess: Boolean = true, space: OfflineSpace? = null) = OfflineDownloadEngine(
@@ -91,7 +91,7 @@ class OfflineDownloadEngineTest {
         space = space ?: store,
     )
 
-    /** Espace disque factice : [usable] libre, [allocatable] obtenable ; [reserved] = demandes faites. */
+    /** Fake disk space: [usable] free, [allocatable] obtainable; [reserved] = requests made. */
     private class FakeSpace(val usable: Long, val allocatable: Long) : OfflineSpace {
         val reserved = ArrayList<Long>()
         override suspend fun usableBytes() = usable
@@ -102,7 +102,7 @@ class OfflineDownloadEngineTest {
         }
     }
 
-    /** Elément OneDrive visible avec une tâche en attente. */
+    /** Visible OneDrive item with a queued task. */
     private suspend fun seed(itemId: String = "A", cTag: String? = "c1"): Long {
         val id = db.mediaDao().insert(
             MediaEntity(
@@ -156,7 +156,7 @@ class OfflineDownloadEngineTest {
         val id = seed()
         fetch = { _, part ->
             part.writeBytes(content)
-            // Déconnexion pendant le téléchargement : le numéro de vidage change.
+            // Sign-out during the download: the purge generation changes.
             generation.bump()
             CdnResult(10, "c1", "e1")
         }
@@ -171,7 +171,7 @@ class OfflineDownloadEngineTest {
         val id = seed()
         fetch = { _, part ->
             part.writeBytes(content)
-            // « Libérer » / « Annuler » entre la fin du téléchargement et l'enregistrement.
+            // "Free up" / "Cancel" between the end of the download and the commit.
             db.downloadTaskDao().deleteForMedia(listOf(id))
             CdnResult(10, "c1", "e1")
         }
@@ -182,9 +182,9 @@ class OfflineDownloadEngineTest {
     }
 
     /**
-     * Contenu plus récent sur OneDrive que dans l'index : pas d'essai compté, la file continue,
-     * et la tâche attend la synchronisation (aucun nouveau téléchargement tant que l'index n'a
-     * pas changé), puis repart avec la nouvelle version.
+     * Newer content on OneDrive than in the index: no attempt counted, the queue continues,
+     * and the task waits for the sync (no new download as long as the index has not
+     * changed), then restarts with the new version.
      */
     @Test
     fun newerContentThanIndex_waitsForSync_withoutCountingAttempts() = runTest {
@@ -202,14 +202,14 @@ class OfflineDownloadEngineTest {
         assertEquals(DownloadError.CONTENT_CHANGED.name, task.error)
         assertEquals(0, task.attempts)
         assertFalse(db.mediaDao().getById(id)!!.hasOffline)
-        // La tâche suivante n'a pas été bloquée.
+        // The next task was not blocked.
         assertTrue(db.mediaDao().getById(other)!!.hasOffline)
         assertFalse(db.downloadTaskDao().existsRunnable())
-        // Nouveau passage avant la synchronisation : rien n'est retéléchargé.
+        // New drain before the sync: nothing is downloaded again.
         val before = fetchCount.get()
         engine.drain(null)
         assertEquals(before, fetchCount.get())
-        // Synchronisation : l'index passe à c2, la copie est enfin enregistrée.
+        // Sync: the index moves to c2, the copy is finally committed.
         val source = db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!
         db.mediaSourceDao().update(source.copy(cTag = "c2"))
         engine.drain(null)
@@ -221,7 +221,7 @@ class OfflineDownloadEngineTest {
     fun itemGoneFromOneDrive_failsAndContinuesWithNext() = runTest {
         val a = seed("A")
         val b = seed("B")
-        // A masqué (supprimé sur OneDrive) depuis la mise en file.
+        // A hidden (deleted on OneDrive) since it was queued.
         db.mediaSourceDao().markMissing(listOf(db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!.id), 5)
         engine().drain(null)
         val failed = db.downloadTaskDao().listOpen().single()
@@ -251,7 +251,7 @@ class OfflineDownloadEngineTest {
         val task = db.downloadTaskDao().listOpen().single()
         assertEquals(DownloadState.QUEUED, task.state)
         assertEquals(1, task.attempts)
-        // Le fichier partiel reste pour la reprise par Range.
+        // The partial file stays for a Range resume.
         assertTrue(dir.listFiles().orEmpty().any { it.name.endsWith(".part") && it.length() == 4L })
     }
 
@@ -269,10 +269,10 @@ class OfflineDownloadEngineTest {
         seed("A")
         seed("B")
         val engine = engine()
-        // Appli balayée depuis les applis récentes sans téléchargement en cours : rien ne change.
+        // App swiped away from recent apps with no download in progress: nothing changes.
         assertEquals(0, engine.recoverIfIdle(firstStart = true, userRequestedExit = true))
         assertTrue(db.downloadTaskDao().listOpen().all { it.state == DownloadState.QUEUED })
-        // Arrêt par l'utilisateur pendant un téléchargement : toute la file en pause.
+        // User stop during a download: the whole queue is paused.
         val task = db.downloadTaskDao().nextQueued()!!
         db.downloadTaskDao().markRunning(task.id, 1)
         assertEquals(2, engine.recoverIfIdle(firstStart = true, userRequestedExit = true))
@@ -291,7 +291,7 @@ class OfflineDownloadEngineTest {
     @Test
     fun networkErrorAfterProgress_doesNotCountAnAttempt() = runTest {
         seed()
-        // Premier relevé : point de départ (reprise) ; le second montre des octets reçus.
+        // First report: starting point (resume); the second shows received bytes.
         reportProgress = { onProgress ->
             onProgress(0, 10)
             onProgress(4, 10)
@@ -309,7 +309,7 @@ class OfflineDownloadEngineTest {
         val a = seed("A")
         val b = seed("B")
         val taskB = db.downloadTaskDao().listOpen().first { it.mediaId == b }
-        // Réseau facturé avec « Wi-Fi uniquement » : seule la tâche de « Télécharger maintenant » passe.
+        // Metered network with "Wi-Fi only": only the "Download now" task goes through.
         assertEquals(DrainOutcome.DONE, engine().drain(null, allowed = { setOf(taskB.id) }))
         assertTrue(db.mediaDao().getById(b)!!.hasOffline)
         assertFalse(db.mediaDao().getById(a)!!.hasOffline)
@@ -335,7 +335,7 @@ class OfflineDownloadEngineTest {
         withContext(Dispatchers.Default) {
             val drain = async { engine.drain(null) }
             started.await()
-            // « Libérer » / « Annuler » de A pendant son téléchargement.
+            // "Free up" / "Cancel" of A during its download.
             engine.withItemsStopped(listOf(a)) { db.downloadTaskDao().deleteForMedia(listOf(a)) }
             assertEquals(DrainOutcome.DONE, drain.await())
         }
@@ -348,10 +348,10 @@ class OfflineDownloadEngineTest {
     fun taskDeletedDuringDownload_stopsTheFetchAtTheNextProgress() = runTest {
         val id = seed()
         reportProgress = { onProgress ->
-            // Tâche supprimée sans passer par le moteur : le relevé suivant arrête le téléchargement.
+            // Task deleted without going through the engine: the next progress report stops the download.
             db.downloadTaskDao().deleteForMedia(listOf(id))
             onProgress(4, 10)
-            fail("Le téléchargement aurait dû s'arrêter")
+            fail("The download should have stopped")
         }
         assertEquals(DrainOutcome.DONE, engine().drain(null))
         assertFalse(db.mediaDao().getById(id)!!.hasOffline)
@@ -362,7 +362,7 @@ class OfflineDownloadEngineTest {
         val id = seed()
         val space = FakeSpace(usable = 0, allocatable = Long.MAX_VALUE / 2)
         engine(space = space).drain(null)
-        // allocateBytes demandé (une écriture ordinaire ne libère pas le cache des autres applis).
+        // allocateBytes requested (an ordinary write does not free other apps' cache).
         assertEquals(listOf(10L + OFFLINE_SPACE_MARGIN_BYTES), space.reserved)
         assertTrue(db.mediaDao().getById(id)!!.hasOffline)
     }
@@ -398,11 +398,11 @@ class OfflineDownloadEngineTest {
             val first = launch { engine.drain(null) }
             started.await()
             assertTrue(engine.isDraining)
-            // Arrêt (purge, annulation) : le passage s'arrête, la tâche repart en attente.
+            // Stop (purge, cancellation): the drain stops, the task goes back to queued.
             engine.stopAndJoin()
             assertTrue(first.isCancelled)
             assertEquals(DownloadState.QUEUED, db.downloadTaskDao().listOpen().single().state)
-            // Nouveau passage : un seul à la fois, il reprend la tâche.
+            // New drain: only one at a time, it picks the task back up.
             release.complete(Unit)
             val second = async { engine.drain(null) }
             assertEquals(DrainOutcome.DONE, second.await())
@@ -416,7 +416,7 @@ class OfflineDownloadEngineTest {
         val id = seed(cTag = "c1")
         engine().drain(null)
         val oldPath = db.cachedFileDao().get(id, CacheKind.OFFLINE)!!.path
-        // Synchro : nouvelle version, nouvelle tâche ; l'ancienne copie reste jusqu'au remplacement.
+        // Sync: new version, new task; the old copy stays until it is replaced.
         val source = db.mediaSourceDao().find(SourceKind.ONEDRIVE, "A")!!
         db.mediaSourceDao().update(source.copy(cTag = "c2"))
         db.downloadTaskDao().enqueueIfAbsent(

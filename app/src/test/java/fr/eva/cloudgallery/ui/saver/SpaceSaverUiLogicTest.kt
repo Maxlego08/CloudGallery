@@ -5,7 +5,7 @@ import fr.eva.cloudgallery.domain.model.SpaceSaverCandidate
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Ecran Economiseur d'espace : filtre d'ancienneté, sélection, résumé, lots. */
+/** Space saver screen: age filter, selection, summary, batches. */
 class SpaceSaverUiLogicTest {
 
     private val day = 24L * 60 * 60 * 1000
@@ -19,7 +19,7 @@ class SpaceSaverUiLogicTest {
     @Test
     fun ageFilter_keepsCopiesTakenBeforeTheThreshold() {
         assertEquals(5, filterByAge(all, SaverAge.ALL, now).size)
-        // Exactement 30 jours : comprise.
+        // Exactly 30 days: included.
         assertEquals(listOf(2L, 3L, 4L, 5L), filterByAge(all, SaverAge.DAYS_30, now).map { it.sourceId })
         assertEquals(listOf(4L, 5L), filterByAge(all, SaverAge.DAYS_90, now).map { it.sourceId })
         assertEquals(listOf(5L), filterByAge(all, SaverAge.YEAR, now).map { it.sourceId })

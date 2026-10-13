@@ -1,36 +1,36 @@
 package fr.eva.cloudgallery.data.dedup
 
 /*
- * Logique pure du dédoublonnage local / OneDrive (testée en JVM).
+ * Pure logic of local / OneDrive deduplication (tested on the JVM).
  *
- * Règle de fond : un fichier du téléphone et un élément OneDrive ne sont un même média que si
- * leur QuickXorHash ET leur taille sont identiques. Le nom, le dossier et la date n'entrent
- * jamais en compte. La fusion ne modifie que l'index : aucun fichier n'est touché.
+ * Core rule: a phone file and a OneDrive item are the same media item only if their
+ * QuickXorHash AND their size are identical. Name, folder and date are never taken into
+ * account. Merging only changes the index: no file is touched.
  */
 
-/** Préfixe de `media.contentHash` pour une empreinte QuickXorHash (même valeur que OneDrive). */
+/** Prefix of `media.contentHash` for a QuickXorHash (same value as OneDrive). */
 internal const val QUICK_XOR_PREFIX = "qxh:"
 
-/** `media.contentHash` d'une empreinte QuickXorHash, null si inconnue. */
+/** `media.contentHash` of a QuickXorHash, null if unknown. */
 internal fun contentHashOf(quickXorHash: String?): String? = quickXorHash?.let { QUICK_XOR_PREFIX + it }
 
 /**
- * Signature d'un fichier local au moment du calcul de son empreinte (`media_source.hashSignature`) :
- * taille, date de modification et génération MediaStore. Une autre valeur pour l'état courant de
- * la source rend l'empreinte périmée. Même forme que l'expression SQL [LOCAL_HASH_SIGNATURE_SQL].
+ * Signature of a local file when its hash was computed (`media_source.hashSignature`): size,
+ * modification date and MediaStore generation. A different value for the source's current state
+ * makes the hash stale. Same shape as the SQL expression [LOCAL_HASH_SIGNATURE_SQL].
  */
 internal fun localHashSignature(sizeBytes: Long, dateModified: Long, generation: Long): String =
     "$sizeBytes:$dateModified:$generation"
 
 /**
- * Signature courante d'une ligne `media_source` en SQL (préfixe de table compris dans les
- * requêtes qui l'insèrent) ; doit rester identique à [localHashSignature].
+ * Current signature of a `media_source` row in SQL (table prefix included by the queries that
+ * embed it); must stay identical to [localHashSignature].
  */
 internal const val LOCAL_HASH_SIGNATURE_SQL = "(sizeBytes || ':' || dateModified || ':' || generation)"
 
 /**
- * Couple candidat à la fusion : fichier local (empreinte à jour, média sans source OneDrive) et
- * élément OneDrive (média sans fichier local) de même empreinte et même taille.
+ * Merge candidate pair: local file (hash up to date, media without a OneDrive source) and
+ * OneDrive item (media without a local file) with the same hash and the same size.
  */
 data class MergeCandidateRow(
     val localSourceId: Long,
@@ -41,14 +41,14 @@ data class MergeCandidateRow(
     val sizeBytes: Long,
 )
 
-/** Fusion à faire : le média OneDrive [cloudMediaId] rejoint le média local [localMediaId]. */
+/** Merge to perform: OneDrive media [cloudMediaId] joins local media [localMediaId]. */
 data class MergePlan(val localMediaId: Long, val cloudMediaId: Long, val cloudSourceId: Long)
 
 /**
- * Fusions à faire parmi [candidates]. Chaque média n'est fusionné qu'une fois. Plusieurs fichiers
- * locaux identiques, ou plusieurs éléments OneDrive identiques (copies du même fichier) : règle
- * déterministe, par empreinte et taille, le i-ème fichier local (ordre des identifiants de
- * source) reçoit le i-ème élément OneDrive ; les éléments en surnombre restent séparés.
+ * Merges to perform among [candidates]. Each media item is merged only once. Several identical
+ * local files, or several identical OneDrive items (copies of the same file): deterministic rule,
+ * per hash and size, the i-th local file (source id order) gets the i-th OneDrive item; surplus
+ * items stay separate.
  */
 internal fun planMerges(candidates: List<MergeCandidateRow>): List<MergePlan> {
     val plans = ArrayList<MergePlan>()
@@ -59,19 +59,19 @@ internal fun planMerges(candidates: List<MergeCandidateRow>): List<MergePlan> {
             plans += MergePlan(localMediaId = local.second, cloudMediaId = cloud.second, cloudSourceId = cloud.first)
         }
     }
-    // Un média ne peut entrer que dans une fusion (deux groupes ne partagent jamais de source,
-    // mais un média local ou OneDrive pourrait apparaître dans deux groupes par une donnée incohérente).
+    // A media item can only take part in one merge (two groups never share a source, but a local
+    // or OneDrive media item could appear in two groups because of inconsistent data).
     val usedLocal = HashSet<Long>()
     val usedCloud = HashSet<Long>()
     return plans.sortedBy { it.cloudSourceId }.filter { usedLocal.add(it.localMediaId) && usedCloud.add(it.cloudMediaId) }
 }
 
-/** Média fusionné vu par la vérification : sa source locale et sa source OneDrive. */
+/** Merged media as seen by the check: its local source and its OneDrive source. */
 data class MergedRow(
     val mediaId: Long,
     val localSizeBytes: Long,
     val localQuickXorHash: String?,
-    /** Empreinte locale calculée pour l'état actuel du fichier (signature à jour). */
+    /** Local hash computed for the file's current state (signature up to date). */
     val localHashCurrent: Boolean,
     val cloudSourceId: Long,
     val cloudItemId: String,
@@ -80,11 +80,11 @@ data class MergedRow(
 )
 
 /**
- * La fusion doit être défaite : tailles différentes (fichier modifié d'un côté, certain), ou
- * deux empreintes connues et différentes (empreinte locale recalculée après une modification,
- * ou contenu OneDrive modifié). Une empreinte locale périmée mais pas encore recalculée (fichier
- * touché sans changement de taille, ex. métadonnées) ne suffit pas : la fusion est gardée
- * jusqu'au prochain calcul (en charge), qui tranche.
+ * The merge must be undone: different sizes (file modified on one side, certain), or two known
+ * and different hashes (local hash recomputed after a modification, or OneDrive content
+ * modified). A stale local hash not yet recomputed (file touched without a size change, e.g.
+ * metadata) is not enough: the merge is kept until the next computation (while charging), which
+ * decides.
  */
 internal fun shouldSplit(row: MergedRow): Boolean {
     if (row.localSizeBytes != row.cloudSizeBytes) return true
@@ -93,7 +93,7 @@ internal fun shouldSplit(row: MergedRow): Boolean {
     return local != cloud
 }
 
-/** Fichier local dont l'empreinte est à calculer. */
+/** Local file whose hash is to be computed. */
 data class HashTarget(
     val sourceId: Long,
     val mediaId: Long,
@@ -106,10 +106,10 @@ data class HashTarget(
 }
 
 /**
- * Prochain lot d'empreintes : d'abord les fichiers dont la taille existe parmi les éléments
- * OneDrive visibles ([cloudSizes] : doublons probables, utiles au dédoublonnage et à
- * l'économiseur d'espace), puis les autres ; dans chaque groupe, ordre des identifiants. Au plus
- * [maxCount] fichiers et [maxBytes] octets (au moins un fichier, même plus gros que le budget).
+ * Next batch of hashes: first the files whose size exists among visible OneDrive items
+ * ([cloudSizes]: likely duplicates, useful for deduplication and the space saver), then the
+ * others; within each group, id order. At most [maxCount] files and [maxBytes] bytes (at least
+ * one file, even if larger than the budget).
  */
 internal fun nextHashBatch(targets: List<HashTarget>, cloudSizes: Set<Long>, maxCount: Int, maxBytes: Long): List<HashTarget> {
     val ordered = targets.sortedWith(compareBy<HashTarget>({ it.sizeBytes !in cloudSizes }, { it.sourceId }))

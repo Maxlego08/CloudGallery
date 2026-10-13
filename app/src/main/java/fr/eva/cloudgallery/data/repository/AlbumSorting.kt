@@ -6,8 +6,8 @@ import java.text.Collator
 import java.util.Locale
 
 /**
- * Rang « par défaut » façon Samsung Galerie : Appareil photo, puis Captures d'écran
- * (DCIM/Screenshots chez Samsung, Pictures/Screenshots ailleurs), puis le reste.
+ * "Default" rank, Samsung Gallery style: Camera, then Screenshots (DCIM/Screenshots on Samsung,
+ * Pictures/Screenshots elsewhere), then the rest.
  */
 internal fun defaultAlbumRank(relativePath: String?): Int {
     val path = relativePath?.trim('/')?.lowercase(Locale.ROOT) ?: return 2
@@ -19,8 +19,8 @@ internal fun defaultAlbumRank(relativePath: String?): Int {
 }
 
 /**
- * Comparateur des albums : épinglés d'abord, puis selon [sort].
- * Le nom comparé est le nom affiché ([AlbumSummary.name], qui intègre déjà customName).
+ * Album comparator: pinned first, then according to [sort].
+ * The compared name is the displayed name ([AlbumSummary.name], which already includes customName).
  */
 internal fun albumComparator(sort: AlbumSort, locale: Locale = Locale.getDefault()): Comparator<AlbumSummary> {
     val collator = Collator.getInstance(locale).apply { strength = Collator.SECONDARY }

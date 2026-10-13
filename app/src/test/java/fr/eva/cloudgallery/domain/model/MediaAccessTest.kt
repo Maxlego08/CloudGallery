@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Accès aux médias d'après les autorisations, et OneDrive dans Photos sans accès local. */
+/** Media access based on permissions, and OneDrive in Photos without local access. */
 class MediaAccessTest {
 
     @Test
@@ -26,7 +26,7 @@ class MediaAccessTest {
         assertEquals(MediaAccess.NONE, mediaAccessOf(images = false, videos = false, selected = false))
     }
 
-    /** Décision utilisateur : en « OneDrive seul », Photos montre OneDrive quel que soit le réglage. */
+    /** User decision: in "OneDrive only" mode, Photos shows OneDrive regardless of the setting. */
     @Test
     fun library_withoutLocalAccess_alwaysIncludesCloudOnlyItems() {
         assertTrue(includeCloudOnlyInLibrary(showCloudInPhotos = false, access = MediaAccess.NONE))

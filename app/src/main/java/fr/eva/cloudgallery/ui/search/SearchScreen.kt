@@ -69,10 +69,10 @@ import fr.eva.cloudgallery.ui.grid.MediaGridPage
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 
 /**
- * Recherche plein texte (nom, dossier, album, date, type) : champ de saisie en haut, puis
- * suggestions pendant la saisie (« Rechercher « … » », albums correspondants, recherches
- * récentes), et résultats en grille une fois la recherche lancée (clavier, suggestion). Toucher
- * le champ pendant les résultats revient à la saisie.
+ * Full-text search (name, folder, album, date, type): input field at the top, then
+ * suggestions while typing ("Search for “…”", matching albums, recent
+ * searches), and results in a grid once the search is submitted (keyboard, suggestion). Tapping
+ * the field while results are shown goes back to typing.
  */
 @Composable
 fun SearchScreen(
@@ -109,7 +109,7 @@ fun SearchScreen(
 
     val query = submitted
     if (query == null) {
-        // Saisie : le champ prend le focus (clavier ouvert) à l'arrivée et au retour des résultats.
+        // Typing: the field takes focus (keyboard open) on arrival and when coming back from results.
         LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
         SuggestionsContent(
             input = input,
@@ -144,7 +144,7 @@ fun SearchScreen(
     }
 }
 
-/** Champ de recherche One UI dans la barre supérieure (inset de la barre d'état compris). */
+/** One UI search field in the top bar (status bar inset included). */
 @Composable
 private fun SearchBar(
     value: String,
@@ -229,7 +229,7 @@ private fun SearchBar(
     }
 }
 
-/** Suggestions pendant la saisie, ou invitation à rechercher s'il n'y a rien à proposer. */
+/** Suggestions while typing, or a prompt to search if there is nothing to suggest. */
 @Composable
 private fun SuggestionsContent(
     input: String,

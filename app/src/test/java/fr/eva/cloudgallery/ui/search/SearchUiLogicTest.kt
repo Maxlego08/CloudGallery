@@ -7,7 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Suggestions de l'écran de recherche. */
+/** Search screen suggestions. */
 class SearchUiLogicTest {
 
     private fun album(id: Long, name: String, count: Int = 3) = AlbumSummary(

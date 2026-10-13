@@ -71,8 +71,8 @@ import fr.eva.cloudgallery.ui.util.progressPercent
 import kotlin.math.max
 
 /**
- * Une page du pager : image zoomable, vidéo (affiche + bouton lecture) ou média sans fichier
- * local. Ordre des sources : fichier local, copie hors ligne, puis OneDrive (aperçu, original).
+ * One pager page: zoomable image, video (poster + play button) or media without a local file.
+ * Source order: local file, offline copy, then OneDrive (preview, original).
  */
 @Composable
 internal fun ViewerPage(
@@ -82,7 +82,7 @@ internal fun ViewerPage(
     onZoomChanged: (Boolean) -> Unit,
     onPlayVideo: (Long) -> Unit,
     cloudOriginal: CloudOriginalState,
-    /** Réseau facturé ; null tant que l'état réel n'est pas connu. */
+    /** Metered network; null until the actual state is known. */
     costlyNetwork: Boolean?,
     onHiResWanted: (mediaId: Long, wanted: Boolean, requestedLongPx: Int, previewSide: Int) -> Unit,
     onLoadOriginal: (Long) -> Unit,
@@ -90,7 +90,7 @@ internal fun ViewerPage(
     modifier: Modifier = Modifier,
 ) {
     if (media == null) {
-        // Chargement des métadonnées (instantané depuis Room) : fond noir.
+        // Loading metadata (instant from Room): black background.
         Box(modifier.fillMaxSize())
         return
     }
@@ -158,9 +158,9 @@ internal fun ViewerPage(
 }
 
 /**
- * Image conservée hors ligne : la copie (fichier de l'appli) est affichée et zoomée comme un
- * fichier local, avec l'aperçu OneDrive comme image d'attente seulement s'il est déjà en cache
- * (jamais de requête réseau pour un élément présent sur l'appareil).
+ * Image kept offline: the copy (app-owned file) is displayed and zoomed like a local file, with
+ * the OneDrive preview as a placeholder only if it is already cached (never a network request
+ * for an item present on the device).
  */
 @Composable
 private fun OfflineImagePage(
@@ -241,7 +241,7 @@ private fun VideoPage(
     }
 }
 
-/** Bouton de lecture rond au centre d'une page vidéo. */
+/** Round play button in the center of a video page. */
 @Composable
 private fun PlayButton(label: String, onPlay: () -> Unit) {
     Box(
@@ -262,10 +262,10 @@ private fun PlayButton(label: String, onPlay: () -> Unit) {
 }
 
 /**
- * Image présente uniquement sur OneDrive : grand aperçu Microsoft Graph zoomable (palier choisi
- * selon l'écran, l'image et le réseau), remplacé par l'original une fois téléchargé (zoom
- * profond : automatique sur réseau non facturé, proposé sinon). Aperçu indisponible (hors
- * connexion sans cache, session expirée…) : message explicatif.
+ * Image present only on OneDrive: large zoomable Microsoft Graph preview (tier chosen based on
+ * the screen, the image and the network), replaced by the original once downloaded (deep zoom:
+ * automatic on an unmetered network, offered otherwise). Preview unavailable (offline without
+ * cache, expired session…): explanatory message.
  */
 @Composable
 private fun CloudImagePage(
@@ -283,7 +283,7 @@ private fun CloudImagePage(
     val ref = media.cloudThumb
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
-    // Palier fixé dès que l'état réel du réseau est connu (pas de rechargement s'il change ensuite).
+    // Tier fixed as soon as the actual network state is known (no reload if it changes later).
     val networkKnown = costlyNetwork != null
     val previewSide: Int? = remember(media.id, ref, networkKnown) {
         val viewportLongPx = (max(configuration.screenWidthDp, configuration.screenHeightDp) * density.density).toInt()
@@ -295,7 +295,7 @@ private fun CloudImagePage(
         ref != null && previewSide != null -> ViewerImageSource.CloudPreview(ref, previewSide)
         else -> null
     }
-    // L'original n'apporte du détail que s'il est plus grand que l'aperçu (taille inconnue : oui).
+    // The original only adds detail if it is larger than the preview (unknown size: yes).
     val originalLarger = previewSide == null || (imageLongSide(media)?.let { it > previewSide } ?: true)
     Box(modifier.fillMaxSize()) {
         if (source != null) {
@@ -309,13 +309,13 @@ private fun CloudImagePage(
                 onHiResWanted = { wanted, requested -> onHiResWanted(media.id, wanted, requested, previewSide ?: CLOUD_PREVIEW_PX) },
             )
         } else {
-            // Ni aperçu ni original : les gestes de page (fermer, détails) restent disponibles.
+            // Neither preview nor original: page gestures (close, details) remain available.
             val scope = rememberCoroutineScope()
             val state = remember(media.id) { ZoomState(scope) }
             ZoomableBox(state = state, zoomEnabled = false, callbacks = callbacks) {}
         }
         val ready = original is CloudOriginalUi.Ready
-        // Sans aperçu possible (pas de miniature, échec) : message. Réseau pas encore connu : attente.
+        // No preview possible (no thumbnail, failure): message. Network not known yet: wait.
         if (!ready && (ref == null || previewFailed)) {
             PageMessage(
                 icon = { Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = ViewerColors.content, modifier = Modifier.size(40.dp)) },
@@ -345,8 +345,8 @@ private fun CloudImagePage(
 }
 
 /**
- * Etat de l'original sous la mention « aperçu » : proposition de chargement avec sa taille
- * (réseau facturé), progression avec annulation, ou échec avec nouvel essai.
+ * State of the original below the "preview" label: offer to load it with its size (metered
+ * network), progress with cancel, or failure with retry.
  */
 @Composable
 private fun OriginalStatusChip(
@@ -434,9 +434,9 @@ private fun OriginalStatusChip(
 }
 
 /**
- * Vidéo sans fichier local : grand aperçu Microsoft Graph (sans zoom), ou image tirée de la copie
- * hors ligne, bouton de lecture (copie hors ligne, sinon streaming depuis OneDrive), même sans
- * aperçu, et badge de durée.
+ * Video without a local file: large Microsoft Graph preview (no zoom), or a frame taken from the
+ * offline copy, play button (offline copy, otherwise streaming from OneDrive), even without a
+ * preview, and a duration badge.
  */
 @Composable
 private fun CloudVideoPage(
@@ -465,7 +465,7 @@ private fun CloudVideoPage(
                 modifier = Modifier.matchParentSize(),
             )
         }
-        // La lecture ne dépend pas de l'aperçu (Graph ne génère pas toujours de miniature vidéo).
+        // Playback does not depend on the preview (Graph does not always generate a video thumbnail).
         Box(Modifier.align(Alignment.Center)) {
             PlayButton(
                 label = stringResource(if (media.offlineCopy != null) R.string.viewer_play else R.string.viewer_play_cloud_video),
@@ -483,9 +483,9 @@ private fun CloudVideoPage(
 }
 
 /**
- * Mention « aperçu OneDrive » ou, pour une vidéo, « lecture en streaming » et badge avec sa durée.
- * [zoomForOriginal] : l'invitation à zoomer pour l'original n'apparaît que s'il est plus grand
- * que l'aperçu.
+ * "OneDrive preview" label or, for a video, "streaming playback" and a badge with its duration.
+ * [zoomForOriginal]: the prompt to zoom in for the original only appears if it is larger than
+ * the preview.
  */
 @Composable
 private fun CloudPreviewCaption(media: MediaDetails, modifier: Modifier = Modifier, zoomForOriginal: Boolean = true) {

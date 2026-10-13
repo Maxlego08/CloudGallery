@@ -28,7 +28,7 @@ data class OneUiDimens(
     val bottomBarHeight: Dp = 64.dp,
     val actionBarHeight: Dp = 64.dp,
     val appBarHeight: Dp = 56.dp,
-    /** Hauteur de la zone de grand titre (≈ 38 % de l'écran sur One UI, bornée). */
+    /** Height of the large title area (≈ 38% of the screen on One UI, bounded). */
     val largeTitleMinHeight: Dp = 180.dp,
     val largeTitleMaxHeight: Dp = 300.dp,
 )
@@ -38,7 +38,7 @@ private val LocalOneUiTypography = staticCompositionLocalOf { OneUiTypography() 
 private val LocalOneUiDimens = staticCompositionLocalOf { OneUiDimens() }
 private val LocalOneUiIsDark = staticCompositionLocalOf { false }
 
-/** Accès aux jetons du thème : `OneUiTheme.colors.accent`, etc. */
+/** Access to the theme tokens: `OneUiTheme.colors.accent`, etc. */
 object OneUiTheme {
     val colors: OneUiColors
         @Composable @ReadOnlyComposable get() = LocalOneUiColors.current
@@ -47,7 +47,7 @@ object OneUiTheme {
     val dimens: OneUiDimens
         @Composable @ReadOnlyComposable get() = LocalOneUiDimens.current
 
-    /** Thème de l'appli (réglage Clair / Sombre / Système), pas forcément celui du système. */
+    /** The app's theme (Light / Dark / System setting), not necessarily the system's. */
     val isDark: Boolean
         @Composable @ReadOnlyComposable get() = LocalOneUiIsDark.current
 }
@@ -60,9 +60,9 @@ fun isAppInDarkTheme(mode: ThemeMode): Boolean = when (mode) {
 }
 
 /**
- * Thème propre au projet : jetons One UI exposés via [OneUiTheme], et un ColorScheme Material 3
- * dérivé (pour les rares composants Material réutilisés : TextField, Switch…). Pas de couleurs dynamiques
- * Material You afin de garder l'apparence Samsung Galerie.
+ * The project's own theme: One UI tokens exposed via [OneUiTheme], and a derived Material 3
+ * ColorScheme (for the few reused Material components: TextField, Switch…). No Material You
+ * dynamic colors, in order to keep the Samsung Gallery look.
  */
 @Composable
 fun CloudGalleryTheme(

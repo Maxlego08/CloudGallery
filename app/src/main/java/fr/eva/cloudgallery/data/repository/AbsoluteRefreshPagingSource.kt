@@ -4,20 +4,20 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 
 /**
- * Enveloppe d'une source paginée par rang (LimitOffsetPagingSource de Room) qui corrige la clé de
- * rechargement après invalidation.
+ * Wrapper around an offset-paged source (Room's LimitOffsetPagingSource) that fixes the refresh
+ * key after invalidation.
  *
- * Sans placeholders, `PagingState.anchorPosition` compte à partir de la première page encore en
- * mémoire, alors que Room l'interprète comme un rang absolu. Dès que des pages ont été lâchées en
- * haut (`maxSize`) ou après un saut du défilement rapide, toute écriture en base renvoyait la grille
- * des milliers de médias plus haut. Le rang absolu de la première page (`itemsBefore`) est rajouté.
+ * Without placeholders, `PagingState.anchorPosition` counts from the first page still in memory,
+ * whereas Room interprets it as an absolute offset. As soon as pages had been dropped at the top
+ * (`maxSize`) or after a fast-scroll jump, any database write sent the grid thousands of media
+ * back up. The absolute offset of the first page (`itemsBefore`) is added.
  */
 internal class AbsoluteRefreshPagingSource<V : Any>(
     private val delegate: PagingSource<Int, V>,
 ) : PagingSource<Int, V>() {
 
     init {
-        // Invalidation dans les deux sens (sans boucle : invalidate() ne notifie qu'une fois).
+        // Invalidation in both directions (no loop: invalidate() notifies only once).
         delegate.registerInvalidatedCallback { invalidate() }
         registerInvalidatedCallback { delegate.invalidate() }
     }
@@ -30,8 +30,8 @@ internal class AbsoluteRefreshPagingSource<V : Any>(
 }
 
 /**
- * Rang de la première ligne à recharger : la moitié du chargement initial avant l'élément ancre,
- * comme Room, mais en rang absolu. Null (rechargement en haut) sans ancre ni rang connu.
+ * Offset of the first row to reload: half the initial load before the anchor item, like Room,
+ * but as an absolute offset. Null (reload at the top) without an anchor or a known offset.
  */
 internal fun <V : Any> absoluteRefreshKey(state: PagingState<Int, V>): Int? {
     val anchor = state.anchorPosition ?: return null

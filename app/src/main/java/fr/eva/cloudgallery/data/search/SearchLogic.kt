@@ -4,20 +4,20 @@ import java.text.Normalizer
 import java.util.Locale
 
 /*
- * Logique pure de la recherche plein texte (testée en JVM).
+ * Pure logic of the full-text search (tested on the JVM).
  */
 
-/** Mots pris en compte au plus dans une recherche (au-delà : ignorés). */
+/** Maximum number of words taken into account in a search (beyond that: ignored). */
 internal const val MAX_SEARCH_TOKENS = 8
 
-/** Longueur maximale d'un mot de recherche (un nom de fichier entier tient largement). */
+/** Maximum length of a search word (a whole file name fits easily). */
 internal const val MAX_SEARCH_TOKEN_LENGTH = 64
 
 private val WORD = Regex("[\\p{L}\\p{N}]+")
 
 /**
- * Libellés des mois (index 0 = janvier), en français puis en anglais, indexés dans `media_fts.dates`
- * pour qu'« août 2026 » comme « august 2026 » trouvent les médias du mois.
+ * Month labels (index 0 = January), in French then English, indexed in `media_fts.dates` so
+ * that both "août 2026" and "august 2026" find the media of that month.
  */
 internal val MONTH_LABELS = listOf(
     "janvier january", "février february", "mars march", "avril april", "mai may", "juin june",
@@ -25,19 +25,19 @@ internal val MONTH_LABELS = listOf(
     "décembre december",
 )
 
-/** Libellés des jours de la semaine, dans l'ordre de `strftime('%w')` (0 = dimanche). */
+/** Weekday labels, in `strftime('%w')` order (0 = Sunday). */
 internal val WEEKDAY_LABELS = listOf(
     "dimanche sunday", "lundi monday", "mardi tuesday", "mercredi wednesday", "jeudi thursday",
     "vendredi friday", "samedi saturday",
 )
 
-/** Libellés du type de média (« vidéo » trouve les vidéos), français puis anglais. */
+/** Media type labels ("vidéo" finds videos), French then English. */
 internal const val VIDEO_LABEL = "vidéo video"
 internal const val PHOTO_LABEL = "photo image"
 
 /**
- * Mots d'une saisie : suites de lettres et de chiffres (tout le reste sépare), en minuscules,
- * comme les découpe le tokeniseur unicode61 de l'index.
+ * Words of an input: runs of letters and digits (everything else separates), lowercased, the
+ * way the index's unicode61 tokenizer splits them.
  */
 internal fun searchTokens(input: String): List<String> =
     WORD.findAll(input.lowercase(Locale.ROOT))
@@ -46,13 +46,13 @@ internal fun searchTokens(input: String): List<String> =
         .toList()
 
 /**
- * Expression FTS4 sûre pour une saisie de l'utilisateur, ou null s'il n'y a aucun mot.
+ * Safe FTS4 expression for a user input, or null if there is no word.
  *
- * Chaque mot devient un préfixe (`mot*` : recherche au fil de la frappe, « 2026 » trouve aussi
- * « IMG_20260812 ») et les mots sont combinés en ET implicite. Aucun caractère de la syntaxe FTS
- * ne survit (guillemets, `*`, `-`, `:`, parenthèses, `^`…) et les mots sont en minuscules : les
- * opérateurs `AND`, `OR`, `NOT`, `NEAR`, sensibles à la casse, ne peuvent pas être formés. Une
- * saisie ne peut donc jamais provoquer d'erreur de syntaxe FTS.
+ * Each word becomes a prefix (`word*`: search-as-you-type, "2026" also finds "IMG_20260812")
+ * and the words are combined with an implicit AND. No FTS syntax character survives (quotes,
+ * `*`, `-`, `:`, parentheses, `^`…) and the words are lowercase: the case-sensitive operators
+ * `AND`, `OR`, `NOT`, `NEAR` cannot be formed. An input can therefore never cause an FTS syntax
+ * error.
  */
 internal fun ftsMatchExpression(input: String): String? {
     val tokens = searchTokens(input)
@@ -60,15 +60,15 @@ internal fun ftsMatchExpression(input: String): String? {
     return tokens.joinToString(" ") { "$it*" }
 }
 
-/** Texte sans accents, en minuscules (comparaison des noms d'albums, comme unicode61). */
+/** Text without accents, lowercased (album name comparison, like unicode61). */
 internal fun foldForSearch(text: String): String =
     Normalizer.normalize(text, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "")
         .lowercase(Locale.ROOT)
 
 /**
- * Nom (d'album) qui correspond à une saisie : chaque mot de la saisie est le début d'un mot du
- * nom (accents et casse ignorés), comme la recherche plein texte des médias. Saisie vide : non.
+ * (Album) name matching an input: each word of the input is the start of a word of the name
+ * (accents and case ignored), like the media full-text search. Empty input: no match.
  */
 internal fun nameMatchesSearch(name: String, input: String): Boolean {
     val wanted = searchTokens(foldForSearch(input))
@@ -77,12 +77,12 @@ internal fun nameMatchesSearch(name: String, input: String): Boolean {
     return wanted.all { w -> words.any { it.startsWith(w) } }
 }
 
-/** Recherches récentes gardées au plus. */
+/** Maximum number of recent searches kept. */
 internal const val MAX_RECENT_SEARCHES = 10
 
 /**
- * Historique après la recherche [query] : en tête, sans doublon (casse et accents ignorés,
- * espaces superflus retirés), borné à [max]. Une saisie sans mot ne change rien.
+ * History after the search [query]: at the top, without duplicates (case and accents ignored,
+ * extra whitespace removed), capped at [max]. An input without any word changes nothing.
  */
 internal fun withRecentSearch(recent: List<String>, query: String, max: Int = MAX_RECENT_SEARCHES): List<String> {
     val clean = query.trim().replace(Regex("\\s+"), " ")

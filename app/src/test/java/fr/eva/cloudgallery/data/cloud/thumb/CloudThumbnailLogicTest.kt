@@ -19,9 +19,9 @@ class CloudThumbnailLogicTest {
         assertEquals(256, cloudThumbBucket(256))
         assertEquals(384, cloudThumbBucket(300))
         assertEquals(1024, cloudThumbBucket(1024))
-        // Au-delà du dernier palier : le plus grand.
+        // Beyond the last tier: the largest one.
         assertEquals(1024, cloudThumbBucket(4000))
-        // Taille nulle ou négative : plus petit palier.
+        // Zero or negative size: smallest tier.
         assertEquals(96, cloudThumbBucket(0))
     }
 
@@ -40,7 +40,7 @@ class CloudThumbnailLogicTest {
         assertEquals("c${CLOUD_PREVIEW_PX}x$CLOUD_PREVIEW_PX", preview.path)
         assertFalse(preview.path.endsWith("_crop"))
         assertEquals("large", preview.fallback)
-        // Grand palier : repli sur le palier 1600 (puis « large » au chargement suivant).
+        // Large tier: falls back to the 1600 tier (then "large" on the next load).
         assertEquals(CloudThumbSize("c2048x2048", "c1600x1600"), cloudThumbSize(384, previewSide = 2048))
     }
 
@@ -49,7 +49,7 @@ class CloudThumbnailLogicTest {
         val size = cloudThumbSize(384, previewSide = null)
         assertEquals("c384x384_crop", effectiveThumbPath(size, customSizesRejected = false))
         assertEquals("largeSquare", effectiveThumbPath(size, customSizesRejected = true))
-        // Sans repli (96 px) : toujours la taille standard demandée.
+        // No fallback (96 px): always the requested standard size.
         val small = cloudThumbSize(96, previewSide = null)
         assertEquals("smallSquare", effectiveThumbPath(small, customSizesRejected = true))
         assertEquals("large", effectiveThumbPath(cloudThumbSize(384, CLOUD_PREVIEW_PX), customSizesRejected = true))
@@ -64,27 +64,27 @@ class CloudThumbnailLogicTest {
         assertNotEquals(key, cloudThumbKey(ref, 192, previewSide = null))
         assertEquals("odthumb:ITEM!1:ctag-1:p1600", cloudThumbKey(ref, 384, previewSide = 1600))
         assertEquals("odthumb:ITEM!1:ctag-1:p2048", cloudThumbKey(ref, 384, previewSide = 2048))
-        // L'aperçu ne dépend pas de la taille de la vue, seulement de son palier.
+        // The preview does not depend on the view size, only on its tier.
         assertEquals(cloudThumbKey(ref, 96, previewSide = 1600), cloudThumbKey(ref, 1024, previewSide = 1600))
         assertNotEquals(cloudThumbKey(ref, 96, previewSide = 1600), cloudThumbKey(ref, 96, previewSide = 2048))
     }
 
     @Test
     fun previewTier_coversViewport_boundedByImageAndNetwork() {
-        // S22 : 2340 px de grand côté.
+        // S22: 2340 px long side.
         assertEquals(2048, previewSideFor(viewportLongPx = 2340, costlyNetwork = false, imageLongPx = 4000))
         assertEquals(1600, previewSideFor(viewportLongPx = 1500, costlyNetwork = false, imageLongPx = 4000))
         assertEquals(1600, previewSideFor(viewportLongPx = 1600, costlyNetwork = false, imageLongPx = null))
         assertEquals(2048, previewSideFor(viewportLongPx = 1601, costlyNetwork = false, imageLongPx = null))
-        // Réseau facturé : au plus 1600.
+        // Metered network: at most 1600.
         assertEquals(1600, previewSideFor(viewportLongPx = 2340, costlyNetwork = true, imageLongPx = 4000))
-        // Image plus petite que l'écran : jamais un palier au-delà de ce qu'elle nécessite.
+        // Image smaller than the screen: never a tier beyond what it needs.
         assertEquals(1600, previewSideFor(viewportLongPx = 2340, costlyNetwork = false, imageLongPx = 1200))
         assertEquals(1600, previewSideFor(viewportLongPx = 2340, costlyNetwork = false, imageLongPx = 1600))
         assertEquals(2048, previewSideFor(viewportLongPx = 2340, costlyNetwork = false, imageLongPx = 1800))
-        // Taille inconnue (0) : ignorée.
+        // Unknown size (0): ignored.
         assertEquals(2048, previewSideFor(viewportLongPx = 2340, costlyNetwork = false, imageLongPx = 0))
-        // Au-delà du dernier palier : le plus grand.
+        // Beyond the last tier: the largest one.
         assertEquals(2048, previewSideFor(viewportLongPx = 3200, costlyNetwork = false, imageLongPx = null))
     }
 
@@ -109,15 +109,15 @@ class CloudThumbnailLogicTest {
         assertEquals(OriginalDecision.AUTO, decide())
         assertEquals(OriginalDecision.ASK, decide(costly = true))
         assertEquals(OriginalDecision.AUTO, decide(costly = true, allow = true))
-        // Pas de zoom profond : l'aperçu suffit.
+        // No deep zoom: the preview is enough.
         assertEquals(OriginalDecision.NOT_NEEDED, decide(deep = false))
-        // Affichage pas plus grand que l'aperçu (+20 %) : inutile.
+        // Display no larger than the preview (+20%): not needed.
         assertEquals(OriginalDecision.NOT_NEEDED, decide(requested = 1920))
         assertEquals(OriginalDecision.AUTO, decide(requested = 1921))
-        // Image pas plus grande que l'aperçu : l'original n'apporterait rien.
+        // Image no larger than the preview: the original would add nothing.
         assertEquals(OriginalDecision.NOT_NEEDED, decide(image = 1600))
         assertEquals(OriginalDecision.NOT_NEEDED, decide(image = 1200, costly = true))
-        // Dimensions inconnues : l'original peut être plus grand.
+        // Unknown dimensions: the original may be larger.
         assertEquals(OriginalDecision.ASK, decide(image = null, costly = true))
         assertEquals(OriginalDecision.AUTO, decide(image = 0))
     }
@@ -152,7 +152,7 @@ class CloudThumbnailLogicTest {
         val set = ExpiringKeySet(ttlMs = 10L) { now }
         repeat(2_000) { set.add("old$it") }
         now = 100L
-        // Plein d'entrées expirées : elles sont purgées avant l'ajout.
+        // Lots of expired entries: they are purged before adding.
         set.add("new")
         assertTrue("new" in set)
         assertFalse("old0" in set)

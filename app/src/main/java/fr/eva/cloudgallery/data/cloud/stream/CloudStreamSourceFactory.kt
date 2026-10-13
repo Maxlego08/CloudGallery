@@ -12,21 +12,21 @@ import fr.eva.cloudgallery.data.cloud.transfer.CloudDownloadUrlProvider
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Source Media3 d'un élément OneDrive lu en streaming, et moyen de forcer une nouvelle URL. */
+/** Media3 source of a streamed OneDrive item, and a way to force a new URL. */
 class RemoteStream internal constructor(
     val source: MediaSource,
     private val resolver: OneDriveStreamResolver,
 ) {
-    /** Avant de réessayer : la prochaine ouverture demande une nouvelle URL de téléchargement. */
+    /** Before retrying: the next open requests a new download URL. */
     fun invalidateUrl() = resolver.invalidate()
 }
 
 /**
- * Construit la source de lecture en streaming d'un élément OneDrive : fichier progressif lu par
- * DefaultHttpDataSource (requêtes HTTP Range pour le seek) sur l'URL de téléchargement temporaire,
- * résolue à chaque ouverture par [OneDriveStreamResolver]. Aucun en-tête d'authentification ni
- * propriété de requête par défaut : le jeton Microsoft Graph n'est jamais envoyé à l'hôte de
- * téléchargement. Pas de type MIME forcé : Media3 détecte le conteneur.
+ * Builds the streaming playback source of a OneDrive item: a progressive file read by
+ * DefaultHttpDataSource (HTTP Range requests for seeking) from the temporary download URL,
+ * resolved on every open by [OneDriveStreamResolver]. No authentication header and no default
+ * request property: the Microsoft Graph token is never sent to the download host. No forced
+ * MIME type: Media3 detects the container.
  */
 @OptIn(UnstableApi::class)
 @Singleton

@@ -68,10 +68,10 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.Formatters
 
 /**
- * Page Stockage (Paramètres) : mise en cache de tout OneDrive (estimation, confirmation,
- * progression, arrêt, « Garder à jour »), espace occupé par niveau (miniatures et aperçus,
- * originaux, copies hors ligne), plafonds des caches et vidage du cache non épinglé avec confirmation.
- * Mesure refaite à chaque retour sur la page.
+ * Storage page (Settings): caching all of OneDrive (estimate, confirmation,
+ * progress, stop, "Keep up to date"), space used per tier (thumbnails and previews,
+ * originals, offline copies), cache limits and clearing of the unpinned cache with confirmation.
+ * Measured again on every return to the page.
  */
 @Composable
 fun StorageScreen(
@@ -112,7 +112,7 @@ fun StorageScreen(
             Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
         }
     }
-    // Passage terminé : nouvelle mesure de l'espace occupé.
+    // Pass finished: measure the space used again.
     LaunchedEffect(precacheState is PrecacheState.Finished) {
         if (precacheState is PrecacheState.Finished) viewModel.refresh()
     }
@@ -234,7 +234,7 @@ private fun StorageContent(
             )
         }
 
-        // Mise en cache de tout OneDrive (vignettes et aperçus hors du plafond LRU).
+        // Caching all of OneDrive (thumbnails and previews outside the LRU limit).
         OneUiCategoryHeader(stringResource(R.string.precache_section))
         OneUiCard {
             OneUiListItem(
@@ -305,7 +305,7 @@ private fun StorageContent(
             )
         }
 
-        // Economiseur d'espace : fichiers du téléphone (jamais lancé automatiquement).
+        // Space saver: phone files (never started automatically).
         OneUiCategoryHeader(stringResource(R.string.saver_title))
         OneUiCard {
             OneUiListItem(
@@ -332,7 +332,7 @@ private fun StorageContent(
     }
 }
 
-/** Sous-titre de « Mettre en cache tout OneDrive » d'après l'état du passage. */
+/** Subtitle of "Cache all of OneDrive" based on the pass state. */
 @Composable
 private fun precacheSubtitle(state: PrecacheState, usage: StorageUsage?): String {
     val size = usage?.takeIf { it.precacheBytes > 0 }?.let {
@@ -357,7 +357,7 @@ private fun precacheSubtitle(state: PrecacheState, usage: StorageUsage?): String
     }
 }
 
-/** Estimation en cours, confirmation (ou « tout est déjà en cache »), arrêt du passage. */
+/** Estimate in progress, confirmation (or "everything is already cached"), stopping the pass. */
 @Composable
 private fun PrecacheDialogs(
     dialog: PrecacheDialog?,
@@ -419,10 +419,10 @@ private fun PrecacheDialogs(
     }
 }
 
-/** Taille lisible, tiret tant que la mesure n'est pas faite. */
+/** Human-readable size, a dash until the measurement is done. */
 private fun sizeText(bytes: Long?): String = bytes?.let { Formatters.fileSize(it) } ?: "–"
 
-/** Choix d'un plafond : un toucher sur une option l'applique et ferme la boîte. */
+/** Limit picker: tapping an option applies it and closes the dialog. */
 @Composable
 private fun CapDialog(
     title: String,

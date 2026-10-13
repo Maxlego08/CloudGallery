@@ -16,14 +16,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Dossier des copies hors ligne : `filesDir/offline/`, privé à l'appli, exclu des sauvegardes
- * (backup_rules, data_extraction_rules) et jamais vidé par le système (contrairement au cache).
- * Uniquement des copies de fichiers OneDrive créées par l'appli : aucun fichier de l'utilisateur,
- * rien dans MediaStore. Noms de fichiers sans nom d'utilisateur (voir `cacheFileName`), partagés
- * tels quels par le FileProvider (`<files-path name="offline" path="offline/"/>`).
+ * Offline copy directory: `filesDir/offline/`, private to the app, excluded from backups
+ * (backup_rules, data_extraction_rules) and never cleared by the system (unlike the cache).
+ * Only copies of OneDrive files created by the app: no user files, nothing in MediaStore. File
+ * names carry no user name (see `cacheFileName`) and are shared as-is by the FileProvider
+ * (`<files-path name="offline" path="offline/"/>`).
  *
- * Toutes les opérations sur fichiers et sur StorageManager passent par le dispatcher d'E/S ; le
- * chemin du dossier lui-même est résolu au premier usage (getFilesDir peut créer le dossier).
+ * All file and StorageManager operations go through the I/O dispatcher; the directory path itself
+ * is resolved on first use (getFilesDir may create the directory).
  */
 @Singleton
 class OfflineStore internal constructor(
@@ -44,26 +44,26 @@ class OfflineStore internal constructor(
         clock = System::currentTimeMillis,
     )
 
-    /** Dossier des copies (aucune E/S tant qu'il n'est pas utilisé). */
+    /** Copy directory (no I/O until it is used). */
     val root: File by lazy(rootProvider)
 
-    /** Fichier d'une copie enregistrée ([name] relatif au dossier), null si le nom n'est pas sûr. */
+    /** File of a recorded copy ([name] relative to the directory), null if the name is not safe. */
     fun fileOf(name: String): File? {
         if (!isSafeName(name)) return null
         return File(root, name)
     }
 
-    /** Fichier partiel (téléchargement en cours ou à reprendre) d'une copie. */
+    /** Partial file (download in progress or to be resumed) of a copy. */
     fun partOf(name: String): File? = fileOf(name)?.let { File(root, it.name + PART_SUFFIX) }
 
-    /** Crée le dossier si besoin ; lève [IOException] s'il est inaccessible. */
+    /** Creates the directory if needed; throws [IOException] if it is inaccessible. */
     suspend fun ensureRoot(): File = withContext(io) {
         val dir = root
-        if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Dossier hors ligne inaccessible")
+        if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Offline directory inaccessible")
         dir
     }
 
-    /** Volume qui héberge les copies (pour l'écran système « Gérer l'espace »). */
+    /** Volume hosting the copies (for the system "Manage space" screen). */
     suspend fun storageUuid(): UUID? = withContext(io) {
         try {
             storage()?.getUuidForPath(ensureRoot())
@@ -72,12 +72,12 @@ class OfflineStore internal constructor(
         }
     }
 
-    /** Espace libre du volume des copies (sans libérer le cache d'autres applis). */
+    /** Free space on the copies' volume (without freeing other apps' cache). */
     override suspend fun usableBytes(): Long = withContext(io) { ensureRoot().usableSpace }
 
     /**
-     * Espace utilisable pour les copies, y compris le cache d'autres applis que le système peut
-     * libérer (StorageManager.getAllocatableBytes). Repli : espace libre du volume.
+     * Space usable for the copies, including other apps' cache that the system can free
+     * (StorageManager.getAllocatableBytes). Fallback: free space on the volume.
      */
     override suspend fun allocatableBytes(): Long = withContext(io) {
         val dir = ensureRoot()
@@ -90,9 +90,9 @@ class OfflineStore internal constructor(
     }
 
     /**
-     * Demande au système de libérer [bytes] octets pour les copies (cache d'autres applis si
-     * nécessaire). Appelé au plus une fois par passage du travail (recommandation de la doc).
-     * Lève [IOException] si l'espace ne peut pas être obtenu.
+     * Asks the system to free [bytes] bytes for the copies (other apps' cache if needed). Called
+     * at most once per job pass (as recommended by the docs).
+     * Throws [IOException] if the space cannot be obtained.
      */
     override suspend fun reserve(bytes: Long): Unit = withContext(io) {
         if (bytes <= 0) return@withContext
@@ -100,7 +100,7 @@ class OfflineStore internal constructor(
         sm.allocateBytes(sm.getUuidForPath(ensureRoot()), bytes)
     }
 
-    /** Supprime les copies (et leurs fichiers partiels) de ces noms. Fichiers de l'appli uniquement. */
+    /** Deletes the copies (and their partial files) with these names. App files only. */
     suspend fun delete(names: Collection<String>): Unit = withContext(io) {
         for (name in names) {
             fileOf(name)?.delete()
@@ -108,14 +108,14 @@ class OfflineStore internal constructor(
         }
     }
 
-    /** Supprime les fichiers partiels de ces noms (téléchargements annulés). */
+    /** Deletes the partial files with these names (cancelled downloads). */
     suspend fun deleteParts(names: Collection<String>): Unit = withContext(io) {
         for (name in names) partOf(name)?.delete()
     }
 
     /**
-     * Vide le dossier des copies (purge des données OneDrive). Ne supprime que le contenu de
-     * `filesDir/offline`, vérifié avant toute suppression.
+     * Empties the copy directory (OneDrive data purge). Only deletes the contents of
+     * `filesDir/offline`, checked before any deletion.
      */
     suspend fun clear(): Unit = withContext(io) {
         val dir = root
@@ -124,10 +124,10 @@ class OfflineStore internal constructor(
     }
 
     /**
-     * Fichiers sans ligne `cached_file` ([known] = noms enregistrés) plus vieux d'une heure, et
-     * fichiers partiels abandonnés depuis plus de 24 h ; jamais ceux d'une tâche ouverte
-     * ([busy], noms de base : reprise possible). Une copie juste renommée mais pas encore
-     * enregistrée a moins d'une heure : elle n'est jamais touchée (voir [filesToSweep]).
+     * Files without a `cached_file` row ([known] = recorded names) older than one hour, and
+     * partial files abandoned for more than 24 h; never those of an open task ([busy], base
+     * names: resume possible). A copy just renamed but not yet recorded is less than one hour
+     * old: it is never touched (see [filesToSweep]).
      */
     suspend fun sweepOrphans(known: Set<String>, busy: Set<String>): Int = withContext(io) {
         val now = clock()
@@ -137,10 +137,10 @@ class OfflineStore internal constructor(
     }
 
     companion object {
-        /** Dossier des copies sous `filesDir` (exposé au partage par FileProvider). */
+        /** Copy directory under `filesDir` (exposed for sharing through FileProvider). */
         const val OFFLINE_DIR = "offline"
 
-        /** Nom simple, sans séparateur ni `.`/`..` (les noms viennent de la base, jamais de l'utilisateur). */
+        /** Plain name, with no separator nor `.`/`..` (names come from the database, never from the user). */
         internal fun isSafeName(name: String): Boolean =
             name.isNotEmpty() && name != "." && name != ".." && !name.contains('/') && !name.contains('\\') &&
                 !name.contains('\u0000')

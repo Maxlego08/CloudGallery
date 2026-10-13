@@ -80,28 +80,28 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Evénements ponctuels envoyés à l'UI. */
+/** One-off events sent to the UI. */
 sealed interface ViewerEvent {
-    /** Demande de consentement système (suppression / écriture) à lancer avec StartIntentSenderForResult. */
+    /** System consent request (delete / write) to launch with StartIntentSenderForResult. */
     data class LaunchIntentSender(val sender: IntentSender) : ViewerEvent
     data class Toast(@StringRes val message: Int, val arg: String? = null) : ViewerEvent
 
-    /** Message court au pluriel ([count] sert de quantité et d'argument). */
+    /** Short plural message ([count] is used as both quantity and argument). */
     data class PluralToast(@PluralsRes val message: Int, val count: Int) : ViewerEvent
-    /** Le recadrage a été enregistré : fermer l'éditeur. */
+    /** The crop was saved: close the editor. */
     data object CropSaved : ViewerEvent
 
-    /** Ouvrir la feuille de partage (URI `content://` en lecture seule). */
+    /** Open the share sheet (read-only `content://` URIs). */
     data class Share(val uris: List<Uri>, val mimeTypes: List<String?>) : ViewerEvent
 
-    /** Ouvrir le média dans une autre appli (URI `content://` en lecture seule). */
+    /** Open the media in another app (read-only `content://` URI). */
     data class OpenWith(val uri: Uri, val mimeType: String?) : ViewerEvent
 }
 
-/** Etat EXIF du média dont le panneau Détails est ouvert. */
+/** EXIF state of the media whose Details sheet is open. */
 data class ExifState(val mediaId: Long, val loading: Boolean, val info: ExifInfo?)
 
-/** Action en attente du résultat d'une demande de consentement système. */
+/** Action awaiting the result of a system consent request. */
 private sealed interface PendingAction {
     data object Delete : PendingAction
     data class Rotate(val uri: Uri, val degrees: Int) : PendingAction
@@ -129,14 +129,14 @@ class ViewerViewModel @Inject constructor(
 
     private val route: ViewerRoute = savedStateHandle.toRoute<ViewerRoute>()
 
-    /** Identifiants du contexte, null tant qu'ils ne sont pas chargés. */
+    /** Ids of the context, null until they are loaded. */
     val ids: StateFlow<List<Long>?> = mediaRepository.observeMediaIds(route.context)
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _currentId = MutableStateFlow(savedStateHandle.get<Long>(KEY_CURRENT) ?: route.mediaId)
 
-    /** Média affiché (mis à jour par le pager). */
+    /** Displayed media (updated by the pager). */
     val currentId: StateFlow<Long> = _currentId.asStateFlow()
 
     val currentMedia: StateFlow<MediaDetails?> = _currentId
@@ -146,14 +146,14 @@ class ViewerViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    /** Dossiers locaux (cibles de « Copier vers un dossier »). */
+    /** Local folders (targets of "Copy to folder"). */
     val localFolders: StateFlow<List<AlbumSummary>> = albumRepository.observeAlbums(AlbumSort.NAME)
         .map { albums -> albums.filter { it.type == AlbumType.LOCAL_FOLDER && !it.relativePath.isNullOrBlank() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _summaries = MutableStateFlow<Map<Long, MediaSummary>>(emptyMap())
 
-    /** Résumés chargés à la demande pour la bande de miniatures. */
+    /** Summaries loaded on demand for the thumbnail strip. */
     val summaries: StateFlow<Map<Long, MediaSummary>> = _summaries.asStateFlow()
     private val loadingSummaries = mutableSetOf<Long>()
 
@@ -162,7 +162,7 @@ class ViewerViewModel @Inject constructor(
 
     private val _busy = MutableStateFlow(false)
 
-    /** Vrai pendant une écriture (rotation, recadrage, copie). */
+    /** True during a write (rotation, crop, copy). */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     private val _events = Channel<ViewerEvent>(Channel.BUFFERED)
@@ -172,21 +172,21 @@ class ViewerViewModel @Inject constructor(
 
     private val _cloudOriginal = MutableStateFlow(CloudOriginalState(_currentId.value, CloudOriginalUi.Idle))
 
-    /** Original OneDrive de l'image courante (aperçu, téléchargement, prêt, à confirmer, échec). */
+    /** OneDrive original of the current image (preview, downloading, ready, needs confirmation, failed). */
     val cloudOriginal: StateFlow<CloudOriginalState> = _cloudOriginal.asStateFlow()
     private var originalJob: Job? = null
 
     private val _sharePreparation = MutableStateFlow<SharePreparation?>(null)
 
-    /** Téléchargement en cours avant un partage ou un « Ouvrir avec » (null sinon). */
+    /** Download in progress before a share or an "Open with" (null otherwise). */
     val sharePreparation: StateFlow<SharePreparation?> = _sharePreparation.asStateFlow()
     private var shareJob: Job? = null
 
     /**
-     * Réseau facturé (données mobiles, économiseur de données) : aperçus OneDrive plus petits.
-     * Null tant que l'état réel n'est pas lu (les pages attendent avant de choisir leur palier) :
-     * lecture directe d'abord, puis suivi des changements (la valeur initiale du flux partagé,
-     * qui peut être un état « inconnu », est ignorée).
+     * Metered network (mobile data, data saver): smaller OneDrive previews.
+     * Null until the actual state is read (pages wait before choosing their tier): direct read
+     * first, then change tracking (the shared flow's initial value, which may be an "unknown"
+     * state, is ignored).
      */
     val costlyNetwork: StateFlow<Boolean?> = flow {
         emit(network.current().costly)
@@ -195,19 +195,19 @@ class ViewerViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Etat hors ligne du média courant (copie, téléchargement en file ou en cours, échec). */
+    /** Offline state of the current media (copy, download queued or in progress, failure). */
     val offlineState: StateFlow<OfflineItemState> = _currentId
         .flatMapLatest { offline.observeItem(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OfflineItemState.NONE)
 
     private val _offlinePrompt = MutableStateFlow<OfflinePrompt?>(null)
 
-    /** Boîte de dialogue d'une action hors ligne (gros lot, attente du Wi-Fi, espace, dernière copie). */
+    /** Dialog of an offline action (large batch, waiting for Wi-Fi, storage space, last copy). */
     val offlinePrompt: StateFlow<OfflinePrompt?> = _offlinePrompt.asStateFlow()
 
     init {
-        // Tient la bande de miniatures à jour après une modification du média courant (rotation,
-        // favori, fichier local apparu ou retiré, nouveau contenu OneDrive).
+        // Keeps the thumbnail strip up to date after a change to the current media (rotation,
+        // favorite, local file appeared or removed, new OneDrive content).
         viewModelScope.launch {
             currentMedia.collect { media ->
                 if (media == null) return@collect
@@ -216,8 +216,8 @@ class ViewerViewModel @Inject constructor(
                 if (refreshed != cached) _summaries.update { it + (media.id to refreshed) }
             }
         }
-        // Nouvelle image courante, ou nouvelle version de l'image (synchro) : l'original suivi
-        // jusque-là est abandonné ; un original déjà téléchargé et à jour est affiché directement.
+        // New current image, or new version of the image (sync): the original tracked so far is
+        // dropped; an already downloaded, up-to-date original is displayed directly.
         viewModelScope.launch {
             currentMedia
                 .filterNotNull()
@@ -252,7 +252,7 @@ class ViewerViewModel @Inject constructor(
         savedStateHandle[KEY_CURRENT] = id
     }
 
-    /** Charge (par lots) les résumés manquants de la fenêtre visible de la bande de miniatures. */
+    /** Loads (in batches) the missing summaries for the visible window of the thumbnail strip. */
     fun requestSummaries(window: List<Long>) {
         val missing = synchronized(loadingSummaries) {
             window.filter { it !in _summaries.value && it !in loadingSummaries }.also { loadingSummaries.addAll(it) }
@@ -265,7 +265,7 @@ class ViewerViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Les cellules restent sur le fond de chargement.
+                // The cells stay on the loading background.
             } finally {
                 synchronized(loadingSummaries) { loadingSummaries.removeAll(missing.toSet()) }
             }
@@ -289,12 +289,12 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    // --- Original OneDrive ------------------------------------------------------------------
+    // --- OneDrive original ------------------------------------------------------------------
 
     /**
-     * Zoom profond sur l'aperçu OneDrive de [mediaId] ([wanted]) ou retour en arrière : décide
-     * s'il faut l'original (voir [originalDecision]) et le charge automatiquement, ou le propose
-     * sur un réseau facturé (sauf réglage contraire). Sans compte utilisable : aperçu seul.
+     * Deep zoom on the OneDrive preview of [mediaId] ([wanted]) or zooming back out: decides
+     * whether the original is needed (see [originalDecision]) and loads it automatically, or offers
+     * it on a metered network (unless the setting says otherwise). Without a usable account: preview only.
      */
     fun onHiResWanted(mediaId: Long, wanted: Boolean, requestedLongPx: Int, previewSide: Int) {
         val media = currentMedia.value?.takeIf { it.id == mediaId } ?: return
@@ -312,8 +312,8 @@ class ViewerViewModel @Inject constructor(
             }
             if (!wanted) return@launch
             if (!cloudAccess.canAccess()) {
-                // Zoom profond sans compte utilisable (reconnexion nécessaire, autre compte) : la
-                // pastille l'explique, si l'original apporterait vraiment plus de détail.
+                // Deep zoom without a usable account (sign-in needed, different account): the chip
+                // explains it, if the original would really bring more detail.
                 val useful = originalDecision(
                     deepZoom = true,
                     requestedLongPx = requestedLongPx,
@@ -347,7 +347,7 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** « Charger l'original » (ou nouvel essai après un échec) pour l'image courante [mediaId]. */
+    /** "Load original" (or retry after a failure) for the current image [mediaId]. */
     fun loadOriginal(mediaId: Long) {
         val media = currentMedia.value?.takeIf { it.id == mediaId } ?: return
         val target = cloudOriginalTargetOf(media) ?: return
@@ -355,7 +355,7 @@ class ViewerViewModel @Inject constructor(
         startOriginal(target, media)
     }
 
-    /** Abandonne le téléchargement de l'original (l'aperçu reste affiché). */
+    /** Abandons the original's download (the preview stays displayed). */
     fun cancelOriginal() {
         originalJob?.cancel()
         originalJob = null
@@ -389,18 +389,18 @@ class ViewerViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 val error = downloadErrorOf(e) ?: DownloadError.SERVER
-                Log.w(TAG, "Original OneDrive indisponible : $error", e)
+                Log.w(TAG, "OneDrive original unavailable: $error", e)
                 _cloudOriginal.update { if (it.mediaId == id) CloudOriginalState(id, CloudOriginalUi.Failed(error)) else it }
             }
         }
     }
 
-    // --- Copies hors ligne ----------------------------------------------------------------------
+    // --- Offline copies -------------------------------------------------------------------------
 
-    /** « Conserver hors ligne » (ou reprise d'un téléchargement en pause / en échec) du média courant. */
+    /** "Keep offline" (or resume a paused / failed download) for the current media. */
     fun keepOffline() = keep(listOf(_currentId.value), confirmed = false)
 
-    /** Gros lot confirmé par l'utilisateur. */
+    /** Large batch confirmed by the user. */
     fun confirmLargeBatch(ids: List<Long>) = keep(ids, confirmed = true)
 
     private fun keep(ids: List<Long>, confirmed: Boolean) {
@@ -416,16 +416,16 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** « Télécharger maintenant » : la file en attente du Wi-Fi utilise le réseau mobile. */
+    /** "Download now": the queue waiting for Wi-Fi uses the mobile network. */
     fun downloadOfflineNow() {
         viewModelScope.launch { runCatchingIo { offline.downloadNow() } }
     }
 
-    /** « Libérer l'espace » : immédiat, sauf pour une dernière copie (confirmation). */
+    /** "Free up space": immediate, except for a last copy (confirmation). */
     fun releaseOffline() {
         val ids = listOf(_currentId.value)
         viewModelScope.launch {
-            // Compte impossible : rien n'est supprimé (une dernière copie l'aurait été sans confirmation).
+            // Count failed: nothing is deleted (a last copy would have been deleted without confirmation).
             val lastCopies = runCatchingIo { offline.lastCopiesAmong(ids) }.getOrNull()
             when (val step = releaseStep(ids, lastCopies)) {
                 ReleaseStep.Release -> release(ids)
@@ -435,7 +435,7 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** Libération d'une dernière copie confirmée. */
+    /** Releasing a confirmed last copy. */
     fun confirmRelease(ids: List<Long>) = release(ids)
 
     private fun release(ids: List<Long>) {
@@ -446,7 +446,7 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** Annule le téléchargement hors ligne du média courant (une copie déjà présente reste). */
+    /** Cancels the offline download of the current media (an already present copy stays). */
     fun cancelOfflineDownload() {
         val id = _currentId.value
         viewModelScope.launch {
@@ -460,7 +460,7 @@ class ViewerViewModel @Inject constructor(
         _offlinePrompt.value = null
     }
 
-    /** L'autorisation des notifications a été demandée (une seule fois). */
+    /** The notification permission has been requested (only once). */
     fun markNotificationsAsked() {
         viewModelScope.launch { runCatching { settingsRepository.setOfflineNotificationsAsked(true) } }
     }
@@ -473,15 +473,15 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    // --- Partage / Ouvrir avec ----------------------------------------------------------------
+    // --- Share / Open with --------------------------------------------------------------------
 
-    /** Partage le média courant : fichier local, copie hors ligne, sinon original OneDrive téléchargé (plafonné). */
+    /** Shares the current media: local file, offline copy, otherwise downloaded OneDrive original (capped). */
     fun shareCurrent() = prepareAndSend(openWith = false)
 
-    /** « Ouvrir avec » : fichier local, copie hors ligne, sinon original OneDrive téléchargé (plafonné). */
+    /** "Open with": local file, offline copy, otherwise downloaded OneDrive original (capped). */
     fun openCurrentWith() = prepareAndSend(openWith = true)
 
-    /** Annule le téléchargement qui précède un partage. */
+    /** Cancels the download that precedes a share. */
     fun cancelSharePreparation() {
         shareJob?.cancel()
         shareJob = null
@@ -497,7 +497,7 @@ class ViewerViewModel @Inject constructor(
         }
         if (shareJob?.isActive == true) return
         shareJob = viewModelScope.launch {
-            // Copie hors ligne intacte : partagée telle quelle (aucun téléchargement).
+            // Intact offline copy: shared as is (no download).
             val copy = media.offlineCopy
             if (copy != null && withContext(io) { PlaybackSourceResolver.isOfflineFileUsable(copy) }) {
                 val uri = try {
@@ -532,7 +532,7 @@ class ViewerViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 val error = downloadErrorOf(e) ?: DownloadError.SERVER
-                Log.w(TAG, "Partage OneDrive impossible : $error", e)
+                Log.w(TAG, "OneDrive share failed: $error", e)
                 send(ViewerEvent.Toast(downloadErrorMessage(error)))
             } finally {
                 _sharePreparation.value = null
@@ -540,7 +540,7 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    // --- Suppression -------------------------------------------------------------------------
+    // --- Deletion ----------------------------------------------------------------------------
 
     fun requestDelete() {
         val uri = currentLocalUri() ?: return send(ViewerEvent.Toast(R.string.common_cloud_only_not_supported))
@@ -555,19 +555,19 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    // --- Dossier sécurisé ---------------------------------------------------------------------
+    // --- Secure Folder ------------------------------------------------------------------------
 
-    /** Appli Dossier sécurisé Samsung installée (« Déplacer vers le Dossier sécurisé »). */
+    /** Samsung Secure Folder app installed ("Move to Secure Folder"). */
     val secureFolderAvailable: StateFlow<Boolean> = flow { emit(secureFolderDetector.isInstalled()) }
         .catch { emit(false) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val secureFolderMove = SecureFolderMoveState()
 
-    /** Déplacement vers le Dossier sécurisé en cours (boîtes de dialogue). */
+    /** Move to the Secure Folder in progress (dialogs). */
     val secureFolderPrompt: StateFlow<SecureFolderPrompt?> = secureFolderMove.prompt
 
-    /** « Déplacer vers le Dossier sécurisé » : fichier du téléphone seulement. */
+    /** "Move to Secure Folder": on-device file only. */
     fun moveCurrentToSecureFolder() {
         val media = currentMedia.value ?: return
         val uri = currentLocalUri()
@@ -585,8 +585,8 @@ class ViewerViewModel @Inject constructor(
     fun dismissSecureFolder() = secureFolderMove.dismiss()
 
     /**
-     * Ajout au Dossier sécurisé confirmé par l'utilisateur : l'original va à la corbeille Android
-     * (toujours la corbeille, quel que soit le réglage), après la confirmation système.
+     * Addition to the Secure Folder confirmed by the user: the original goes to the Android trash
+     * (always the trash, whatever the setting), after the system confirmation.
      */
     fun trashAfterSecureFolder() {
         val moved = secureFolderMove.takeForTrash() ?: return
@@ -607,7 +607,7 @@ class ViewerViewModel @Inject constructor(
         val uri = media.uri
         if (uri == null || !media.hasLocal) return send(ViewerEvent.Toast(R.string.common_cloud_only_not_supported))
         if (media.type != MediaType.IMAGE || _busy.value) return
-        // Vérifier le format AVANT de demander l'autorisation d'écriture à l'utilisateur.
+        // Check the format BEFORE asking the user for write permission.
         if (!writer.canRotate(media.mimeType)) return send(ViewerEvent.Toast(R.string.data_error_rotate_unsupported))
         viewModelScope.launch {
             runCatchingIo { writer.createWriteRequest(listOf(uri)) }
@@ -619,11 +619,11 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** Rotation sans perte possible pour ce média (format dont l'orientation EXIF est modifiable). */
+    /** Lossless rotation possible for this media (format whose EXIF orientation can be modified). */
     fun canRotate(media: MediaDetails?): Boolean =
         media != null && media.type == MediaType.IMAGE && writer.canRotate(media.mimeType)
 
-    /** Résultat de la boîte de consentement système. */
+    /** Result of the system consent dialog. */
     fun onIntentSenderResult(granted: Boolean) {
         val action = pendingAction ?: return
         pendingAction = null
@@ -647,7 +647,7 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    // --- Recadrage / copie ------------------------------------------------------------------
+    // --- Crop / copy ------------------------------------------------------------------------
 
     fun saveCrop(rect: CropRect, rotationDegrees: Int) {
         val uri = currentLocalUri() ?: return send(ViewerEvent.Toast(R.string.common_cloud_only_not_supported))
@@ -714,12 +714,12 @@ class ViewerViewModel @Inject constructor(
         }
     }
 
-    /** Oublie l'EXIF en cache (ex. après rotation, le panneau relira le fichier). */
+    /** Forgets the cached EXIF (e.g. after a rotation, the sheet will re-read the file). */
     fun clearExif() {
         _exif.value = null
     }
 
-    // --- Utilitaires -------------------------------------------------------------------------
+    // --- Utilities ---------------------------------------------------------------------------
 
     private fun currentLocalUri(): Uri? {
         val media = currentMedia.value ?: return null
@@ -732,7 +732,7 @@ class ViewerViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            // L'observateur MediaStore rattrapera la modification.
+            // The MediaStore observer will catch up with the change.
         }
     }
 
@@ -755,8 +755,8 @@ class ViewerViewModel @Inject constructor(
 }
 
 /**
- * Résumé de la bande de miniatures mis à jour depuis les détails du média courant : tout ce qui
- * change l'image affichée (version, fichier local, miniature OneDrive, copie hors ligne) et le favori.
+ * Thumbnail strip summary updated from the current media's details: everything that changes the
+ * displayed image (version, local file, OneDrive thumbnail, offline copy) and the favorite flag.
  */
 internal fun refreshedSummary(cached: MediaSummary, media: MediaDetails): MediaSummary = cached.copy(
     dateModified = media.dateModified,

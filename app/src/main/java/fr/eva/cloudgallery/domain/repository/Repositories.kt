@@ -33,21 +33,21 @@ import fr.eva.cloudgallery.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Accès en lecture à la bibliothèque unifiée (locale + cloud), indépendamment de la source. */
+/** Read access to the unified library (local + cloud), regardless of the source. */
 interface MediaRepository {
-    /** Médias du contexte, du plus récent au plus ancien (dateTaken DESC, id DESC). */
+    /** Media of the context, from newest to oldest (dateTaken DESC, id DESC). */
     fun pagedMedia(context: MediaContext): Flow<PagingData<MediaSummary>> = pagedMedia(context, 0)
 
     /**
-     * Comme [pagedMedia], la première page commençant au rang [initialOffset] de la liste triée
-     * (saut du défilement rapide) ; les pages précédentes se chargent en remontant.
+     * Like [pagedMedia], with the first page starting at position [initialOffset] of the sorted
+     * list (fast-scroll jump); the previous pages load when scrolling back up.
      */
     fun pagedMedia(context: MediaContext, initialOffset: Int): Flow<PagingData<MediaSummary>>
 
-    /** Dates de prise de vue du contexte, dans le même ordre que [pagedMedia] (défilement rapide). */
+    /** Dates taken of the context, in the same order as [pagedMedia] (fast scroll). */
     fun observeDates(context: MediaContext): Flow<List<Long>>
 
-    /** Identifiants du contexte, dans le même ordre que [pagedMedia]. Utilisé par la visionneuse. */
+    /** IDs of the context, in the same order as [pagedMedia]. Used by the viewer. */
     fun observeMediaIds(context: MediaContext): Flow<List<Long>>
 
     fun observeMedia(id: Long): Flow<MediaDetails?>
@@ -56,31 +56,31 @@ interface MediaRepository {
 
     suspend fun getSummaries(ids: List<Long>): List<MediaSummary>
 
-    /** Nombre de médias parmi [ids] disposant d'un fichier local (les éléments uniquement OneDrive sont exclus). */
+    /** Number of media among [ids] that have a local file (OneDrive-only items are excluded). */
     suspend fun countWithLocalFile(ids: Collection<Long>): Int
 
-    /** Nombre de médias parmi [ids] partageables (fichier local, copie hors ligne ou élément OneDrive). */
+    /** Number of shareable media among [ids] (local file, offline copy or OneDrive item). */
     suspend fun countShareable(ids: Collection<Long>): Int
 
-    /** Eléments OneDrive visibles sans copie hors ligne parmi [ids] (« Conserver hors ligne »). */
+    /** Visible OneDrive items without an offline copy among [ids] ("Keep offline"). */
     suspend fun countKeepableOffline(ids: Collection<Long>): Int
 
-    /** Médias parmi [ids] qui ont une copie hors ligne (« Libérer l'espace »). */
+    /** Media among [ids] that have an offline copy ("Free up space"). */
     suspend fun countWithOfflineCopy(ids: Collection<Long>): Int
 
-    /** Identifiants du contexte dont la date de prise de vue est dans [startMs, endMs[, dans l'ordre de [pagedMedia]. */
+    /** IDs of the context whose date taken is in [startMs, endMs[, in the order of [pagedMedia]. */
     suspend fun idsInPeriod(context: MediaContext, startMs: Long, endMs: Long): List<Long>
 
     /**
-     * Identifiants du contexte situés entre deux médias de la liste (bornes incluses, dans
-     * n'importe quel ordre), y compris ceux qui ne sont pas encore chargés par la pagination.
+     * IDs of the context located between two media of the list (bounds included, in any
+     * order), including those not yet loaded by paging.
      */
     suspend fun idsBetween(context: MediaContext, a: MediaSummary, b: MediaSummary): List<Long>
 
-    /** Nombre de médias du contexte. */
+    /** Number of media in the context. */
     fun observeCount(context: MediaContext): Flow<Int>
 
-    /** Retrouve (ou indexe immédiatement) le média correspondant à une URI MediaStore. */
+    /** Finds (or immediately indexes) the media item matching a MediaStore URI. */
     suspend fun findByContentUri(uri: Uri): Long?
 }
 
@@ -95,24 +95,24 @@ interface AlbumRepository {
     suspend fun createVirtualAlbum(name: String): Long
     suspend fun renameAlbum(albumId: Long, name: String)
 
-    /** Supprime uniquement un album virtuel (les médias référencés ne sont pas touchés). */
+    /** Deletes only a virtual album (the referenced media are not touched). */
     suspend fun deleteVirtualAlbum(albumId: Long)
     suspend fun addToAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun removeFromAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun setPinned(albumId: Long, pinned: Boolean)
 
-    /** Tous les albums, masqués compris, triés par nom (écran « Masquer des albums »). */
+    /** All albums, hidden ones included, sorted by name ("Hide albums" screen). */
     fun observeAllAlbums(): Flow<List<AlbumSummary>>
     suspend fun setVisibility(albumId: Long, visibility: AlbumVisibility)
 
     /**
-     * Lien web du dossier OneDrive d'un album OneDrive (ouvert dans l'appli OneDrive ou le
-     * navigateur) ; null pour un autre album. Requête Graph : [fr.eva.cloudgallery.domain.model.CloudException] hors connexion.
+     * Web link of the OneDrive folder of a OneDrive album (opened in the OneDrive app or the
+     * browser); null for any other album. Graph request: [fr.eva.cloudgallery.domain.model.CloudException] when offline.
      */
     suspend fun oneDriveFolderUrl(albumId: Long): String?
 }
 
-/** Recherches récentes (sur l'appareil seulement), la plus récente en tête. */
+/** Recent searches (on the device only), most recent first. */
 interface SearchHistoryRepository {
     val recent: Flow<List<String>>
     suspend fun add(query: String)
@@ -120,33 +120,33 @@ interface SearchHistoryRepository {
     suspend fun clear()
 }
 
-/** Indexation incrémentale de MediaStore vers la base Room. */
+/** Incremental indexing from MediaStore into the Room database. */
 interface LocalMediaIndexer {
     val state: StateFlow<IndexState>
 
-    /** Synchronise MediaStore -> Room. [full] force une relecture complète. */
+    /** Syncs MediaStore -> Room. [full] forces a complete re-read. */
     suspend fun sync(full: Boolean = false)
 
-    /** Démarre l'observation des changements MediaStore (ContentObserver). Idempotent. */
+    /** Starts observing MediaStore changes (ContentObserver). Idempotent. */
     fun startObserving()
 }
 
 /**
- * Opérations d'écriture sur les fichiers locaux. Celles qui exigent une confirmation
- * système renvoient un [IntentSender] à lancer par l'UI (StartIntentSenderForResult).
+ * Write operations on local files. Those that require a system confirmation return an
+ * [IntentSender] to be launched by the UI (StartIntentSenderForResult).
  */
 interface LocalMediaWriter {
-    /** Corbeille Android (récupérable) ou suppression définitive selon [toTrash]. */
+    /** Android trash (recoverable) or permanent deletion depending on [toTrash]. */
     fun createDeleteRequest(uris: List<Uri>, toTrash: Boolean): IntentSender
     fun createWriteRequest(uris: List<Uri>): IntentSender
 
-    /** Vrai si [mimeType] permet une rotation sans perte (orientation EXIF modifiable). */
+    /** True if [mimeType] allows a lossless rotation (editable EXIF orientation). */
     fun canRotate(mimeType: String?): Boolean
 
-    /** Pivote une image de [degrees] (multiple de 90). Nécessite l'accès en écriture accordé. */
+    /** Rotates an image by [degrees] (multiple of 90). Requires granted write access. */
     suspend fun rotateImage(uri: Uri, degrees: Int): Result<Unit>
 
-    /** Enregistre une copie recadrée (rectangle normalisé 0..1) et renvoie l'URI créée. */
+    /** Saves a cropped copy (normalized 0..1 rectangle) and returns the created URI. */
     suspend fun saveCroppedCopy(
         uri: Uri,
         left: Float,
@@ -156,7 +156,7 @@ interface LocalMediaWriter {
         rotationDegrees: Int,
     ): Result<Uri>
 
-    /** Copie des fichiers locaux vers un dossier relatif (ex. "Pictures/Vacances/"). */
+    /** Copies local files to a relative folder (e.g. "Pictures/Holidays/"). */
     suspend fun copyToFolder(uris: List<Uri>, relativePath: String): Result<Int>
 }
 
@@ -175,10 +175,10 @@ interface SettingsRepository {
     suspend fun setOfflineWifiOnly(enabled: Boolean)
     suspend fun setOfflineNotificationsAsked(asked: Boolean)
 
-    /** [bytes] : une des valeurs de `ORIGINALS_CACHE_CHOICES`. */
+    /** [bytes]: one of the values of `ORIGINALS_CACHE_CHOICES`. */
     suspend fun setOriginalsCacheMaxBytes(bytes: Long)
 
-    /** [bytes] : une des valeurs de `THUMBNAIL_CACHE_CHOICES` (appliquée au prochain démarrage). */
+    /** [bytes]: one of the values of `THUMBNAIL_CACHE_CHOICES` (applied at the next start). */
     suspend fun setThumbnailCacheMaxBytes(bytes: Long)
     suspend fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     suspend fun setBackgroundSyncWifiOnly(enabled: Boolean)
@@ -186,213 +186,212 @@ interface SettingsRepository {
     suspend fun setPrecacheKeepUpdated(enabled: Boolean)
 }
 
-/** Espace occupé par l'appli et vidage du cache non épinglé (page Stockage). */
+/** Space used by the app and clearing of the unpinned cache (Storage page). */
 interface StorageRepository {
-    /** Mesure sur le disque (dispatcher d'E/S). */
+    /** Measures on disk (I/O dispatcher). */
     suspend fun usage(): StorageUsage
 
     /**
-     * Vide le cache non épinglé : miniatures et aperçus OneDrive, originaux temporaires (sauf
-     * téléchargements en cours). Les copies hors ligne ne sont jamais touchées.
+     * Clears the unpinned cache: OneDrive thumbnails and previews, temporary originals (except
+     * downloads in progress). Offline copies are never touched.
      */
     suspend fun clearCache()
 
-    /** Nouveau plafond des originaux (déjà enregistré) : nettoyage aussitôt (dispatcher d'E/S). */
+    /** New originals cap (already saved): cleanup right away (I/O dispatcher). */
     suspend fun applyOriginalsCap()
 }
 
 /**
- * « Mettre en cache tout OneDrive » : vignettes de grille et aperçus de la visionneuse de tous
- * les éléments OneDrive, téléchargés en arrière-plan (WorkManager) et gardés hors du plafond du
- * cache des miniatures.
+ * "Cache all of OneDrive": grid thumbnails and viewer previews of all OneDrive items,
+ * downloaded in the background (WorkManager) and kept outside the thumbnail cache cap.
  */
 interface OneDrivePrecacheRepository {
-    /** État du passage en cours ou du dernier passage. */
+    /** State of the current pass or of the last pass. */
     val state: Flow<PrecacheState>
 
-    /** Éléments concernés, restant à mettre en cache, taille estimée et espace libre (dispatcher d'E/S). */
+    /** Items concerned, remaining to cache, estimated size and free space (I/O dispatcher). */
     suspend fun estimate(): PrecacheEstimate
 
-    /** Lance (ou laisse continuer) le passage ; reprend sans retélécharger ce qui est déjà en cache. */
+    /** Starts (or lets continue) the pass; resumes without re-downloading what is already cached. */
     fun start()
 
-    /** Arrête le passage en cours ; ce qui est déjà en cache est gardé. */
+    /** Stops the current pass; what is already cached is kept. */
     fun cancel()
 }
 
 /**
- * Compte OneDrive (mode compte unique) vu par l'UI : connexion, déconnexion et données cloud
- * locales. Les opérations interactives ne suspendent pas l'appelant : leur issue est publiée
- * dans [signInOutcomes] et l'état dans [state].
+ * OneDrive account (single-account mode) as seen by the UI: sign-in, sign-out and local cloud
+ * data. Interactive operations do not suspend the caller: their outcome is published in
+ * [signInOutcomes] and the state in [state].
  */
 interface CloudAccountRepository {
-    /** Vrai si ce build embarque une configuration MSAL valide (sinon tout est masqué). */
+    /** True if this build ships a valid MSAL configuration (otherwise everything is hidden). */
     val isAvailable: Boolean
 
     val state: StateFlow<CloudAccountState>
 
-    /** Vrai pendant une connexion interactive (page Microsoft ouverte). */
+    /** True during an interactive sign-in (Microsoft page open). */
     val signInRunning: StateFlow<Boolean>
 
-    /** Issues des connexions interactives, une par tentative. */
+    /** Outcomes of interactive sign-ins, one per attempt. */
     val signInOutcomes: Flow<SignInOutcome>
 
-    /** Relit le compte persisté par MSAL (thread d'E/S). */
+    /** Re-reads the account persisted by MSAL (I/O thread). */
     suspend fun refresh()
 
-    /** Ouvre la page de connexion Microsoft depuis [activity]. */
+    /** Opens the Microsoft sign-in page from [activity]. */
     fun signIn(activity: Activity)
 
-    /** Reconnexion du compte courant après expiration de la session. */
+    /** Re-sign-in of the current account after the session expired. */
     fun reauthenticate(activity: Activity)
 
     /**
-     * Déconnecte le compte puis retire de l'index local toutes les données OneDrive (médias,
-     * favoris et ajouts aux albums associés, albums OneDrive). Les fichiers sur OneDrive et sur
-     * l'appareil ne sont jamais modifiés. Echec de la déconnexion : les données sont conservées.
+     * Signs the account out, then removes all OneDrive data from the local index (media,
+     * favorites and the associated album additions, OneDrive albums). Files on OneDrive and on
+     * the device are never modified. If sign-out fails, the data is kept.
      */
     suspend fun signOutAndPurge(): Result<Unit>
 
-    /** Retire les données OneDrive restées dans l'index après une session terminée. */
+    /** Removes the OneDrive data left in the index after a finished session. */
     suspend fun purgeLeftoverData(): Result<Unit>
 
-    /** Etat de la synchronisation OneDrive. */
+    /** State of the OneDrive sync. */
     val syncState: StateFlow<CloudSyncState>
 
-    /** Synchronisation OneDrive immédiate (incrémentale). */
+    /** Immediate (incremental) OneDrive sync. */
     fun syncNow()
 
-    /** Nom, adresse et quota du compte connecté (Microsoft Graph). */
+    /** Name, address and quota of the signed-in account (Microsoft Graph). */
     suspend fun loadProfile(): Result<CloudProfile>
 
     /**
-     * Le OneDrive connecté diffère de celui des données de l'index ([CloudSyncState.accountMismatch]) :
-     * après confirmation de l'utilisateur, retire les données de l'ancien compte puis synchronise
-     * le compte connecté. Les fichiers sur OneDrive et sur l'appareil ne sont jamais modifiés.
+     * The signed-in OneDrive differs from the one of the index data ([CloudSyncState.accountMismatch]):
+     * after the user confirms, removes the old account's data then syncs the signed-in
+     * account. Files on OneDrive and on the device are never modified.
      */
     suspend fun replaceMismatchedData(): Result<Unit>
 }
 
 /**
- * Synchronisation OneDrive -> index local (lecture seule côté OneDrive). Ne s'exécute que pour
- * un compte connecté ; les demandes simultanées sont regroupées.
+ * OneDrive -> local index sync (read-only on the OneDrive side). Only runs for a signed-in
+ * account; concurrent requests are coalesced.
  */
 interface CloudMediaSyncer {
     val state: StateFlow<CloudSyncState>
 
-    /** Demande une synchronisation (sans attendre). Sans effet si OneDrive est indisponible. */
+    /** Requests a sync (without waiting). No effect if OneDrive is unavailable. */
     fun requestSync(reason: CloudSyncReason)
 
     /**
-     * Synchronisation dont on attend la fin (travail de fond) : regroupée avec les demandes en
-     * cours comme [requestSync]. Vrai si OneDrive a été interrogé (même en échec).
+     * Sync whose completion is awaited (background work): coalesced with the pending requests
+     * like [requestSync]. True if OneDrive was queried (even on failure).
      */
     suspend fun syncAndWait(reason: CloudSyncReason): Boolean
 
     /**
-     * Le compte MSAL [accountId] peut accéder aux données de l'index : aucun autre lecteur
-     * détecté, et compte vérifié par le dernier passage (ou aucun compte encore vérifié).
-     * Valeurs conservées hors de la mémoire : vrai dès le démarrage du processus.
+     * The MSAL account [accountId] may access the index data: no other drive detected, and the
+     * account was verified by the last pass (or no account verified yet). Values stored outside
+     * memory: true right from process start.
      */
     suspend fun accountAllowed(accountId: String?): Boolean
 
     /**
-     * Interrompt la synchronisation en cours et exécute [block] en exclusion mutuelle avec toute
-     * synchronisation (déconnexion, purge). L'état est relu ensuite.
+     * Interrupts the current sync and runs [block] mutually exclusive with any sync (sign-out,
+     * purge). The state is re-read afterwards.
      */
     suspend fun <T> exclusive(block: suspend () -> T): T
 }
 
-/** Jeton d'accès Microsoft Graph pour le compte connecté. */
+/** Microsoft Graph access token for the signed-in account. */
 interface CloudTokenProvider {
     /**
-     * Jeton valide, renouvelé silencieusement si besoin (thread d'E/S).
-     * @throws CloudAuthRequiredException si une reconnexion interactive est nécessaire.
-     * @throws CloudException pour les autres échecs (réseau, service…).
+     * Valid token, silently renewed if needed (I/O thread).
+     * @throws CloudAuthRequiredException if an interactive sign-in is required.
+     * @throws CloudException for other failures (network, service...).
      */
     suspend fun accessToken(forceRefresh: Boolean = false): String
 
     /**
-     * Microsoft Graph a refusé (401) [token], obtenu juste avant par un renouvellement forcé :
-     * l'accès a été révoqué côté service, le compte passe en reconnexion requise. Sans effet si
-     * [token] n'est plus le jeton courant (déconnexion, autre compte entre-temps).
+     * Microsoft Graph rejected (401) [token], obtained just before by a forced renewal: access
+     * was revoked on the service side, the account switches to sign-in required. No effect if
+     * [token] is no longer the current token (sign-out, another account in the meantime).
      */
     suspend fun onTokenRejected(token: String)
 }
 
 /**
- * Copies hors ligne d'éléments OneDrive (« Conserver hors ligne » / « Libérer ») : fichiers
- * privés de l'appli, téléchargés en arrière-plan par une tâche lancée par l'utilisateur. Ni
- * MediaStore ni les fichiers de l'utilisateur ne sont jamais touchés.
+ * Offline copies of OneDrive items ("Keep offline" / "Free up"): private app files, downloaded
+ * in the background by a task started by the user. Neither MediaStore nor the user's files are
+ * ever touched.
  */
 interface OfflineRepository {
-    /** File des téléchargements et copies présentes. */
+    /** Download queue and copies present. */
     val queue: Flow<OfflineQueueState>
 
-    /** Etat hors ligne d'un média (statut, progression, erreur). */
+    /** Offline state of a media item (status, progress, error). */
     fun observeItem(mediaId: Long): Flow<OfflineItemState>
 
     /**
-     * Met en file les éléments OneDrive de [mediaIds] sans copie hors ligne. Un gros lot (plus de
-     * 200 éléments ou 1 Go) demande d'abord confirmation, sauf [confirmedLargeBatch].
+     * Queues the OneDrive items of [mediaIds] that have no offline copy. A large batch (more
+     * than 200 items or 1 GB) first asks for confirmation, unless [confirmedLargeBatch].
      */
     suspend fun keepOffline(mediaIds: Collection<Long>, confirmedLargeBatch: Boolean = false): KeepOfflineResult
 
     /**
-     * Copies hors ligne parmi [mediaIds] (visibles ou masquées) qui sont la dernière copie de
-     * l'élément : ni sur OneDrive (supprimé), ni sur l'appareil. Lève une exception si le compte
-     * est impossible : « Libérer » ne doit alors rien supprimer sans confirmation.
+     * Offline copies among [mediaIds] (visible or hidden) that are the last copy of the item:
+     * neither on OneDrive (deleted) nor on the device. Throws if the count is impossible:
+     * "Free up" must then delete nothing without confirmation.
      */
     suspend fun lastCopiesAmong(mediaIds: Collection<Long>): Int
 
     /**
-     * Supprime les copies hors ligne de [mediaIds] (et leurs téléchargements). Un élément qui
-     * n'existait plus qu'en copie hors ligne disparaît. Renvoie le nombre de copies supprimées.
+     * Deletes the offline copies of [mediaIds] (and their downloads). An item that only existed
+     * as an offline copy disappears. Returns the number of copies deleted.
      */
     suspend fun release(mediaIds: Collection<Long>): Int
 
-    /** Annule les téléchargements de [mediaIds] (une copie déjà présente est gardée). */
+    /** Cancels the downloads of [mediaIds] (a copy already present is kept). */
     suspend fun cancel(mediaIds: Collection<Long>)
 
-    /** Annule tous les téléchargements (bouton « Annuler » de la notification, écran Compte). */
+    /** Cancels all downloads ("Cancel" button of the notification, Account screen). */
     suspend fun cancelAll()
 
-    /** Reprend les téléchargements en pause ou en échec. */
+    /** Resumes paused or failed downloads. */
     suspend fun resume()
 
     /**
-     * « Télécharger maintenant » : les tâches en file à cet instant ignorent le réglage « Wi-Fi
-     * uniquement » (les suivantes le respectent de nouveau).
+     * "Download now": the tasks queued at this moment ignore the "Wi-Fi only" setting (the
+     * following ones respect it again).
      */
     suspend fun downloadNow()
 
-    /** Réglage « Wi-Fi uniquement » modifié : travail en cours ou planifié adapté aussitôt. */
+    /** "Wi-Fi only" setting changed: current or scheduled work adjusted right away. */
     suspend fun onNetworkPolicyChanged()
 
-    /** Retour au premier plan : reprise après un arrêt du processus, nettoyage, relance de la file. */
+    /** Back to the foreground: resume after a process kill, cleanup, restart of the queue. */
     suspend fun resumeIfNeeded()
 
-    /** Copies d'éléments supprimés de OneDrive en attente de décision (délai de grâce écoulé). */
+    /** Copies of items deleted from OneDrive awaiting a decision (grace period elapsed). */
     val deletedOnOneDrive: Flow<List<DeletedOnOneDriveCopy>>
 
     /**
-     * « Supprimer les copies » confirmé pour [mediaIds] (la liste montrée à l'utilisateur) :
-     * retire ces copies et leurs éléments, seulement pour ceux encore en attente de décision.
-     * Renvoie le nombre réellement traité.
+     * "Delete the copies" confirmed for [mediaIds] (the list shown to the user): removes these
+     * copies and their items, only for those still awaiting a decision. Returns the number
+     * actually processed.
      */
     suspend fun deleteCopiesOfDeletedItems(mediaIds: Collection<Long>): Int
 
     /**
-     * « Les conserver » pour [mediaIds] (la liste montrée) : ces copies restent, visibles, comme
-     * seuls exemplaires. Seulement pour ceux encore en attente de décision ; renvoie leur nombre.
+     * "Keep them" for [mediaIds] (the list shown): these copies remain, visible, as the only
+     * copies. Only for those still awaiting a decision; returns their number.
      */
     suspend fun keepCopiesOfDeletedItems(mediaIds: Collection<Long>): Int
 
-    /** Copies hors ligne supprimées par une déconnexion ou une purge, dont dernières copies. */
+    /** Offline copies deleted by a sign-out or a purge, including last copies. */
     suspend fun purgeImpact(): OfflinePurgeImpact
 }
 
-/** Copies hors ligne retirées par une purge des données OneDrive ([lastCopies] : seuls exemplaires). */
+/** Offline copies removed by a purge of OneDrive data ([lastCopies]: only remaining copies). */
 data class OfflinePurgeImpact(val copies: Int, val lastCopies: Int)
 
 interface PlaybackPositionRepository {
@@ -402,13 +401,13 @@ interface PlaybackPositionRepository {
 }
 
 /**
- * Economiseur d'espace : copies locales déjà sur OneDrive (empreinte et taille identiques),
- * jamais supprimées sans revue, confirmation et dialogue système ; toujours vers la corbeille.
+ * Space saver: local copies already on OneDrive (identical hash and size), never deleted
+ * without review, confirmation and system dialog; always to the trash.
  */
 interface SpaceSaverRepository {
-    /** Copies proposées (dispatcher d'E/S). */
+    /** Copies offered (I/O dispatcher). */
     suspend fun candidates(): SpaceSaverList
 
-    /** Copies revues encore supprimables, relues en base juste avant la demande. */
+    /** Reviewed copies still deletable, re-read from the database right before the request. */
     suspend fun revalidate(reviewed: List<SpaceSaverCandidate>): List<SpaceSaverCandidate>
 }

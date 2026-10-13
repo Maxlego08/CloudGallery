@@ -26,7 +26,7 @@ class GridSelectionLogicTest {
 
     @Test
     fun periodBounds_dayAcrossDstChangeIs25Hours() {
-        // Passage à l'heure d'hiver le 25/10/2026 à Paris : journée de 25 h.
+        // Switch to winter time on 2026-10-25 in Paris: 25-hour day.
         val (start, end) = periodBoundsMs(LocalDate.of(2026, 10, 25).toEpochDay(), GridGrouping.DAY, paris)
         assertEquals(25L * 3_600_000L, end - start)
     }
@@ -41,7 +41,7 @@ class GridSelectionLogicTest {
 
     @Test
     fun periodBounds_matchGrouping() {
-        // Tout instant de la période retombe sur le même en-tête.
+        // Any instant in the period maps to the same header.
         val epochDay = LocalDate.of(2026, 10, 6).toEpochDay()
         val (start, end) = periodBoundsMs(epochDay, GridGrouping.DAY, paris)
         assertEquals(epochDay, periodStartEpochDay(start, GridGrouping.DAY, paris))
@@ -76,16 +76,16 @@ class GridSelectionLogicTest {
     @Test
     fun localActionTarget_requiresVisibleLocalFileAndUri() {
         assertTrue(isLocalActionTarget(hasLocal = true, hasUri = true))
-        // Uniquement sur OneDrive.
+        // Only on OneDrive.
         assertFalse(isLocalActionTarget(hasLocal = false, hasUri = false))
-        // Copie locale masquée (corbeille) : plus d'URI exploitable.
+        // Local copy hidden (trash): no usable URI anymore.
         assertFalse(isLocalActionTarget(hasLocal = true, hasUri = false))
         assertFalse(isLocalActionTarget(hasLocal = false, hasUri = true))
     }
 
     @Test
     fun localActionTargets_excludeCloudOnlyItems() {
-        // Sans URI (impossible à construire en JVM), aucun élément n'est une cible locale.
+        // Without a URI (impossible to build on the JVM), no item is a local target.
         val items = listOf(summary(1, hasLocal = false, hasCloud = true), summary(2, hasLocal = true, hasCloud = true))
         assertTrue(localActionTargets(items).isEmpty())
     }
@@ -94,10 +94,10 @@ class GridSelectionLogicTest {
     fun actionCounts_useTargetsOnlyForTheSameSelection() {
         val selection = setOf(1L, 2L, 3L)
         assertEquals(ActionCounts(local = 1, skippedCloud = 2), actionCounts(selection, SelectionTargets(selection, 1)))
-        // Calcul pas encore à jour : toute la sélection, l'action filtrera elle-même.
+        // Computation not up to date yet: the whole selection, the action will filter by itself.
         assertEquals(ActionCounts(local = 3, skippedCloud = 0), actionCounts(selection, SelectionTargets(setOf(1L), 1)))
         assertEquals(ActionCounts(local = 3, skippedCloud = 0), actionCounts(selection, null))
-        // Valeur incohérente bornée.
+        // Inconsistent value clamped.
         assertEquals(ActionCounts(local = 3, skippedCloud = 0), actionCounts(selection, SelectionTargets(selection, 9)))
     }
 
@@ -114,22 +114,22 @@ class GridSelectionLogicTest {
     @Test
     fun share_enabledForCloudItems_disabledWithoutAnyShareableItem() {
         val selection = setOf(1L, 2L)
-        // Tout OneDrive : rien à supprimer, mais partageable (original téléchargé).
+        // All OneDrive: nothing to delete, but shareable (original downloaded).
         assertFalse(localActionsEnabled(selection, SelectionTargets(selection, local = 0, shareable = 2)))
         assertTrue(shareEnabled(selection, SelectionTargets(selection, local = 0, shareable = 2)))
-        // Aucune source partageable (éléments masqués) : désactivé.
+        // No shareable source (hidden items): disabled.
         assertFalse(shareEnabled(selection, SelectionTargets(selection, local = 0, shareable = 0)))
-        // Calcul en cours ou pour une autre sélection : l'action filtre elle-même.
+        // Computation in progress or for another selection: the action filters by itself.
         assertTrue(shareEnabled(selection, null))
         assertTrue(shareEnabled(selection, SelectionTargets(setOf(1L), local = 0, shareable = 0)))
         assertFalse(shareEnabled(emptySet(), null))
-        // Par défaut, partageable = local (compatibilité).
+        // By default, shareable = local (compatibility).
         assertEquals(1, SelectionTargets(selection, 1).shareable)
     }
 
     @Test
     fun contentCoordinates_removeTopPadding() {
-        // Doigt à 300 px du haut du conteneur, marge intérieure de 250 px : 50 px dans le contenu.
+        // Finger 300 px from the top of the container, 250 px padding: 50 px into the content.
         assertEquals(Offset(12f, 50f), toContentCoordinates(Offset(12f, 300f), 250))
         assertEquals(Offset(0f, -20f), toContentCoordinates(Offset(0f, 230f), 250))
         assertEquals(Offset(5f, 5f), toContentCoordinates(Offset(5f, 5f), 0))
@@ -138,7 +138,7 @@ class GridSelectionLogicTest {
     @Test
     fun offlineMenu_onlyFromCountsOfTheSameSelection() {
         val selection = setOf(1L, 2L)
-        // Calcul en cours (ou pour une autre sélection) : aucune entrée hors ligne.
+        // Computation in progress (or for another selection): no offline entry.
         assertEquals(OfflineMenuState.NONE, selectionOfflineMenu(selection, null))
         assertEquals(
             OfflineMenuState.NONE,

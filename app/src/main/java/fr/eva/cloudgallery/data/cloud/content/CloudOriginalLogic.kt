@@ -1,22 +1,22 @@
 package fr.eva.cloudgallery.data.cloud.content
 
 /*
- * Logique pure du cache temporaire des originaux OneDrive (testée en JVM).
+ * Pure logic of the temporary cache of OneDrive originals (tested on the JVM).
  */
 
-/** Espace libre gardé sur l'appareil en plus d'un original téléchargé (50 Mio). */
+/** Free space kept on the device in addition to a downloaded original (50 MiB). */
 internal const val ORIGINAL_SPACE_MARGIN_BYTES = 50L * 1024 * 1024
 
 /**
- * Un original utilisé depuis moins longtemps (affiché, partagé, ouvert dans une autre appli) n'est
- * pas évincé pour respecter le plafond : l'appli qui le lit par le FileProvider peut le faire
- * quelques minutes plus tard. Le plafond peut donc être dépassé un moment.
+ * An original used more recently than this (displayed, shared, opened in another app) is not
+ * evicted to respect the cap: the app reading it through the FileProvider may do so a few
+ * minutes later. The cap can therefore be exceeded for a while.
  */
 internal const val ORIGINAL_IN_USE_GRACE_MS = 30L * 60 * 1000
 
 /**
- * Ligne `cached_file` d'un original, vue par le nettoyage ([fileExists] : fichier présent ;
- * [pinned] : jamais supprimée par le nettoyage ni comptée dans le plafond).
+ * `cached_file` row of an original, as seen by the cleanup ([fileExists]: file present;
+ * [pinned]: never deleted by the cleanup nor counted towards the cap).
  */
 internal data class TrimRow(
     val id: Long,
@@ -27,14 +27,14 @@ internal data class TrimRow(
     val pinned: Boolean = false,
 )
 
-/** Lignes à supprimer ([drop], avec leur fichier) et à garder ([keep]) au nettoyage. */
+/** Rows to delete ([drop], with their file) and to keep ([keep]) during the cleanup. */
 internal data class TrimPlan(val drop: List<TrimRow>, val keep: List<TrimRow>)
 
 /**
- * Nettoyage LRU du cache des originaux : lignes sans fichier, originaux inutilisés depuis plus
- * de [maxAgeMs], puis les moins récemment utilisés tant que le total (lignes non épinglées)
- * dépasse [maxBytes]. Jamais retirés : un fichier en cours de téléchargement ([busy]), une ligne
- * épinglée ; pas d'éviction pour le plafond d'un original utilisé depuis moins de [inUseGraceMs].
+ * LRU cleanup of the originals cache: rows without a file, originals unused for more than
+ * [maxAgeMs], then the least recently used ones while the total (unpinned rows) exceeds
+ * [maxBytes]. Never removed: a file being downloaded ([busy]), a pinned row; no eviction for
+ * the cap of an original used less than [inUseGraceMs] ago.
  */
 internal fun planOriginalTrim(
     rows: List<TrimRow>,
@@ -66,9 +66,9 @@ internal fun planOriginalTrim(
 }
 
 /**
- * Autre nom pour un original dont le nom habituel [name] est déjà pris par un fichier (version
- * inconnue, ou fichier précédent non réutilisable) : `<base>-<nonce>.<ext>`. Le fichier existant
- * n'est jamais écrasé avant l'enregistrement du nouveau (il peut être partagé à une autre appli).
+ * Alternate name for an original whose usual name [name] is already taken by a file (unknown
+ * version, or previous file not reusable): `<base>-<nonce>.<ext>`. The existing file is never
+ * overwritten before the new one is saved (it may be shared with another app).
  */
 internal fun alternateFileName(name: String, nonce: String): String {
     val dot = name.lastIndexOf('.')

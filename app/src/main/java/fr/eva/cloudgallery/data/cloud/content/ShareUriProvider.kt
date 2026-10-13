@@ -13,10 +13,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * URI `content://` (FileProvider de l'appli) d'un fichier OneDrive téléchargé, à transmettre
- * avec une autorisation de lecture seule. L'appli qui le reçoit voit [uriFor] `displayName`
- * (nom OneDrive nettoyé), jamais le nom interne du fichier. Sur le dispatcher d'E/S :
- * FileProvider résout le chemin canonique du fichier (accès disque).
+ * `content://` URI (the app's FileProvider) of a downloaded OneDrive file, to be handed over
+ * with a read-only grant. The receiving app sees [uriFor]'s `displayName` (sanitized OneDrive
+ * name), never the file's internal name. On the I/O dispatcher: FileProvider resolves the
+ * file's canonical path (disk access).
  */
 @Singleton
 class ShareUriProvider @Inject constructor(
@@ -28,7 +28,7 @@ class ShareUriProvider @Inject constructor(
     }
 
     companion object {
-        /** Autorité déclarée dans le manifeste (`${applicationId}.fileprovider`). */
+        /** Authority declared in the manifest (`${applicationId}.fileprovider`). */
         fun authority(context: Context): String = "${context.packageName}.fileprovider"
     }
 }

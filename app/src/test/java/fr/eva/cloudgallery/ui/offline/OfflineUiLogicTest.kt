@@ -67,7 +67,7 @@ class OfflineUiLogicTest {
     fun purgeDialog_confirmDisabledWhileLoading_andWarnsWhenUnknown() {
         assertFalse(purgeConfirmEnabled(PurgeImpactUi.Loading))
         assertEquals(PurgeNotice.None, purgeNotice(PurgeImpactUi.Loading))
-        // Lecture impossible : confirmation possible, avec un avertissement prudent.
+        // Read failed: confirmation allowed, with a cautious warning.
         assertTrue(purgeConfirmEnabled(PurgeImpactUi.Unknown))
         assertEquals(PurgeNotice.Unknown, purgeNotice(PurgeImpactUi.Unknown))
         assertTrue(purgeConfirmEnabled(PurgeImpactUi.Known(0, 0)))

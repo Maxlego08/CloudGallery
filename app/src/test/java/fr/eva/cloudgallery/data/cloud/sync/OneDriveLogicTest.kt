@@ -83,7 +83,7 @@ class OneDriveLogicTest {
         assertEquals(DeltaAction.Remove("X"), classifyDeltaItem(DriveItemDto(id = "X", name = "x")))
         assertEquals(DeltaAction.Remove("F1"), classifyDeltaItem(file(mime = "application/pdf")))
         assertEquals(DeltaAction.Remove("F1"), classifyDeltaItem(file(mime = "image/svg+xml")))
-        // Type générique sans facette média : ignoré.
+        // Generic type without a media facet: ignored.
         assertEquals(DeltaAction.Remove("F1"), classifyDeltaItem(file(mime = "application/octet-stream")))
     }
 
@@ -118,7 +118,7 @@ class OneDriveLogicTest {
         val created = "2024-06-01T10:00:00Z"
         assertEquals(ms(photo), chooseDateTakenMs(photo, fs, created))
         assertEquals(ms(fs), chooseDateTakenMs(null, fs, created))
-        assertEquals(ms(fs), chooseDateTakenMs("pas une date", fs, created))
+        assertEquals(ms(fs), chooseDateTakenMs("not a date", fs, created))
         assertEquals(ms(created), chooseDateTakenMs("0001-01-01T00:00:00Z", null, created))
         assertEquals(0L, chooseDateTakenMs(null, "", null))
     }
@@ -133,7 +133,7 @@ class OneDriveLogicTest {
         assertNull(parseGraphInstantMs(null))
     }
 
-    // --- Correspondance des champs -------------------------------------------------------
+    // --- Field mapping -------------------------------------------------------------------
 
     @Test
     fun mediaFields_mapping() {
@@ -169,7 +169,7 @@ class OneDriveLogicTest {
         assertNull(m.bucketKey)
         assertNull(m.parentId)
         assertNull(m.contentHash)
-        // Sans date de prise de vue côté photo ni client : date de création du service.
+        // No capture date from the photo facet or the client: service creation date.
         assertEquals(ms("2024-06-01T10:00:00Z"), m.dateTakenMs)
     }
 
@@ -199,7 +199,7 @@ class OneDriveLogicTest {
         assertEquals(emptyList<DriveItemDto>(), lastOccurrenceById(emptyList()))
     }
 
-    // --- Dossiers ------------------------------------------------------------------------
+    // --- Folders -------------------------------------------------------------------------
 
     private val folders = listOf(
         CloudFolderFields("ROOT", null, "root", isRoot = true),
@@ -235,7 +235,7 @@ class OneDriveLogicTest {
         assertEquals(emptySet<String>(), descendantFolderIds(emptySet(), folders.values))
     }
 
-    // --- Retraits ------------------------------------------------------------------------
+    // --- Removals ------------------------------------------------------------------------
 
     private fun stamp(id: Long, externalId: String, missingSince: Long? = null) =
         CloudStamp(sourceId = id, mediaId = id * 10, externalId = externalId, missingSince = missingSince)
@@ -262,7 +262,7 @@ class OneDriveLogicTest {
         val expired = stamp(2, "B", missingSince = now - MISSING_GRACE_MS)
         val plan = planCloudRemovals(listOf(recent, expired), seen = null, now = now)
         assertEquals(listOf(expired), plan.purge)
-        // Déjà masquée : ni re-masquée ni purgée pendant le délai de grâce, même absente d'une énumération complète.
+        // Already hidden: neither re-hidden nor purged during the grace period, even if absent from a full enumeration.
         val full = planCloudRemovals(listOf(recent), seen = emptySet(), now = now)
         assertTrue(full.hide.isEmpty())
         assertTrue(full.purge.isEmpty())
@@ -274,11 +274,11 @@ class OneDriveLogicTest {
         assertFalse(shouldRunForegroundSync(lastSyncAt = now - 60_000, retryNotBefore = 0, now = now))
         assertTrue(shouldRunForegroundSync(lastSyncAt = now - FOREGROUND_SYNC_MIN_INTERVAL_MS, retryNotBefore = 0, now = now))
         assertFalse(shouldRunForegroundSync(lastSyncAt = 0, retryNotBefore = now + 1, now = now))
-        // Horloge reculée : la synchro n'est pas bloquée.
+        // Clock moved back: sync is not blocked.
         assertTrue(shouldRunForegroundSync(lastSyncAt = now + 3_600_000, retryNotBefore = 0, now = now))
     }
 
-    // --- Départ de synchro et liaison au lecteur ------------------------------------------
+    // --- Sync start and drive binding ---------------------------------------------------
 
     @Test
     fun cursorVersion_roundTrip() {
@@ -293,7 +293,7 @@ class OneDriveLogicTest {
     @Test
     fun planSyncStart_firstRunOrUnboundCursorIsFullAndNeverPurges() {
         assertEquals(SyncStart.Full, planSyncStart(null, null, "D1", "s1", hasIndexedData = false))
-        // Premier passage interrompu avant la liaison : on adopte le lecteur courant.
+        // First run interrupted before binding: the current drive is adopted.
         assertEquals(SyncStart.Full, planSyncStart(null, null, "D1", "s1", hasIndexedData = true))
     }
 
@@ -305,9 +305,9 @@ class OneDriveLogicTest {
 
     @Test
     fun planSyncStart_boundButNoLinkOrNewSelect_isFull() {
-        // Enumération complète interrompue : elle reprend du début, sur le même lecteur.
+        // Interrupted full enumeration: it restarts from the beginning, on the same drive.
         assertEquals(SyncStart.Full, planSyncStart(null, "D1|s1", "D1", "s1", hasIndexedData = true))
-        // $select modifié : le deltaLink enregistré porte l'ancien, nouvelle énumération complète.
+        // $select changed: the saved deltaLink carries the old one, so a new full enumeration.
         assertEquals(SyncStart.Full, planSyncStart("https://graph.microsoft.com/x", "D1|s0", "D1", "s1", hasIndexedData = true))
         assertEquals(SyncStart.Full, planSyncStart("https://graph.microsoft.com/x", "D1", "D1", "s1", hasIndexedData = true))
     }
@@ -317,14 +317,14 @@ class OneDriveLogicTest {
         val link = "https://graph.microsoft.com/x"
         assertEquals(SyncStart.AccountMismatch, planSyncStart(link, "D1|s1", "D2", "s1", hasIndexedData = true))
         assertEquals(SyncStart.AccountMismatch, planSyncStart(null, "D1|s1", "D2", "s1", hasIndexedData = true))
-        // Aucune donnée à protéger : le nouveau lecteur est simplement adopté.
+        // No data to protect: the new drive is simply adopted.
         assertEquals(SyncStart.Full, planSyncStart(link, "D1|s1", "D2", "s1", hasIndexedData = false))
     }
 
     @Test
     fun planSyncStart_afterRestoredFolderDecision_isFullEvenIfRunWasInterrupted() {
-        // Dossier restauré : le deltaLink est effacé avec la page. Un passage interrompu ensuite
-        // reprend par une énumération complète, jamais depuis l'ancien deltaLink.
+        // Restored folder: the deltaLink is cleared along with the page. A run interrupted afterwards
+        // resumes with a full enumeration, never from the old deltaLink.
         assertEquals(SyncStart.Full, planSyncStart(null, "D1|s1", "D1", "s1", hasIndexedData = true))
     }
 
@@ -332,10 +332,10 @@ class OneDriveLogicTest {
     fun deltaPageStep_restoredFolderRestartsAtOnce() {
         val next = "https://graph.microsoft.com/next"
         val delta = "https://graph.microsoft.com/delta"
-        // Passage incrémental : la reprise complète n'attend ni les pages suivantes ni le deltaLink.
+        // Incremental run: the full restart waits for neither the following pages nor the deltaLink.
         assertEquals(DeltaPageStep.RestartFull, deltaPageStep(full = false, restoredFolderWithHiddenItems = true, next, null))
         assertEquals(DeltaPageStep.RestartFull, deltaPageStep(full = false, restoredFolderWithHiddenItems = true, null, delta))
-        // Déjà en énumération complète : le flux continue normalement.
+        // Already in a full enumeration: the flow continues normally.
         assertEquals(DeltaPageStep.NextPage(next), deltaPageStep(full = true, restoredFolderWithHiddenItems = true, next, null))
         assertEquals(DeltaPageStep.Finish(delta), deltaPageStep(full = true, restoredFolderWithHiddenItems = true, null, delta))
     }
@@ -352,32 +352,32 @@ class OneDriveLogicTest {
 
     @Test
     fun restoredRetryNotBefore_keepsPendingPauseOnly() {
-        // Pause Graph encore en cours après un redémarrage : respectée.
+        // Graph pause still running after a restart: honoured.
         assertEquals(now + 30 * 60_000L, restoredRetryNotBefore(now + 30 * 60_000L, now))
-        // Pause écoulée ou absente.
+        // Pause elapsed or absent.
         assertEquals(0L, restoredRetryNotBefore(now - 1, now))
         assertEquals(0L, restoredRetryNotBefore(now, now))
         assertEquals(0L, restoredRetryNotBefore(0L, now))
-        // Valeur anormalement lointaine (horloge reculée) : ignorée.
+        // Abnormally distant value (clock moved back): ignored.
         assertEquals(0L, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS + 1, now))
         assertEquals(now + MAX_STORED_THROTTLE_MS, restoredRetryNotBefore(now + MAX_STORED_THROTTLE_MS, now))
     }
 
     @Test
     fun accountAllowed_onlyForTheVerifiedAccount_andNeverAfterAMismatch() {
-        // Index lié au compte A par le dernier passage.
+        // Index bound to account A by the last run.
         assertTrue(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = false))
-        // Autre compte connecté : bloqué jusqu'à ce qu'un passage vérifie son lecteur.
+        // Another account signed in: blocked until a run verifies its drive.
         assertFalse(cloudAccountAllowed("B", verifiedAccountId = "A", mismatch = false))
         assertFalse(cloudAccountAllowed(null, verifiedAccountId = "A", mismatch = false))
-        // Aucun compte vérifié (index vide, ou données d'avant la vérification) : permis.
+        // No verified account (empty index, or data from before verification): allowed.
         assertTrue(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = false))
-        // Autre lecteur détecté : bloqué même pour le compte vérifié, jusqu'à la purge.
+        // Other drive detected: blocked even for the verified account, until the purge.
         assertFalse(cloudAccountAllowed("A", verifiedAccountId = "A", mismatch = true))
         assertFalse(cloudAccountAllowed("B", verifiedAccountId = null, mismatch = true))
     }
 
-    // --- Marqueurs de suppression des dossiers ---------------------------------------------
+    // --- Folder tombstones ----------------------------------------------------------------
 
     /** ROOT > P > C > G ; ROOT > Q. */
     private val tree = listOf(
@@ -391,7 +391,7 @@ class OneDriveLogicTest {
     @Test
     fun tombstones_goneFolderWithHiddenItemsInSubtree_isMarkedWithItsAncestors() {
         val plan = planFolderTombstones(tree, markers = emptySet(), gone = setOf("P", "C", "G"), keepVisible = emptySet(), hiddenFolders = setOf("G"))
-        // P et C n'ont pas d'élément mais rattachent G au dossier restauré.
+        // P and C have no items but link G to the restored folder.
         assertEquals(setOf("P", "C", "G"), plan.mark)
         assertTrue(plan.delete.isEmpty())
     }
@@ -406,7 +406,7 @@ class OneDriveLogicTest {
     @Test
     fun tombstones_existingMarkers_areDeletedOnceNothingHiddenRemains_andNeverRemarked() {
         val kept = planFolderTombstones(tree, markers = setOf("P", "C", "G"), gone = emptySet(), keepVisible = emptySet(), hiddenFolders = setOf("C"))
-        // P et C restent (déjà marqués : rien à remarquer) ; G n'a plus rien sous lui.
+        // P and C stay (already marked: nothing to re-mark); G has nothing left under it.
         assertTrue(kept.mark.isEmpty())
         assertEquals(setOf("G"), kept.delete)
 
@@ -425,7 +425,7 @@ class OneDriveLogicTest {
     fun subtreeHasHiddenItems_followsDescendantsOnly() {
         assertTrue(subtreeHasHiddenItems(setOf("P"), tree, hiddenFolders = setOf("G")))
         assertTrue(subtreeHasHiddenItems(setOf("G"), tree, hiddenFolders = setOf("G")))
-        // Un frère ou un ancêtre masqué ne concerne pas ce dossier.
+        // A hidden sibling or ancestor does not concern this folder.
         assertFalse(subtreeHasHiddenItems(setOf("Q"), tree, hiddenFolders = setOf("G")))
         assertFalse(subtreeHasHiddenItems(setOf("C"), tree, hiddenFolders = setOf("P")))
         assertFalse(subtreeHasHiddenItems(emptySet(), tree, hiddenFolders = setOf("G")))

@@ -13,32 +13,32 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Appels Microsoft Graph utilisés par CloudGallery (lecture seule, OneDrive personnel).
- * Les liens nextLink / deltaLink sont utilisés tels quels, jamais reconstruits.
+ * Microsoft Graph calls used by CloudGallery (read-only, personal OneDrive).
+ * nextLink / deltaLink links are used as is, never rebuilt.
  */
 @Singleton
 class GraphApi @Inject constructor(
     private val http: GraphHttpClient,
 ) {
 
-    /** Profil : nom affiché et adresse. */
+    /** Profile: display name and address. */
     suspend fun me(): MeDto = getJson("$GRAPH_BASE/me?\$select=displayName,mail,userPrincipalName", MeDto.serializer())
 
-    /** Lecteur OneDrive : identifiant stable (liaison du curseur) et quota. */
+    /** OneDrive drive: stable identifier (cursor binding) and quota. */
     suspend fun drive(): DriveDto = getJson("$GRAPH_BASE/me/drive?\$select=id,driveType,quota", DriveDto.serializer())
 
-    /** Une page de la requête delta ([url] : delta initial, nextLink, deltaLink ou URL de reprise). */
+    /** One page of the delta query ([url]: initial delta, nextLink, deltaLink or resume URL). */
     suspend fun deltaPage(url: String): DeltaPage = getJson(url, DeltaPage.serializer())
 
-    /** Delta initial sur tout le lecteur (énumération complète), avec la liste de champs [DELTA_SELECT]. */
+    /** Initial delta over the whole drive (full enumeration), with the [DELTA_SELECT] field list. */
     fun initialDeltaUrl(): String = buildInitialDeltaUrl()
 
     /**
-     * Contenu de la miniature [size] (taille standard ou personnalisée `c{L}x{H}[_crop]`) de
-     * l'élément [itemId] : `GET /me/drive/items/{id}/thumbnails/0/{size}/content`. Graph répond
-     * par une redirection vers une URL de miniature, suivie par OkHttp sans l'en-tête
-     * Authorization (autre hôte). [read] reçoit le corps et son type MIME (réponse fermée ensuite).
-     * Peu de nouvelles tentatives : une miniature est redemandée au prochain affichage.
+     * Content of thumbnail [size] (standard size or custom `c{W}x{H}[_crop]`) of item [itemId]:
+     * `GET /me/drive/items/{id}/thumbnails/0/{size}/content`. Graph responds with a redirect to a
+     * thumbnail URL, which OkHttp follows without the Authorization header (different host).
+     * [read] receives the body and its MIME type (the response is closed afterwards).
+     * Few retries: a thumbnail is requested again the next time it is displayed.
      */
     suspend fun <T> thumbnailContent(
         itemId: String,
@@ -47,15 +47,15 @@ class GraphApi @Inject constructor(
     ): T = http.get(thumbnailContentUrl(itemId, size), accept = ACCEPT_IMAGE, maxRetries = THUMBNAIL_MAX_RETRIES) { response ->
         val body = response.body
         if (body.contentLength() > THUMBNAIL_MAX_BYTES) {
-            throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Miniature trop volumineuse"))
+            throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Thumbnail too large"))
         }
         read(body.source(), body.contentType()?.let { "${it.type}/${it.subtype}" })
     }
 
     /**
-     * Taille, version et URL de téléchargement temporaire (`@microsoft.graph.downloadUrl`) d'un
-     * élément. L'URL pré-authentifiée vaut un jeton : elle n'est ni journalisée ni persistée, et
-     * une réponse illisible est signalée sans son contenu (qui pourrait la contenir).
+     * Size, version and temporary download URL (`@microsoft.graph.downloadUrl`) of an item. The
+     * pre-authenticated URL is as good as a token: it is neither logged nor persisted, and an
+     * unreadable response is reported without its content (which might contain it).
      */
     suspend fun downloadInfo(itemId: String): CloudDownloadInfo =
         http.get(downloadInfoUrl(itemId), maxRetries = DOWNLOAD_INFO_MAX_RETRIES) { response ->
@@ -67,7 +67,7 @@ class GraphApi @Inject constructor(
                 throw CloudException(CloudErrorCode.SERVER)
             }
             val url = dto.downloadUrl?.takeIf { isDownloadUrlAcceptable(it) }
-                ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("URL de téléchargement absente"))
+                ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Missing download URL"))
             CloudDownloadInfo(
                 itemId = dto.id,
                 sizeBytes = dto.size ?: 0L,
@@ -78,12 +78,12 @@ class GraphApi @Inject constructor(
             )
         }
 
-    /** Lien web (`webUrl`) d'un élément ou dossier OneDrive, ouvert dans l'appli OneDrive ou le navigateur. */
+    /** Web link (`webUrl`) of a OneDrive item or folder, opened in the OneDrive app or the browser. */
     suspend fun webUrl(itemId: String): String {
         val url = "${downloadInfoUrl(itemId)}?\$select=webUrl"
         return getJson(url, WebUrlDto.serializer()).webUrl
             ?.takeIf { it.startsWith("https://") }
-            ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Lien web absent"))
+            ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Missing web link"))
     }
 
     private suspend fun <T> getJson(url: String, deserializer: DeserializationStrategy<T>): T =
@@ -103,15 +103,15 @@ class GraphApi @Inject constructor(
         private const val ACCEPT_IMAGE = "image/*"
         private const val THUMBNAIL_MAX_RETRIES = 1
 
-        /** Demandée juste avant une lecture : quelques nouvelles tentatives seulement. */
+        /** Requested right before playback: only a few retries. */
         private const val DOWNLOAD_INFO_MAX_RETRIES = 2
 
-        /** Une miniature pèse quelques dizaines à centaines de Ko : au-delà, réponse inattendue. */
+        /** A thumbnail weighs tens to hundreds of KB: anything beyond is an unexpected response. */
         private const val THUMBNAIL_MAX_BYTES = 16L * 1024 * 1024
     }
 }
 
-/** URL du contenu d'une miniature ; l'identifiant et la taille sont encodés comme segments de chemin. */
+/** URL of a thumbnail's content; the identifier and size are encoded as path segments. */
 internal fun thumbnailContentUrl(itemId: String, size: String): String =
     "${GraphApi.GRAPH_BASE}/me/drive/items".toHttpUrl().newBuilder()
         .addPathSegment(itemId)
@@ -123,10 +123,10 @@ internal fun thumbnailContentUrl(itemId: String, size: String): String =
         .toString()
 
 /**
- * URL de `GET /me/drive/items/{id}` (l'identifiant est encodé comme un segment de chemin). Sans
- * `$select` : l'annotation `@microsoft.graph.downloadUrl` fait partie de la réponse complète d'un
- * fichier, alors qu'avec `$select` OneDrive personnel peut ne pas la renvoyer (originaux, lecture
- * vidéo et téléchargements tous en échec sur appareil).
+ * URL of `GET /me/drive/items/{id}` (the identifier is encoded as a path segment). No
+ * `$select`: the `@microsoft.graph.downloadUrl` annotation is part of a file's full response,
+ * whereas with `$select` personal OneDrive may not return it (originals, video playback and
+ * downloads all failing on device).
  */
 internal fun downloadInfoUrl(itemId: String): String =
     "${GraphApi.GRAPH_BASE}/me/drive/items".toHttpUrl().newBuilder()
@@ -135,9 +135,9 @@ internal fun downloadInfoUrl(itemId: String): String =
         .toString()
 
 /**
- * URL de téléchargement utilisable : HTTPS uniquement (elle transporte une autorisation
- * temporaire), et jamais l'hôte Microsoft Graph (le jeton Bearer n'y est jamais joint, mais un
- * lien Graph n'a rien à faire ici).
+ * Usable download URL: HTTPS only (it carries a temporary authorization), and never the
+ * Microsoft Graph host (the Bearer token is never attached to it, but a Graph link has no
+ * business here).
  */
 internal fun isDownloadUrlAcceptable(url: String): Boolean {
     val parsed = url.toHttpUrlOrNull() ?: return false
@@ -145,8 +145,8 @@ internal fun isDownloadUrlAcceptable(url: String): Boolean {
 }
 
 /**
- * URL du delta initial (tout le lecteur). `$select` et les virgules restent littéraux, comme
- * dans la documentation Microsoft Graph ([DELTA_SELECT] ne contient que des lettres et des virgules).
+ * Initial delta URL (whole drive). `$select` and the commas stay literal, as in the Microsoft
+ * Graph documentation ([DELTA_SELECT] contains only letters and commas).
  */
 internal fun buildInitialDeltaUrl(): String =
     "${GraphApi.GRAPH_BASE}/me/drive/root/delta".toHttpUrl().newBuilder()

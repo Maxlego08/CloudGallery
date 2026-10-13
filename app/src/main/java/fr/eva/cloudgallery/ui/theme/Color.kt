@@ -3,9 +3,9 @@ package fr.eva.cloudgallery.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
-// Palette inspirée de One UI 8 (valeurs approchées, aucune ressource Samsung embarquée).
+// Palette inspired by One UI 8 (approximate values, no Samsung resources bundled).
 
-/** Bleu d'accent One UI. */
+/** One UI accent blue. */
 val OneUiBlue = Color(0xFF3E91FF)
 val OneUiBlueDark = Color(0xFF4E9BFF)
 val OneUiRed = Color(0xFFF2453D)
@@ -13,24 +13,24 @@ val OneUiFavoriteRed = Color(0xFFFF4B4B)
 
 @Immutable
 data class OneUiColors(
-    /** Fond des écrans de contenu (grilles). */
+    /** Background of content screens (grids). */
     val background: Color,
-    /** Fond des écrans de type « liste de réglages » (cartes posées dessus). */
+    /** Background of "settings list" screens (with cards laid on top). */
     val groupedBackground: Color,
-    /** Cartes arrondies posées sur [groupedBackground]. */
+    /** Rounded cards laid on [groupedBackground]. */
     val card: Color,
     val textPrimary: Color,
     val textSecondary: Color,
     val textTertiary: Color,
     val accent: Color,
     val divider: Color,
-    /** Fond des panneaux inférieurs et menus contextuels. */
+    /** Background of bottom sheets and context menus. */
     val sheet: Color,
-    /** Barre de navigation inférieure. */
+    /** Bottom navigation bar. */
     val bottomBar: Color,
-    /** Pastille de l'onglet sélectionné. */
+    /** Pill of the selected tab. */
     val tabIndicator: Color,
-    /** Fond des cellules pendant le chargement. */
+    /** Cell background while loading. */
     val placeholder: Color,
     val selectionOverlay: Color,
     val checkboxBorder: Color,
@@ -79,7 +79,7 @@ val DarkOneUiColors = OneUiColors(
     isDark = true,
 )
 
-/** La visionneuse est toujours sur fond noir, comme dans Samsung Galerie. */
+/** The viewer is always on a black background, as in Samsung Gallery. */
 object ViewerColors {
     val background = Color.Black
     val barScrim = Color(0x66000000)

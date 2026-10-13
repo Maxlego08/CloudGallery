@@ -6,36 +6,36 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.math.min
 
 /*
- * Logique pure des appels Microsoft Graph (testée en JVM) : classement des statuts HTTP,
- * Retry-After, attente exponentielle et URL de reprise après un 410.
+ * Pure logic of Microsoft Graph calls (tested on the JVM): HTTP status classification,
+ * Retry-After, exponential backoff and resume URL after a 410.
  */
 
-/** Hôte de Microsoft Graph : le jeton n'est jamais envoyé ailleurs. */
+/** Microsoft Graph host: the token is never sent anywhere else. */
 internal const val GRAPH_HOST = "graph.microsoft.com"
 
-/** Attente exponentielle sans Retry-After : 2 s, 4 s, 8 s… plafonnée à 60 s. */
+/** Exponential backoff without Retry-After: 2 s, 4 s, 8 s… capped at 60 s. */
 internal const val BACKOFF_BASE_MS = 2_000L
 internal const val BACKOFF_CAP_MS = 60_000L
 
-/** Nombre maximal de nouvelles tentatives pour une même requête limitée (429/503…). */
+/** Maximum number of retries for the same throttled request (429/503…). */
 internal const val MAX_RETRIES = 5
 
-/** Retry-After plus long : on abandonne (la synchro sera retentée plus tard). */
+/** Longer Retry-After: give up (the sync will be retried later). */
 internal const val RETRY_AFTER_MAX_MS = 10 * 60_000L
 
-/** Nouvelles tentatives après une erreur réseau (connexion coupée, délai dépassé). */
+/** Retries after a network error (connection dropped, timeout). */
 internal const val IO_MAX_RETRIES = 2
 
 internal enum class GraphStatusAction {
     SUCCESS,
 
-    /** 401 : jeton refusé, renouvellement forcé puis une seule nouvelle tentative. */
+    /** 401: token rejected, forced refresh, then a single retry. */
     REFRESH_TOKEN,
 
-    /** Limitation ou indisponibilité passagère : attendre puis réessayer. */
+    /** Throttling or temporary unavailability: wait, then retry. */
     RETRY,
 
-    /** 410 Gone : jeton delta expiré, énumération complète à reprendre. */
+    /** 410 Gone: delta token expired, full enumeration to restart. */
     RESYNC,
     FAIL,
 }
@@ -48,7 +48,7 @@ internal fun classifyGraphStatus(code: Int): GraphStatusAction = when (code) {
     else -> GraphStatusAction.FAIL
 }
 
-/** Retry-After en secondes (seule forme renvoyée par Graph) ; null si absent, négatif ou illisible. */
+/** Retry-After in seconds (the only form Graph returns); null if absent, negative or unreadable. */
 internal fun parseRetryAfterMs(header: String?): Long? {
     val seconds = header?.trim()?.toLongOrNull() ?: return null
     if (seconds < 0) return null
@@ -56,9 +56,9 @@ internal fun parseRetryAfterMs(header: String?): Long? {
 }
 
 /**
- * Attente avant la tentative suivante ([attempt] = nombre de tentatives déjà refaites), ou null
- * pour abandonner : trop de tentatives, ou Retry-After au-delà de [RETRY_AFTER_MAX_MS].
- * Retry-After est toujours respecté ; à défaut, attente exponentielle plafonnée.
+ * Wait before the next attempt ([attempt] = number of retries already made), or null to give
+ * up: too many attempts, or Retry-After beyond [RETRY_AFTER_MAX_MS].
+ * Retry-After is always honored; otherwise, capped exponential backoff.
  */
 internal fun retryDelayMs(attempt: Int, retryAfterMs: Long?): Long? {
     if (attempt >= MAX_RETRIES) return null
@@ -66,17 +66,17 @@ internal fun retryDelayMs(attempt: Int, retryAfterMs: Long?): Long? {
     return min(BACKOFF_CAP_MS, BACKOFF_BASE_MS shl attempt.coerceIn(0, 20))
 }
 
-/** Après un 410 : URL du header Location (nouvelle énumération) si elle vise Graph, sinon delta initial. */
+/** After a 410: URL from the Location header (new enumeration) if it targets Graph, else initial delta. */
 internal fun resyncStartUrl(location: String?, initialUrl: String): String =
     location?.trim()?.takeIf { it.isNotEmpty() && isTrustedGraphUrl(it) } ?: initialUrl
 
-/** Seules les URL https de Microsoft Graph reçoivent le jeton (nextLink, deltaLink, Location). */
+/** Only Microsoft Graph https URLs receive the token (nextLink, deltaLink, Location). */
 internal fun isTrustedGraphUrl(url: HttpUrl): Boolean = url.isHttps && url.host == GRAPH_HOST
 
 internal fun isTrustedGraphUrl(url: String): Boolean =
     url.toHttpUrlOrNull()?.let { isTrustedGraphUrl(it) } ?: false
 
-/** Erreur présentée à l'utilisateur pour un statut HTTP en échec. */
+/** Error shown to the user for a failed HTTP status. */
 internal fun errorCodeForStatus(code: Int): CloudErrorCode = when (code) {
     401 -> CloudErrorCode.AUTH_REQUIRED
     403 -> CloudErrorCode.DECLINED

@@ -33,14 +33,14 @@ import javax.inject.Inject
 
 sealed interface MainEvent {
     /**
-     * Ouvrir la visionneuse sur un média indexé résolu depuis un intent VIEW. [exitOnBack] : le
-     * retour rend la main à l'appli appelante.
+     * Open the viewer on an indexed media item resolved from a VIEW intent. [exitOnBack]: back
+     * returns control to the calling app.
      */
     data class OpenViewer(val mediaId: Long, val exitOnBack: Boolean) : MainEvent
 
     /**
-     * Média non indexé (URI FileProvider d'une autre appli, sélecteur de photos, accès partiel…) :
-     * affichage en lecture seule directement depuis l'URI accordée par l'appelant.
+     * Non-indexed media (FileProvider URI from another app, photo picker, partial access…):
+     * read-only display directly from the URI granted by the caller.
      */
     data class OpenExternal(
         val uri: Uri,
@@ -50,11 +50,11 @@ sealed interface MainEvent {
         val exitOnBack: Boolean,
     ) : MainEvent
 
-    /** L'URI reçue n'est ni une image ni une vidéo lisible. [finish] : rendre la main à l'appelant. */
+    /** The received URI is neither a readable image nor a readable video. [finish]: return control to the caller. */
     data class CannotOpen(val finish: Boolean) : MainEvent
 }
 
-/** ViewModel de l'activité : réglages (thème), intents VIEW, démarrage de l'indexation. */
+/** Activity ViewModel: settings (theme), VIEW intents, starting indexing. */
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
@@ -69,15 +69,15 @@ class MainViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    /** OneDrive existe dans ce build : « Utiliser OneDrive seulement » est alors proposé. */
+    /** OneDrive exists in this build: "Use OneDrive only" is then offered. */
     val cloudAvailable: Boolean = cloudAccounts.isAvailable
 
-    /** Choix « OneDrive seul » enregistré, null tant que les réglages ne sont pas lus. */
+    /** Saved "OneDrive only" choice, null until the settings are read. */
     val oneDriveOnlyChosen: StateFlow<Boolean?> = settingsRepository.settings
         .map { it.oneDriveOnlyChosen }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** Compte OneDrive connecté (ou à reconnecter) : sinon l'onglet Photos invite à se connecter. */
+    /** OneDrive account signed in (or needing re-sign-in): otherwise the Photos tab prompts to sign in. */
     val cloudSignedIn: StateFlow<Boolean> = cloudAccounts.state
         .map { it is CloudAccountState.SignedIn || it is CloudAccountState.NeedsReauth }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -88,41 +88,41 @@ class MainViewModel @Inject constructor(
     private var lastAccess: MediaAccess? = null
 
     init {
-        // Etat du compte lu au démarrage (Photos en « OneDrive seul » en dépend).
+        // Account state read at startup (Photos in "OneDrive only" mode depends on it).
         val current = cloudAccounts.state.value
         if (cloudAvailable && (current is CloudAccountState.Loading || current is CloudAccountState.Error)) {
             viewModelScope.launch { cloudAccounts.refresh() }
         }
     }
 
-    /** Appelé à chaque changement d'accès détecté par l'UI (y compris au premier affichage). */
+    /** Called on every access change detected by the UI (including the first display). */
     fun onMediaAccessChanged(access: MediaAccess) {
         mediaAccess.update(access)
         if (access == lastAccess) return
         lastAccess = access
         if (access != MediaAccess.NONE) {
             syncCoordinator.onAccessChanged()
-            // Accès accordé : le choix « OneDrive seul » est oublié (un retrait ultérieur redemande).
+            // Access granted: the "OneDrive only" choice is forgotten (a later revocation asks again).
             viewModelScope.launch {
                 if (settingsRepository.settings.first().oneDriveOnlyChosen) settingsRepository.setOneDriveOnlyChosen(false)
             }
         }
     }
 
-    /** « Utiliser OneDrive seulement » sur l'écran d'autorisation. */
+    /** "Use OneDrive only" on the permission screen. */
     fun chooseOneDriveOnly() {
         if (!cloudAvailable) return
         viewModelScope.launch { settingsRepository.setOneDriveOnlyChosen(true) }
     }
 
-    /** Retour de la demande d'autorisation avec un accès accordé (ex. nouvelle sélection partielle). */
+    /** Back from the permission request with access granted (e.g. new partial selection). */
     fun onMediaAccessRegranted() {
         syncCoordinator.onAccessChanged()
     }
 
     /**
-     * Résout une URI content:// reçue par intent VIEW, hors du thread principal : média indexé si
-     * possible (visionneuse complète), sinon affichage direct de l'URI accordée.
+     * Resolves a content:// URI received through a VIEW intent, off the main thread: indexed media
+     * if possible (full viewer), otherwise direct display of the granted URI.
      */
     fun handleViewIntent(uri: Uri, intentType: String?, exitOnBack: Boolean) {
         viewModelScope.launch {
@@ -132,7 +132,7 @@ class MainViewModel @Inject constructor(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.w(TAG, "URI non résolue : $uri", e)
+                    Log.w(TAG, "Unresolved URI: $uri", e)
                     null
                 }
             }
@@ -157,7 +157,7 @@ class MainViewModel @Inject constructor(
             resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                 if (c.moveToFirst()) c.getString(0) else null
             }
-        }.onFailure { Log.w(TAG, "Nom du fichier illisible : $uri", it) }.getOrNull()
+        }.onFailure { Log.w(TAG, "Unreadable file name: $uri", it) }.getOrNull()
         return MainEvent.OpenExternal(uri, mime, title, isVideo, exitOnBack)
     }
 

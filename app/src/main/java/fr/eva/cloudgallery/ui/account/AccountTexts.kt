@@ -10,7 +10,7 @@ import fr.eva.cloudgallery.domain.model.CloudErrorCode
 import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.ui.util.Formatters
 
-/** Message localisé d'une erreur cloud (résolu à l'affichage, jamais persisté). */
+/** Localised message for a cloud error (resolved at display time, never persisted). */
 @StringRes
 fun CloudErrorCode.messageRes(): Int = when (this) {
     CloudErrorCode.NETWORK -> R.string.data_cloud_error_network
@@ -23,7 +23,7 @@ fun CloudErrorCode.messageRes(): Int = when (this) {
     CloudErrorCode.UNKNOWN -> R.string.data_cloud_error_unknown
 }
 
-/** Résumé d'une ligne de l'état du compte OneDrive (Menu, Paramètres). */
+/** One-line summary of the OneDrive account state (Menu, Settings). */
 @Composable
 fun cloudAccountSummary(state: CloudAccountState): String = when (state) {
     CloudAccountState.NotConfigured -> stringResource(R.string.account_not_configured)
@@ -35,7 +35,7 @@ fun cloudAccountSummary(state: CloudAccountState): String = when (state) {
     is CloudAccountState.Error -> stringResource(state.code.messageRes())
 }
 
-/** Etat de la synchronisation OneDrive en une ligne. */
+/** OneDrive sync status in one line. */
 @Composable
 fun cloudSyncStatusText(state: CloudSyncState): String = when {
     state.running -> pluralStringResource(R.plurals.account_sync_running, state.processedItems, state.processedItems)

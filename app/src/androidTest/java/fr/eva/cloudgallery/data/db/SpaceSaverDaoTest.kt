@@ -22,8 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Copies locales proposées par l'économiseur d'espace : empreinte à jour, élément OneDrive
- * visible de même empreinte et taille, regroupées ou non dans un même média.
+ * Local copies offered by the space saver: up-to-date hash, visible OneDrive item
+ * with the same hash and size, whether or not merged into the same media.
  */
 @RunWith(AndroidJUnit4::class)
 class SpaceSaverDaoTest {
@@ -77,16 +77,16 @@ class SpaceSaverDaoTest {
     @Test
     fun candidates_requireAnUpToDateHashMatchingAVisibleOneDriveItem() = runTest {
         val dao = db.mediaSourceDao()
-        // Regroupés dans un même média.
+        // Merged into the same media.
         val merged = media("merged.jpg", dateTaken = 3)
         val mergedSource = local(merged, "1")
         cloud(merged, "A")
-        // Médias distincts (pas encore regroupés) : proposés aussi.
+        // Separate media (not merged yet): offered too.
         val separate = media("separate.jpg", dateTaken = 2)
         val separateSource = local(separate, "2", hash = "S")
         cloud(media("separate-cloud.jpg"), "B", hash = "S")
-        // Écartés : empreinte périmée, empreinte jamais calculée, taille différente, OneDrive masqué,
-        // copie locale masquée, aucun élément OneDrive.
+        // Excluded: stale hash, hash never computed, different size, hidden OneDrive item,
+        // hidden local copy, no OneDrive item.
         local(media("stale.jpg"), "3", hash = "T", signature = "10:4:3").also { cloud(media("c3"), "C", hash = "T") }
         local(media("nohash.jpg"), "4", hash = null, signature = null)
         local(media("size.jpg"), "5", hash = "Z", size = 11).also { cloud(media("c5"), "E", hash = "Z", size = 12) }

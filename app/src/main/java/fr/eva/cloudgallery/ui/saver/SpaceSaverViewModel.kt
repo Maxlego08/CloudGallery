@@ -28,35 +28,35 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Etat de l'écran : [list] null pendant la lecture ; [busy] pendant une mise à la corbeille. */
+/** Screen state: [list] null while loading; [busy] while moving to the trash. */
 data class SpaceSaverUiState(
     val list: SpaceSaverList? = null,
     val age: SaverAge = SaverAge.DAYS_30,
     val deselected: Set<Long> = emptySet(),
     val busy: Boolean = false,
 ) {
-    /** Copies du filtre d'ancienneté courant. */
+    /** Copies in the current age filter. */
     fun filtered(now: Long): List<SpaceSaverCandidate> = filterByAge(list?.candidates.orEmpty(), age, now)
 }
 
 sealed interface SpaceSaverEvent {
-    /** Demande système de mise à la corbeille d'un lot (confirmée par l'utilisateur). */
+    /** System request to move a batch to the trash (confirmed by the user). */
     class LaunchTrash(val sender: IntentSender) : SpaceSaverEvent
 
-    /** Copies envoyées à la corbeille et espace libéré. */
+    /** Copies sent to the trash and space freed. */
     data class Freed(val count: Int, val bytes: Long) : SpaceSaverEvent
 
-    /** Copies écartées à la revérification (modifiées ou plus sur OneDrive entre-temps). */
+    /** Copies dropped on re-verification (modified or no longer on OneDrive in the meantime). */
     data class Changed(val count: Int) : SpaceSaverEvent
 
     data object Failed : SpaceSaverEvent
 }
 
 /**
- * Economiseur d'espace : revue des copies locales déjà sur OneDrive, puis mise à la corbeille
- * Android des copies cochées, après confirmation dans l'appli puis dans la boîte de dialogue
- * système (par lots de [MAX_TRASH_BATCH]). Jamais de suppression définitive ; jamais lancé
- * automatiquement. Les copies sont revérifiées en base juste avant la demande.
+ * Space saver: review of local copies already on OneDrive, then moving the checked copies to
+ * the Android trash, after confirmation in the app and then in the system dialog (in batches
+ * of [MAX_TRASH_BATCH]). Never a permanent deletion; never started automatically. The copies
+ * are re-verified against the database right before the request.
  */
 @HiltViewModel
 class SpaceSaverViewModel @Inject constructor(
@@ -82,7 +82,7 @@ class SpaceSaverViewModel @Inject constructor(
         reload()
     }
 
-    /** Relecture des copies proposées (ouverture, retour sur l'écran), sauf pendant une suppression. */
+    /** Reloads the proposed copies (opening, returning to the screen), except during a deletion. */
     fun reload() {
         if (_state.value.busy) return
         viewModelScope.launch { load() }
@@ -94,13 +94,13 @@ class SpaceSaverViewModel @Inject constructor(
         it.copy(deselected = if (sourceId in it.deselected) it.deselected - sourceId else it.deselected + sourceId)
     }
 
-    /** Tout cocher ou tout décocher dans le filtre courant. */
+    /** Checks or unchecks everything in the current filter. */
     fun setAllSelected(selected: Boolean, now: Long) = _state.update { s ->
         val ids = s.filtered(now).map { it.sourceId }.toSet()
         s.copy(deselected = if (selected) s.deselected - ids else s.deselected + ids)
     }
 
-    /** Confirmé par l'utilisateur : revérification puis premier lot de la demande de corbeille. */
+    /** Confirmed by the user: re-verification, then the first batch of the trash request. */
     fun freeUp(now: Long) {
         val s = _state.value
         if (s.busy) return
@@ -113,7 +113,7 @@ class SpaceSaverViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Revérification des copies impossible", e)
+                Log.w(TAG, "Could not re-verify copies", e)
                 eventChannel.trySend(SpaceSaverEvent.Failed)
                 _state.update { it.copy(busy = false) }
                 return@launch
@@ -128,10 +128,10 @@ class SpaceSaverViewModel @Inject constructor(
         }
     }
 
-    /** Retour de la boîte de dialogue système pour le lot en cours. */
+    /** Result of the system dialog for the current batch. */
     fun onTrashResult(granted: Boolean) {
         if (!granted) {
-            // Refus : on s'arrête (les lots déjà confirmés sont dans la corbeille).
+            // Declined: stop (batches already confirmed are in the trash).
             pendingBatches.clear()
             finish()
             return
@@ -150,12 +150,12 @@ class SpaceSaverViewModel @Inject constructor(
         currentBatch = batch
         val sender = withContext(io) {
             try {
-                // Toujours la corbeille (récupérable), quel que soit le réglage de suppression.
+                // Always the trash (recoverable), whatever the deletion setting.
                 writer.createDeleteRequest(batch.map { Uri.parse(it.uri) }, toTrash = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Demande de mise à la corbeille impossible", e)
+                Log.w(TAG, "Could not request moving to the trash", e)
                 null
             }
         }
@@ -175,15 +175,15 @@ class SpaceSaverViewModel @Inject constructor(
         if (count > 0) eventChannel.trySend(SpaceSaverEvent.Freed(count, bytes))
         viewModelScope.launch {
             if (count > 0) {
-                // Relecture de MediaStore (portée de l'appli : terminée même si l'écran est fermé),
-                // puis de la liste.
+                // Reload MediaStore (app scope: completes even if the screen is closed),
+                // then the list.
                 appScope.launch(io) {
                     try {
                         indexer.sync()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "Resynchronisation MediaStore impossible", e)
+                        Log.w(TAG, "MediaStore resync failed", e)
                     }
                 }.join()
             }
@@ -199,7 +199,7 @@ class SpaceSaverViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Lecture des copies proposées impossible", e)
+            Log.w(TAG, "Could not load proposed copies", e)
             _state.update { it.copy(list = it.list ?: SpaceSaverList(emptyList(), 0)) }
         }
     }
