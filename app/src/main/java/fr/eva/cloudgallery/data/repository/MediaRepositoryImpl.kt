@@ -88,9 +88,16 @@ class MediaRepositoryImpl @Inject constructor(
             ?: flowOf(PagingData.empty())
     }
 
-    /** [initialOffset] : rang de la première ligne chargée (clé de LimitOffsetPagingSource de Room). */
+    /**
+     * [initialOffset] : rang de la première ligne chargée (clé de LimitOffsetPagingSource de Room).
+     * Le rechargement après invalidation reste à la même position ([AbsoluteRefreshPagingSource]).
+     */
     private fun pager(initialOffset: Int, source: () -> PagingSource<Int, MediaRow>): Flow<PagingData<MediaSummary>> =
-        Pager(PAGING_CONFIG, initialKey = initialOffset.takeIf { it > 0 }, pagingSourceFactory = source)
+        Pager(
+            PAGING_CONFIG,
+            initialKey = initialOffset.takeIf { it > 0 },
+            pagingSourceFactory = { AbsoluteRefreshPagingSource(source()) },
+        )
             .flow
             .map { data -> data.map { row -> row.toSummary() } }
 
