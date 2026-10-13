@@ -73,7 +73,7 @@
     <string name="settings_show_cloud_in_photos">Afficher les éléments OneDrive dans Photos</string>
     <string name="settings_originals_mobile_title">Charger les originaux sur réseau mobile</string>
     <string name="settings_originals_mobile_summary">Au zoom, télécharge l\'original OneDrive sans demander, même sur données mobiles ou avec l\'économiseur de données. Désactivé, il vous est proposé avec sa taille. En Wi-Fi, il est toujours chargé automatiquement.</string>
-    <string name="settings_show_cloud_in_photos_summary">Désactivé : les éléments présents uniquement sur OneDrive n\'apparaissent que dans leurs albums OneDrive, les Favoris et vos albums ; ceux conservés hors ligne apparaissent toujours dans Photos. Activé, une photo présente sur le téléphone et sur OneDrive apparaît deux fois.</string>
+    <string name="settings_show_cloud_in_photos_summary">Désactivé : les éléments présents uniquement sur OneDrive n\'apparaissent que dans leurs albums OneDrive, les Favoris et vos albums ; ceux conservés hors ligne apparaissent toujours dans Photos. Activé : une photo présente sur le téléphone et sur OneDrive n\'apparaît qu\'une fois, après le calcul de son empreinte (fait pendant la charge).</string>
     <string name="settings_section_about">À propos</string>
     <string name="settings_version">Version %1$s</string>
 </resources>

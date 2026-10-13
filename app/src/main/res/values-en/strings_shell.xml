@@ -68,7 +68,7 @@
     <string name="settings_show_cloud_in_photos">Show OneDrive items in Photos</string>
     <string name="settings_originals_mobile_title">Load originals on mobile data</string>
     <string name="settings_originals_mobile_summary">When you zoom in, downloads the OneDrive original without asking, even on mobile data or with Data Saver on. Off: it\'s offered to you with its size. On Wi-Fi, it always loads automatically.</string>
-    <string name="settings_show_cloud_in_photos_summary">Off: items only on OneDrive appear only in their OneDrive albums, Favorites and your albums; items kept offline always appear in Photos. On: a photo stored both on the phone and on OneDrive appears twice.</string>
+    <string name="settings_show_cloud_in_photos_summary">Off: items only on OneDrive appear only in their OneDrive albums, Favorites and your albums; items kept offline always appear in Photos. On: a photo stored both on the phone and on OneDrive appears once, after its fingerprint is computed (done while charging).</string>
     <string name="settings_section_about">About</string>
     <string name="settings_version">Version %1$s</string>
 </resources>

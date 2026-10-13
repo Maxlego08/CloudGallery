@@ -49,19 +49,19 @@ class SettingsLogicTest {
         assertEquals(AlbumSort.COUNT, enumOrDefault("COUNT", AlbumSort.CUSTOM))
     }
 
-    /** Décision utilisateur : « Afficher les éléments OneDrive dans Photos » est désactivé par défaut. */
+    /** Décision utilisateur (13/10/2026) : « Afficher les éléments OneDrive dans Photos » activé par défaut. */
     @Test
-    fun showCloudInPhotos_isOffByDefault() = runTest {
-        assertFalse(AppSettings().showCloudInPhotos)
+    fun showCloudInPhotos_isOnByDefault() = runTest {
+        assertTrue(AppSettings().showCloudInPhotos)
 
         val repository = SettingsRepositoryImpl(InMemoryDataStore())
-        // Clé absente (première installation) : repli sur la valeur par défaut.
-        assertFalse(repository.settings.first().showCloudInPhotos)
-
-        repository.setShowCloudInPhotos(true)
+        // Clé absente (première installation, ou réglage jamais touché) : repli sur la valeur par défaut.
         assertTrue(repository.settings.first().showCloudInPhotos)
+
         repository.setShowCloudInPhotos(false)
         assertFalse(repository.settings.first().showCloudInPhotos)
+        repository.setShowCloudInPhotos(true)
+        assertTrue(repository.settings.first().showCloudInPhotos)
     }
 
     /** Décision utilisateur (D2) : sur réseau facturé, l'original est proposé, pas chargé, par défaut. */
@@ -73,7 +73,7 @@ class SettingsLogicTest {
         repository.setLoadOriginalsOnMobileData(true)
         assertTrue(repository.settings.first().loadOriginalsOnMobileData)
         // Indépendant de l'autre réglage OneDrive.
-        assertFalse(repository.settings.first().showCloudInPhotos)
+        assertTrue(repository.settings.first().showCloudInPhotos)
         repository.setLoadOriginalsOnMobileData(false)
         assertFalse(repository.settings.first().loadOriginalsOnMobileData)
     }

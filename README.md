@@ -432,7 +432,7 @@ rattrapés au prochain passage au premier plan grâce au curseur de génération
   déjà supprimés de OneDrive. Même chose pour la purge des données restantes et le changement de
   compte. Les fichiers sur OneDrive et sur le téléphone ne sont pas modifiés. Si la déconnexion
   MSAL échoue, les données sont conservées et les téléchargements reprennent.
-- **Réglage « Afficher les éléments OneDrive dans Photos »** (désactivé par défaut, Paramètres et
+- **Réglage « Afficher les éléments OneDrive dans Photos »** (activé par défaut, Paramètres et
   écran Compte) : désactivé, Photos et Vidéos (grille, nombres, sélection par jour ou par
   glissement) ne montrent que les médias présents sur l'appareil ou **conservés hors ligne** (toujours
   affichés, même réglage désactivé) ; les éléments
@@ -938,7 +938,7 @@ CloudGallery.
 |---|---|
 | `data/local/MediaStoreLogicTest` | Identifiants externes, dates, décision de relecture complète, empreintes, analyse des URI MediaStore / MediaDocuments, rognage, positions de lecture |
 | `data/local/RemovalPlanTest` | Plan de suppression : accès partiel, masquage, frein anti-suppression massive, délai de grâce de 30 jours |
-| `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue, « Afficher les éléments OneDrive dans Photos » et « Charger les originaux sur réseau mobile » désactivés par défaut, « Wi-Fi uniquement » activé par défaut (DataStore vide) |
+| `data/prefs/SettingsLogicTest` | Bornage du niveau de zoom, repli sur la valeur par défaut d'une énumération inconnue, « Afficher les éléments OneDrive dans Photos » activé et « Charger les originaux sur réseau mobile » désactivé par défaut, « Wi-Fi uniquement » activé par défaut (DataStore vide) |
 | `data/repository/AlbumSortingTest` | Tri des albums |
 | `data/search/SearchLogicTest` | Expression FTS sûre (préfixes, ET implicite, aucune syntaxe FTS ni opérateur, bornes), libellés de date conformes au SQL de l'index, correspondance des noms (accents, casse, débuts de mots), historique des recherches |
 | `ui/search/SearchUiLogicTest` | Albums proposés (correspondance, albums vides exclus, borne), recherches récentes filtrées, saisie sans mot refusée |
@@ -1138,8 +1138,8 @@ n'ont pas de tests automatisés : ils se vérifient sur l'appareil.
   vérifié) ; les éléments partagés par d'autres personnes sont ignorés.
 - **Doublons** : un fichier du téléphone et son élément OneDrive ne sont fusionnés qu'après le
   calcul de l'empreinte locale, fait en charge seulement (premier calcul étalé sur plusieurs
-  charges pour une grande bibliothèque). D'ici là ce sont deux médias ; le réglage « Afficher les
-  éléments OneDrive dans Photos » reste désactivé par défaut. Un fichier modifié après sa
+  charges pour une grande bibliothèque). D'ici là ce sont deux médias, visibles tous deux dans Photos
+  avec le réglage « Afficher les éléments OneDrive dans Photos » (activé par défaut). Un fichier modifié après sa
   sauvegarde (contenu différent) n'est jamais fusionné.
 - **OneDrive sans permission médias** : sans accès aux photos du téléphone, l'application affiche
   l'écran d'autorisation et rien d'autre ; un usage « OneDrive seul » est reporté en phase 5.
