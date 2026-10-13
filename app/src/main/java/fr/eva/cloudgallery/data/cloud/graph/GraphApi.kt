@@ -78,6 +78,14 @@ class GraphApi @Inject constructor(
             )
         }
 
+    /** Lien web (`webUrl`) d'un élément ou dossier OneDrive, ouvert dans l'appli OneDrive ou le navigateur. */
+    suspend fun webUrl(itemId: String): String {
+        val url = "${downloadInfoUrl(itemId)}?\$select=webUrl"
+        return getJson(url, WebUrlDto.serializer()).webUrl
+            ?.takeIf { it.startsWith("https://") }
+            ?: throw CloudException(CloudErrorCode.SERVER, IllegalStateException("Lien web absent"))
+    }
+
     private suspend fun <T> getJson(url: String, deserializer: DeserializationStrategy<T>): T =
         http.get(url) { response ->
             val body = response.body.string()

@@ -374,6 +374,12 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 - [x] Retour : l'écran sort en glissant entièrement vers la droite (sans fondu), l'écran précédent
       revient avec un léger décalage ; suit le geste de retour prédictif. La visionneuse et le
       lecteur gardent leur zoom arrière.
+- [x] Passages d'écran calés sur Samsung Galerie 15.8 (One UI 8, Android 16), mesurés image par image
+      (`adb shell screenrecord`) : écran du dessus entièrement par la droite, écran du dessous
+      décalé de 30 % et assombri presque jusqu'au noir (~130 ms), courbe
+      `cubic-bezier(0.9, 0, 0.3, 1)` sur 340 ms dans les deux sens. Geste de retour prédictif :
+      mêmes transitions (`predictivePop*Transition`), linéaires pour suivre le doigt ; auparavant
+      Navigation appliquait les siennes (écran réduit à 70 %).
 - [x] Défilement rapide : poignée à droite de la grille avec bulle de date (mois, année), pour
       atteindre n'importe quelle date sans faire défiler toute la grille. Photos et toutes les
       collections (`ui/grid/FastScroller.kt`) ; position calculée sur les dates de tous les
@@ -391,7 +397,7 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
 
 ### Vérifications sur l'appareil (améliorations)
 - [ ] Retour depuis Paramètres, Stockage, un album, la recherche : glissement vers la droite, au
-      bouton et au geste (aperçu prédictif).
+      bouton et au geste (aperçu prédictif). Vérifier aussi l'assombrissement en thème clair (non comparé à Samsung).
 - [ ] Dossier sécurisé : l'entrée apparaît (sélection avec une photo du téléphone, visionneuse) et
       pas pour un élément uniquement OneDrive ; une appli du Dossier sécurisé (sa Galerie) apparaît
       dans le menu de partage, sinon l'activer dans les paramètres du Dossier sécurisé et noter le
@@ -434,8 +440,23 @@ photos et vidéos, avec filtre par ancienneté ; favoris non synchronisés avec 
       d'un format documenté.
 - [ ] Édition vidéo (découpe) : désactivée pour l'instant (TODO dans `ui/viewer/ViewerScreen.kt`).
       À évaluer avec Media3 Transformer, toujours en enregistrant une copie.
-- [ ] Transitions à élément partagé grille → visionneuse (`SharedTransitionLayout`) et retour sur la
-      bonne cellule.
+- [x] Transition grille ↔ visionneuse calée sur Samsung Galerie (`ui/viewer/ViewerTransition.kt`) :
+      la photo grandit depuis sa vignette (recadrée en carré) jusqu'à sa taille ajustée, et y
+      revient au retour (barres masquées et grille visible aussitôt, vignette masquée pendant le
+      vol). Miniature de la grille (cache mémoire) affichée dès la première image ; pages de la
+      visionneuse composées après l'ouverture (sinon saccades) ; ouverture lancée après la première
+      image dessinée. 250 ms, `cubic-bezier(0.6, 0.4, 0.45, 1)`. Sans vignette visible : fondu.
+- [x] Retour de la visionneuse calé sur Samsung (`cubic-bezier(0.15, 0.4, 0.1, 1)`, 280 ms : la photo
+      perd la moitié de sa taille en ~50 ms), distinct de l'ouverture.
+- [x] « Afficher les éléments OneDrive dans Photos » activé par défaut (fusion des doublons en place).
+- [x] Albums : « Masquer des albums » (menu de l'onglet Albums) ; par album : affiché, masqué dans
+      Albums, ou masqué dans Albums et Photos (ses médias quittent aussi Photos et Vidéos ;
+      `album.hideMedia`, base v7).
+- [x] Album OneDrive : « Ouvrir dans OneDrive » (menu de l'album) ouvre le dossier sur le web
+      (`webUrl` Graph) dans le navigateur. L'appli OneDrive n'ouvre pas un dossier depuis un lien
+      (compte personnel, testé : refus ou accueil de l'appli).
+- [ ] Transition : au retour sur une autre photo que celle ouverte, faire défiler la grille jusqu'à
+      sa vignette (Samsung) au lieu du fondu ; partir de l'état zoomé ou glissé sans saut.
 
 ### URI externes et accès partiel
 - [ ] URI du sélecteur de photos (`content://media/picker/...`) et URI FileProvider tierces : elles

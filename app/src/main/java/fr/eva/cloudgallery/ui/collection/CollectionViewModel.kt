@@ -11,7 +11,10 @@ import fr.eva.cloudgallery.domain.model.AppSettings
 import fr.eva.cloudgallery.domain.model.MediaContext
 import fr.eva.cloudgallery.ui.grid.MediaGridDeps
 import fr.eva.cloudgallery.ui.grid.MediaGridViewModel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -37,6 +40,20 @@ class CollectionViewModel @AssistedInject constructor(
     val album: StateFlow<AlbumSummary?> =
         ((context as? MediaContext.Album)?.let { deps.albumRepository.observeAlbum(it.albumId) } ?: flowOf(null))
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val oneDriveLinkChannel = Channel<String>(Channel.BUFFERED)
+
+    /** Lien web du dossier OneDrive à ouvrir (« Ouvrir dans OneDrive »). */
+    val oneDriveLinks: Flow<String> = oneDriveLinkChannel.receiveAsFlow()
+
+    /** Album OneDrive : demande le lien web de son dossier (requête Graph). */
+    fun openInOneDrive() {
+        val albumId = (mediaContext as? MediaContext.Album)?.albumId ?: return
+        viewModelScope.launch {
+            val url = runCatching { deps.albumRepository.oneDriveFolderUrl(albumId) }.getOrNull()
+            if (url != null) oneDriveLinkChannel.send(url) else toast(R.string.albums_open_onedrive_failed)
+        }
+    }
 
     override fun zoomLevelOf(settings: AppSettings): Int = settings.albumZoomLevel
 

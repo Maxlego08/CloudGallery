@@ -136,6 +136,10 @@ class DownloadInfoDto(
     override fun toString(): String = "DownloadInfoDto(id=$id, size=$size)"
 }
 
+/** Lien web d'un élément (`$select=webUrl`). */
+@Serializable
+data class WebUrlDto(val webUrl: String? = null)
+
 @Serializable
 data class GraphErrorEnvelope(val error: GraphErrorDto? = null)
 

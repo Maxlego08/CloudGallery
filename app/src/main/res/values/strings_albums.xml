@@ -31,4 +31,12 @@
     <string name="albums_picker_new">Nouvel album</string>
     <string name="albums_picker_caption">Les éléments sont ajoutés à l\'album sous forme de références : les fichiers ne sont ni copiés ni déplacés.</string>
     <string name="albums_picker_empty">Aucun album personnalisé pour le moment.</string>
+    <string name="albums_visibility_menu">Masquer des albums</string>
+    <string name="albums_visibility_intro">Choisissez où chaque album apparaît. « Masqué dans Albums et Photos » retire aussi ses photos et vidéos des onglets Photos et Vidéos. Rien n\'est supprimé.</string>
+    <string name="albums_visibility_shown">Affiché</string>
+    <string name="albums_visibility_hidden_albums">Masqué dans Albums</string>
+    <string name="albums_visibility_hidden_everywhere">Masqué dans Albums et Photos</string>
+    <string name="albums_visibility_empty">Aucun album.</string>
+    <string name="albums_open_onedrive">Ouvrir dans OneDrive</string>
+    <string name="albums_open_onedrive_failed">Impossible d\'ouvrir le dossier OneDrive. Vérifiez la connexion.</string>
 </resources>

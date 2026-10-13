@@ -6,6 +6,7 @@ import fr.eva.cloudgallery.data.db.entity.MediaEntity
 import fr.eva.cloudgallery.data.db.entity.MediaRow
 import fr.eva.cloudgallery.data.db.entity.MediaSourceEntity
 import fr.eva.cloudgallery.domain.model.AlbumSummary
+import fr.eva.cloudgallery.domain.model.AlbumVisibility
 import fr.eva.cloudgallery.domain.model.CloudThumbRef
 import fr.eva.cloudgallery.domain.model.MediaDetails
 import fr.eva.cloudgallery.domain.model.MediaSourceInfo
@@ -84,6 +85,11 @@ fun AlbumRow.toSummary(): AlbumSummary = AlbumSummary(
     latestDate = latestDate ?: 0L,
     isPinned = isPinned,
     coverCloud = coverCloudItemId?.let { cloudThumbRef(it, coverCloudCTag, coverDateModified ?: 0L) },
+    visibility = when {
+        hideMedia -> AlbumVisibility.HIDDEN_EVERYWHERE
+        isHidden -> AlbumVisibility.HIDDEN_IN_ALBUMS
+        else -> AlbumVisibility.SHOWN
+    },
 )
 
 /**

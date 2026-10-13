@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.paging.PagingData
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
+import fr.eva.cloudgallery.domain.model.AlbumVisibility
 import fr.eva.cloudgallery.domain.model.AppSettings
 import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
 import fr.eva.cloudgallery.domain.model.CloudAccountState
@@ -99,6 +100,16 @@ interface AlbumRepository {
     suspend fun addToAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun removeFromAlbum(albumId: Long, mediaIds: Collection<Long>)
     suspend fun setPinned(albumId: Long, pinned: Boolean)
+
+    /** Tous les albums, masqués compris, triés par nom (écran « Masquer des albums »). */
+    fun observeAllAlbums(): Flow<List<AlbumSummary>>
+    suspend fun setVisibility(albumId: Long, visibility: AlbumVisibility)
+
+    /**
+     * Lien web du dossier OneDrive d'un album OneDrive (ouvert dans l'appli OneDrive ou le
+     * navigateur) ; null pour un autre album. Requête Graph : [fr.eva.cloudgallery.domain.model.CloudException] hors connexion.
+     */
+    suspend fun oneDriveFolderUrl(albumId: Long): String?
 }
 
 /** Recherches récentes (sur l'appareil seulement), la plus récente en tête. */

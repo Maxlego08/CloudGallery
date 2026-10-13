@@ -21,7 +21,7 @@ class CloudThumbMappingTest {
 
     private fun album(coverItemId: String?, coverCTag: String?) = AlbumRow(
         id = 1, name = "Photos", customName = null, type = AlbumType.CLOUD_FOLDER, sourceKey = "onedrive:P",
-        relativePath = "OneDrive/Photos/", isPinned = false, sortIndex = 0, mediaCount = 1, coverMediaId = 1,
+        relativePath = "OneDrive/Photos/", isPinned = false, isHidden = false, hideMedia = false, sortIndex = 0, mediaCount = 1, coverMediaId = 1,
         coverUri = null, coverType = MediaType.IMAGE, coverDateModified = 7, coverCloudItemId = coverItemId,
         coverCloudCTag = coverCTag, latestDate = 7,
     )

@@ -137,9 +137,12 @@ data class AlbumEntity(
     val updatedAt: Long,
     val sortIndex: Int = 0,
     val isPinned: Boolean = false,
+    /** Masqué dans l'onglet Albums (choix de l'utilisateur, « Masquer des albums »). */
     val isHidden: Boolean = false,
     /** Nom défini par l'utilisateur (prioritaire sur le nom de dossier). */
     val customName: String? = null,
+    /** Médias de l'album masqués aussi dans Photos et Vidéos (v7, avec [isHidden]). */
+    @ColumnInfo(defaultValue = "0") val hideMedia: Boolean = false,
 )
 
 @Entity(
@@ -321,6 +324,8 @@ data class AlbumRow(
     val sourceKey: String?,
     val relativePath: String?,
     val isPinned: Boolean,
+    val isHidden: Boolean,
+    val hideMedia: Boolean,
     val sortIndex: Int,
     val mediaCount: Int,
     val coverMediaId: Long?,

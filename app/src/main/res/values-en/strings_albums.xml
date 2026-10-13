@@ -29,4 +29,12 @@
     <string name="albums_picker_new">New album</string>
     <string name="albums_picker_caption">Items are added to the album as references: files are not copied or moved.</string>
     <string name="albums_picker_empty">No custom albums yet.</string>
+    <string name="albums_visibility_menu">Hide albums</string>
+    <string name="albums_visibility_intro">Choose where each album appears. “Hidden in Albums and Photos” also removes its photos and videos from the Photos and Videos tabs. Nothing is deleted.</string>
+    <string name="albums_visibility_shown">Shown</string>
+    <string name="albums_visibility_hidden_albums">Hidden in Albums</string>
+    <string name="albums_visibility_hidden_everywhere">Hidden in Albums and Photos</string>
+    <string name="albums_visibility_empty">No albums.</string>
+    <string name="albums_open_onedrive">Open in OneDrive</string>
+    <string name="albums_open_onedrive_failed">Couldn\'t open the OneDrive folder. Check your connection.</string>
 </resources>

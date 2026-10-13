@@ -105,6 +105,7 @@ fun AlbumsScreen(
     onOpenAlbum: (Long) -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenVideos: () -> Unit,
+    onOpenAlbumVisibility: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -193,6 +194,10 @@ fun AlbumsScreen(
                                     ) {
                                         menuExpanded = false
                                         viewModel.startSelection()
+                                    },
+                                    OneUiMenuItem(label = stringResource(R.string.albums_visibility_menu)) {
+                                        menuExpanded = false
+                                        onOpenAlbumVisibility()
                                     },
                                 ),
                             )

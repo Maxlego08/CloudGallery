@@ -81,6 +81,10 @@ data object StorageRoute
 @Serializable
 data object SearchRoute
 
+/** « Masquer des albums » : affichage de chaque album dans Albums et Photos. */
+@Serializable
+data object AlbumVisibilityRoute
+
 /** Economiseur d'espace : copies du téléphone déjà sur OneDrive, revues avant la corbeille. */
 @Serializable
 data object SpaceSaverRoute

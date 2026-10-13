@@ -30,7 +30,7 @@ private const val ALBUM_ROWS = """
         WHERE (m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)
         GROUP BY mb.albumId
     )
-    SELECT a.id, a.name, a.customName, a.type, a.sourceKey, a.relativePath, a.isPinned, a.sortIndex,
+    SELECT a.id, a.name, a.customName, a.type, a.sourceKey, a.relativePath, a.isPinned, a.isHidden, a.hideMedia, a.sortIndex,
         COALESCE(st.cnt, 0) AS mediaCount,
         c.id AS coverMediaId, c.primaryUri AS coverUri, c.mediaType AS coverType,
         c.dateModified AS coverDateModified, c.cloudItemId AS coverCloudItemId, c.cloudCTag AS coverCloudCTag,
@@ -45,6 +45,10 @@ interface AlbumDao {
 
     @Query("$ALBUM_ROWS WHERE a.isHidden = 0 AND (a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0)")
     fun observeAlbumRows(): Flow<List<AlbumRow>>
+
+    /** Tous les albums non vides, masqués compris (écran « Masquer des albums »). */
+    @Query("$ALBUM_ROWS WHERE a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0")
+    fun observeAllAlbumRows(): Flow<List<AlbumRow>>
 
     @Query("$ALBUM_ROWS WHERE a.id = :albumId")
     fun observeAlbumRow(albumId: Long): Flow<AlbumRow?>
@@ -72,6 +76,9 @@ interface AlbumDao {
 
     @Query("UPDATE album SET isPinned = :pinned, updatedAt = :now WHERE id = :id")
     suspend fun setPinned(id: Long, pinned: Boolean, now: Long)
+
+    @Query("UPDATE album SET isHidden = :hidden, hideMedia = :hideMedia, updatedAt = :now WHERE id = :id")
+    suspend fun setVisibility(id: Long, hidden: Boolean, hideMedia: Boolean, now: Long)
 
     @Query("UPDATE album SET coverMediaId = :mediaId, updatedAt = :now WHERE id = :id")
     suspend fun setCover(id: Long, mediaId: Long?, now: Long)

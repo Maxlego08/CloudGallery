@@ -23,6 +23,12 @@
     <!-- « Déplacer vers le Dossier sécurisé » : proposé seulement si l'appli Samsung est installée -->
     <queries>
         <package android:name="com.samsung.knox.securefolder" />
+        <!-- Navigateurs : « Ouvrir dans OneDrive » ouvre le dossier sur le web. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application

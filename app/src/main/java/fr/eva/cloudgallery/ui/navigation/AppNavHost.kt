@@ -38,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.ui.account.AccountScreen
+import fr.eva.cloudgallery.ui.albums.AlbumVisibilityScreen
 import fr.eva.cloudgallery.domain.model.MediaContext
 import androidx.core.net.toUri
 import fr.eva.cloudgallery.ui.collection.MediaCollectionScreen
@@ -215,6 +216,7 @@ fun AppNavHost(
                     onOpenAlbum = { id -> navController.navigate(AlbumRoute(id)) },
                     onOpenFavorites = { navController.navigate(FavoritesRoute) },
                     onOpenVideos = { navController.navigate(VideosRoute) },
+                    onOpenAlbumVisibility = { navController.navigate(AlbumVisibilityRoute) { launchSingleTop = true } },
                     onOpenSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
                     onOpenAccount = openAccount,
                     onOpenSearch = { navController.navigate(SearchRoute) { launchSingleTop = true } },
@@ -292,6 +294,9 @@ fun AppNavHost(
                     onOpenAccount = openAccount,
                     onOpenSpaceSaver = { navController.navigate(SpaceSaverRoute) { launchSingleTop = true } },
                 )
+            }
+            composable<AlbumVisibilityRoute> {
+                AlbumVisibilityScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
             composable<SpaceSaverRoute> {
                 SpaceSaverScreen(onBack = dropUnlessResumed { navController.popBackStack() })

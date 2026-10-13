@@ -48,7 +48,7 @@ import fr.eva.cloudgallery.data.db.entity.UserSettingEntity
         CloudFolderEntity::class,
         MediaFtsEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -134,6 +134,16 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_source ADD COLUMN hashSignature TEXT")
                 db.execSQL(MEDIA_FTS_CREATE_SQL)
+            }
+        }
+
+        /**
+         * v7 : albums masqués aussi dans Photos et Vidéos (`album.hideMedia`). Albums existants :
+         * non concernés (0) ; `isHidden` existait déjà (masqué dans Albums seulement).
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE album ADD COLUMN hideMedia INTEGER NOT NULL DEFAULT 0")
             }
         }
 

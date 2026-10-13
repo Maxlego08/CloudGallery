@@ -1,6 +1,8 @@
 package fr.eva.cloudgallery.data.repository
 
 import android.util.Log
+import fr.eva.cloudgallery.data.cloud.graph.GraphApi
+import fr.eva.cloudgallery.data.cloud.sync.folderIdOfCloudBucket
 import fr.eva.cloudgallery.data.db.dao.AlbumDao
 import fr.eva.cloudgallery.data.db.entity.AlbumEntity
 import fr.eva.cloudgallery.data.db.entity.AlbumMediaEntity
@@ -9,6 +11,7 @@ import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AlbumSort
 import fr.eva.cloudgallery.domain.model.AlbumSummary
 import fr.eva.cloudgallery.domain.model.AlbumType
+import fr.eva.cloudgallery.domain.model.AlbumVisibility
 import fr.eva.cloudgallery.domain.repository.AlbumRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class AlbumRepositoryImpl @Inject constructor(
     private val albumDao: AlbumDao,
+    private val graphApi: GraphApi,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : AlbumRepository {
 
@@ -87,6 +91,28 @@ class AlbumRepositoryImpl @Inject constructor(
 
     override suspend fun setPinned(albumId: Long, pinned: Boolean): Unit = withContext(io) {
         albumDao.setPinned(albumId, pinned, System.currentTimeMillis())
+    }
+
+    override fun observeAllAlbums(): Flow<List<AlbumSummary>> =
+        albumDao.observeAllAlbumRows()
+            .map { rows -> rows.map { it.toSummary() }.sortedWith(albumComparator(AlbumSort.NAME)) }
+            .distinctUntilChanged()
+            .flowOn(io)
+
+    override suspend fun setVisibility(albumId: Long, visibility: AlbumVisibility): Unit = withContext(io) {
+        albumDao.setVisibility(
+            id = albumId,
+            hidden = visibility != AlbumVisibility.SHOWN,
+            hideMedia = visibility == AlbumVisibility.HIDDEN_EVERYWHERE,
+            now = System.currentTimeMillis(),
+        )
+    }
+
+    override suspend fun oneDriveFolderUrl(albumId: Long): String? {
+        val album = withContext(io) { albumDao.getById(albumId) } ?: return null
+        if (album.type != AlbumType.CLOUD_FOLDER) return null
+        val folderId = album.sourceKey?.let(::folderIdOfCloudBucket) ?: return null
+        return graphApi.webUrl(folderId)
     }
 
     private companion object {

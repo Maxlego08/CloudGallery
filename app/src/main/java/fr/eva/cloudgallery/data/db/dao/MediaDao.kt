@@ -48,12 +48,30 @@ internal const val ORDER = "ORDER BY m.dateTaken DESC, m.id DESC"
 internal const val VISIBLE = "(m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)"
 
 /**
+ * Hors des albums masqués « dans Albums et Photos » (album.hideMedia) : dossier du téléphone ou
+ * OneDrive (une des sources du média y est rangée) ou album personnalisé.
+ */
+internal const val NOT_IN_HIDDEN_ALBUM = """
+    NOT EXISTS (
+        SELECT 1 FROM media_source hs JOIN album ha ON ha.sourceKey = hs.bucketKey
+        WHERE hs.mediaId = m.id AND ha.hideMedia = 1
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM album_media ham JOIN album hv ON hv.id = ham.albumId
+        WHERE ham.mediaId = m.id AND hv.hideMedia = 1
+    )
+"""
+
+/**
  * Photos et Vidéos (réglage « Afficher les éléments OneDrive dans Photos ») : sans
  * `:includeCloudOnly`, seuls les médias présents sur l'appareil ou disponibles hors connexion y
  * figurent ; les éléments uniquement sur OneDrive restent dans leurs albums OneDrive, les
- * Favoris et les albums de l'utilisateur. Sous-ensemble de [VISIBLE].
+ * Favoris et les albums de l'utilisateur. Médias des albums masqués « dans Albums et Photos »
+ * exclus ([NOT_IN_HIDDEN_ALBUM]). Sous-ensemble de [VISIBLE].
  */
-private const val LIBRARY = "(m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1))"
+private const val LIBRARY = """
+    (m.hasLocal = 1 OR m.hasOffline = 1 OR (:includeCloudOnly = 1 AND m.hasCloud = 1)) AND $NOT_IN_HIDDEN_ALBUM
+"""
 
 /** Eléments situés entre deux éléments de la liste triée (bornes incluses). */
 internal const val BETWEEN = """
