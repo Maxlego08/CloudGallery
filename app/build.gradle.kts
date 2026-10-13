@@ -32,6 +32,19 @@ if (msalClientId.isEmpty() || msalSignatureHash.isEmpty()) {
     logger.warn("MSAL non configuré (msal.clientId / msal.signatureHash) : OneDrive désactivé dans ce build")
 }
 
+// --- Signature release -------------------------------------------------------------------
+// Keystore et mots de passe lus hors du dépôt (cloudgallery.release.* dans
+// ~/.gradle/gradle.properties ou local.properties). Absents : release signé avec la clé debug.
+val releaseStoreFile: File? = msalProp("cloudgallery.release.storeFile")
+    .takeIf { it.isNotEmpty() }?.let(::file)?.takeIf { it.isFile }
+// Empreinte de la clé release, enregistrée en plus de celle de debug dans Entra.
+val msalReleaseSignatureHash: String = msalProp("msal.releaseSignatureHash")
+    .takeIf { releaseStoreFile != null && Regex("^[A-Za-z0-9+/]{27}=$").matches(it) }
+    ?: msalSignatureHash
+if (releaseStoreFile == null) {
+    logger.warn("Keystore release absent (cloudgallery.release.storeFile) : release signé avec la clé debug")
+}
+
 android {
     namespace = "fr.eva.cloudgallery"
     compileSdk {
@@ -42,8 +55,8 @@ android {
         applicationId = "fr.eva.cloudgallery"
         minSdk = 36
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -54,15 +67,26 @@ android {
         manifestPlaceholders["msalSignatureHash"] = msalSignatureHash.ifEmpty { "msal-not-configured" }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = msalProp("cloudgallery.release.storePassword")
+                keyAlias = msalProp("cloudgallery.release.keyAlias")
+                keyPassword = msalProp("cloudgallery.release.keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
-            // Usage personnel : APK release signé avec la clé debug pour une installation directe.
-            // Remplacer par une vraie signingConfig avant toute distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            buildConfigField("String", "MSAL_SIGNATURE_HASH", "\"$msalReleaseSignatureHash\"")
+            manifestPlaceholders["msalSignatureHash"] = msalReleaseSignatureHash.ifEmpty { "msal-not-configured" }
         }
     }
     compileOptions {
