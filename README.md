@@ -1,178 +1,174 @@
 # CloudGallery
 
-Galerie photo et vidéo pour Android, inspirée de Samsung Galerie (One UI 8), qui regroupe dans une
-même bibliothèque les photos du téléphone et celles de **OneDrive**.
+An Android photo and video gallery inspired by Samsung Gallery (One UI 8). It shows your phone's
+photos and your **OneDrive** photos in a single library.
 
 [![Release](https://img.shields.io/github/v/release/Maxlego08/CloudGallery)](https://github.com/Maxlego08/CloudGallery/releases/latest)
 ![Android 16+](https://img.shields.io/badge/Android-16%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
-[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-> Projet personnel, conçu et testé sur Samsung Galaxy sous One UI 8. Il n'est affilié ni à Samsung
-> ni à Microsoft.
+> A personal project, built and tested on Samsung Galaxy phones running One UI 8. It is not
+> affiliated with Samsung or Microsoft.
 
 ---
 
-## Fonctionnalités
+## Features
 
-### Bibliothèque
+### Library
 
-- **Photos du téléphone et de OneDrive réunies** dans une seule grille, triée par date de prise de
-  vue. Un élément présent uniquement sur OneDrive porte un badge nuage.
-- **Grandes bibliothèques** : défilement fluide sur plusieurs dizaines de milliers d'éléments, et
-  défilement rapide par date avec une poignée et une bulle de date.
-- **Zoom au pincement** sur la grille (2 à 9 colonnes), avec regroupement par jour ou par mois.
-- **Doublons fusionnés** : une photo sauvegardée sur OneDrive et toujours présente sur le
-  téléphone n'apparaît qu'une fois, après comparaison de l'empreinte des fichiers.
-- **Recherche** par nom de fichier, dossier, album, date ou type.
+- **Phone and OneDrive photos together** in one grid, sorted by date taken. Items that exist only
+  on OneDrive show a cloud badge.
+- **Large libraries**: smooth scrolling through tens of thousands of items, plus fast scrolling by
+  date with a drag handle and a date bubble.
+- **Pinch to zoom** the grid (2 to 9 columns), grouped by day or by month.
+- **Duplicates merged**: a photo backed up to OneDrive and still on the phone appears once, after
+  the app compares the file hashes.
+- **Search** by file name, folder, album, date or type.
 
 ### Albums
 
-- Un album par dossier du téléphone, un album par dossier OneDrive, et des **albums
-  personnalisés** qui ne copient aucun fichier.
-- Tri, épinglage et renommage, ainsi que les collections Favoris et Vidéos.
-- **Masquer des albums** : chaque album peut être affiché, masqué de l'onglet Albums, ou masqué
-  aussi de Photos.
-- **Ouvrir dans OneDrive** : depuis un album OneDrive, ouvre le dossier dans OneDrive sur le web.
+- One album per phone folder, one album per OneDrive folder, and **custom albums** that never copy
+  files.
+- Sort, pin and rename albums, plus Favourites and Videos collections.
+- **Hide albums**: each album can be shown, hidden in the Albums tab, or hidden in Photos too.
+- **Open in OneDrive**: opens a OneDrive album's folder in OneDrive on the web.
 
-### Visionneuse et vidéos
+### Viewer and videos
 
-- **Transitions façon One UI** : la photo s'agrandit depuis sa vignette et y revient à la
-  fermeture. Les courbes ont été mesurées sur Samsung Galerie.
-- Zoom au pincement ou au double appui, bande de miniatures et détails EXIF (appareil, réglages,
-  position GPS).
-- Rotation sans perte. Le rognage enregistre une copie.
-- **Lecteur vidéo** (Media3) : ±10 s, vitesse, son, reprise à la dernière position et lecture en
-  streaming des vidéos OneDrive.
+- **One UI-style transitions**: the photo grows out of its thumbnail and shrinks back into it when
+  you close it. The curves were measured on Samsung Gallery.
+- Pinch or double-tap to zoom, a thumbnail strip, and EXIF details (camera, settings, GPS
+  location).
+- Lossless rotation. Cropping saves a copy.
+- **Video player** (Media3): ±10 s, speed, sound, resume where you left off, and streaming for
+  OneDrive videos.
 
 ### OneDrive
 
-- Connexion avec un **compte Microsoft personnel**, en **lecture seule** : l'application ne crée,
-  ne modifie et ne supprime jamais rien sur OneDrive.
-- Aperçus adaptés au réseau, et original téléchargé au zoom profond.
-- Partage et « Ouvrir avec » pour les éléments OneDrive.
-- **Copies hors ligne** (« Conserver hors ligne ») et **mise en cache de tout OneDrive**
-  (vignettes et aperçus) pour naviguer sans connexion.
-- **Page Stockage** : espace utilisé, plafonds du cache et vidage du cache.
-- **Économiseur d'espace** : propose de mettre à la corbeille les photos du téléphone déjà
-  sauvegardées à l'identique sur OneDrive.
+- Sign in with a **personal Microsoft account**, **read-only**: the app never creates, changes or
+  deletes anything on OneDrive.
+- Previews sized to the network, and the original downloaded at deep zoom.
+- Share and "Open with" for OneDrive items.
+- **Offline copies** ("Keep offline") and **Cache all of OneDrive** (thumbnails and previews) for
+  browsing without a connection.
+- **Storage page**: space used, cache limits and cache clearing.
+- **Space saver**: offers to move phone photos that already have an identical copy on OneDrive to
+  the trash.
 
-### Et aussi
+### Also included
 
-- Mode sélection avec glissement, et sélection d'un jour ou d'un mois entier. Actions disponibles :
-  favori, partage, ajout à un album, copie et suppression.
-- **Déplacer vers le Dossier sécurisé** Samsung.
-- Animation de chargement des vignettes.
-- Thèmes clair, sombre et système. Interface en français et en anglais.
-- Peut servir d'application par défaut pour ouvrir les photos et vidéos.
+- Selection mode with drag-to-select, and selection of a whole day or month. Available actions:
+  favourite, share, add to album, copy and delete.
+- **Move to Secure Folder** (Samsung).
+- A loading animation on thumbnails.
+- Light, dark and system themes. The interface is in French and English.
+- Can be the default app for opening photos and videos.
 
-### Sécurité des fichiers
+### File safety
 
-Toute suppression passe par la **corbeille Android** (récupérable pendant 30 jours) ou par la boîte
-de confirmation du système. L'indexation ne fait que lire les fichiers du téléphone.
+Every deletion goes through the **Android trash** (recoverable for 30 days) or the system's own
+confirmation dialog. Indexing only reads the phone's files.
 
 ---
 
 ## Installation
 
-**Prérequis : Android 16 (One UI 8) ou plus récent.**
+**Requires Android 16 (One UI 8) or later.**
 
-1. Téléchargez `CloudGallery-v*.apk` depuis la
-   [dernière release](https://github.com/Maxlego08/CloudGallery/releases/latest).
-2. Ouvrez le fichier sur le téléphone. Si Android le demande, autorisez l'installation
-   d'applications depuis votre navigateur ou votre gestionnaire de fichiers.
-3. Au premier lancement, accordez l'accès aux photos et vidéos.
-4. Pour activer OneDrive : *Menu > OneDrive > Se connecter*.
+1. Download `CloudGallery-v*.apk` from the
+   [latest release](https://github.com/Maxlego08/CloudGallery/releases/latest).
+2. Open the file on your phone. If Android asks, allow installing apps from your browser or file
+   manager.
+3. On first launch, grant access to photos and videos.
+4. To turn on OneDrive: *Menu > OneDrive > Sign in to OneDrive*.
 
-Avec adb : `adb install -r CloudGallery-v1.0.0.apk`.
+With adb: `adb install -r CloudGallery-v1.0.0.apk`.
 
-Pour ouvrir les photos avec CloudGallery par défaut, ouvrez une photo depuis une autre
-application (Mes fichiers, une messagerie…), choisissez **CloudGallery**, puis **Toujours**.
+To make CloudGallery the default for opening photos, open a photo from another app (My Files, a
+messaging app…), choose **CloudGallery**, then **Always**.
 
-> Les APK publiés sont signés avec la clé de release du projet. Un APK compilé vous-même porte une
-> autre signature : il faut désinstaller l'un avant d'installer l'autre, ce qui efface les favoris
-> et les albums personnalisés.
+> Published APKs are signed with the project's release key. An APK you build yourself has a
+> different signature: you have to uninstall one before installing the other, which erases your
+> favourites and custom albums.
 
 ---
 
-## Compiler depuis les sources
+## Building from source
 
-Prérequis : Android Studio récent (AGP 9.4), JDK 17 ou plus récent, SDK Android API 37.
+Requirements: a recent Android Studio (AGP 9.4), JDK 17 or later, and Android SDK API 37.
 
 ```bash
 git clone https://github.com/Maxlego08/CloudGallery.git
 cd CloudGallery
-./gradlew assembleDebug        # Windows : .\gradlew.bat assembleDebug
+./gradlew assembleDebug        # Windows: .\gradlew.bat assembleDebug
 ```
 
-L'APK se trouve dans `app/build/outputs/apk/debug/`.
+The APK is in `app/build/outputs/apk/debug/`.
 
-### Activer OneDrive dans votre build
+### Enabling OneDrive in your build
 
-Sans configuration, l'application se compile normalement et les fonctions OneDrive sont
-masquées. Pour les activer, il faut une inscription d'application gratuite dans Microsoft Entra,
-sans secret client :
+Without any configuration, the app builds normally and the OneDrive features are hidden. To turn
+them on, you need a free app registration in Microsoft Entra, with no client secret:
 
-1. Inscrivez l'application dans le [centre d'administration Entra](https://entra.microsoft.com) :
-   - type de compte : *Comptes Microsoft personnels* ;
-   - plateforme Android : package `fr.eva.cloudgallery` et hachage de votre clé de signature ;
-   - autorisations déléguées : `Files.Read`, `User.Read` et `offline_access`.
-2. Ajoutez dans `local.properties` (fichier non versionné) :
+1. Register the app in the [Entra admin center](https://entra.microsoft.com):
+   - account type: *Personal Microsoft accounts*;
+   - Android platform: package `fr.eva.cloudgallery` and your signing key's hash;
+   - delegated permissions: `Files.Read`, `User.Read` and `offline_access`.
+2. Add to `local.properties` (not committed):
 
    ```properties
    msal.clientId=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
    msal.signatureHash=XXXXXXXXXXXXXXXXXXXXXXXXXXX=
    ```
 
-La procédure complète, avec le calcul du hachage sous Windows, se trouve dans
-[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#configuration-microsoft-entra-et-paramétrage-msal).
+The full procedure, including how to compute the hash on Windows, is in
+[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#microsoft-entra-configuration-and-msal-setup).
 
-### Build release signé
+### Signed release build
 
-Pour signer `assembleRelease` avec votre propre clé, définissez ces propriétés dans
-`~/.gradle/gradle.properties` :
+To sign `assembleRelease` with your own key, set these properties in
+`~/.gradle/gradle.properties`:
 
 ```properties
-cloudgallery.release.storeFile=C:/chemin/vers/release.jks
+cloudgallery.release.storeFile=C:/path/to/release.jks
 cloudgallery.release.storePassword=…
 cloudgallery.release.keyAlias=…
 cloudgallery.release.keyPassword=…
-msal.releaseSignatureHash=…   # hachage de cette clé, à ajouter aussi dans Entra
+msal.releaseSignatureHash=…   # this key's hash, also registered in Entra
 ```
 
-Sans ces propriétés, le build release est signé avec la clé debug.
+Without these properties, the release build is signed with the debug key.
 
 ### Tests
 
 ```bash
-./gradlew testDebugUnitTest          # tests unitaires JVM
-./gradlew connectedDebugAndroidTest  # tests instrumentés (appareil requis)
+./gradlew testDebugUnitTest          # JVM unit tests
+./gradlew connectedDebugAndroidTest  # instrumented tests (device required)
 ```
 
 ---
 
-## Technique
+## Tech stack
 
-Kotlin, Jetpack Compose, Hilt, Room (avec Paging 3), WorkManager, DataStore, Coil 3,
-Media3 ExoPlayer, MSAL et Microsoft Graph (requête delta).
+Kotlin, Jetpack Compose, Hilt, Room (with Paging 3), WorkManager, DataStore, Coil 3,
+Media3 ExoPlayer, MSAL and Microsoft Graph (delta query).
 
-Le détail de l'architecture, de la synchronisation, du cache, des permissions et des tests est
-dans [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
+Architecture, sync, cache, permissions and tests are documented in detail in
+[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
 
-## Limitations connues
+## Known limitations
 
-- OneDrive : comptes Microsoft personnels uniquement, un seul compte à la fois, en lecture seule.
-- Pas de synchronisation en arrière-plan : la bibliothèque est mise à jour quand l'application est
-  ouverte.
-- Les favoris et les albums personnalisés sont propres à l'application. Ils ne sont pas partagés
-  avec Samsung Galerie et sont perdus en cas de désinstallation.
-- Pas de décodage par tuiles pour les très grandes images (au-delà d'environ 24 MP), ni de GIF
-  animés ou de Motion Photos.
-- Recherche sans reconnaissance de lieux ni de contenu.
+- OneDrive: personal Microsoft accounts only, one account at a time, read-only.
+- No background sync: the library updates while the app is open.
+- Favourites and custom albums belong to the app. They are not shared with Samsung Gallery and
+  are lost if you uninstall it.
+- No tiled decoding for very large images (above about 24 MP), and no animated GIFs or Motion
+  Photos.
+- Search does not recognise places or image content.
 
-La liste complète se trouve dans
-[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#limitations-connues).
+The full list is in [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#known-limitations).
 
-## Licence
+## License
 
 [MIT](LICENSE)

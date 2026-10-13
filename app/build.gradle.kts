@@ -29,7 +29,7 @@ val msalSignatureHash: String = msalProp("msal.signatureHash")
     .takeIf { Regex("^[A-Za-z0-9+/]{27}=$").matches(it) }
     .orEmpty()
 if (msalClientId.isEmpty() || msalSignatureHash.isEmpty()) {
-    logger.warn("MSAL non configuré (msal.clientId / msal.signatureHash) : OneDrive désactivé dans ce build")
+    logger.warn("MSAL not configured (msal.clientId / msal.signatureHash): OneDrive disabled in this build")
 }
 
 // --- Signature release -------------------------------------------------------------------
@@ -42,7 +42,7 @@ val msalReleaseSignatureHash: String = msalProp("msal.releaseSignatureHash")
     .takeIf { releaseStoreFile != null && Regex("^[A-Za-z0-9+/]{27}=$").matches(it) }
     ?: msalSignatureHash
 if (releaseStoreFile == null) {
-    logger.warn("Keystore release absent (cloudgallery.release.storeFile) : release signé avec la clé debug")
+    logger.warn("No release keystore (cloudgallery.release.storeFile): release signed with the debug key")
 }
 
 android {
