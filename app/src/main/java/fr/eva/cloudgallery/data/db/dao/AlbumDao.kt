@@ -11,7 +11,8 @@ import fr.eva.cloudgallery.domain.model.AlbumType
 import kotlinx.coroutines.flow.Flow
 
 /*
- * members : couples (albumId, mediaId) des albums-dossiers et des albums virtuels.
+ * members : couples (albumId, mediaId) des albums-dossiers (sources visibles, voir
+ *           FOLDER_MEMBER_SOURCE) et des albums virtuels.
  * stats   : nombre de médias, date la plus récente et média le plus récent (colonne « nue »
  *           associée à MAX(), comportement documenté de SQLite) pour la couverture.
  */
@@ -19,7 +20,7 @@ private const val ALBUM_ROWS = """
     WITH members AS (
         SELECT a.id AS albumId, s.mediaId AS mediaId
         FROM album a JOIN media_source s ON s.bucketKey = a.sourceKey
-        WHERE a.sourceKey IS NOT NULL
+        WHERE a.sourceKey IS NOT NULL AND $FOLDER_MEMBER_SOURCE
         UNION
         SELECT am.albumId AS albumId, am.mediaId AS mediaId FROM album_media am
     ),
@@ -29,10 +30,11 @@ private const val ALBUM_ROWS = """
         WHERE (m.hasLocal = 1 OR m.hasCloud = 1 OR m.hasOffline = 1)
         GROUP BY mb.albumId
     )
-    SELECT a.id, a.name, a.customName, a.type, a.sourceKey, a.relativePath, a.isPinned, a.sortIndex,
+    SELECT a.id, a.name, a.customName, a.type, a.sourceKey, a.relativePath, a.isPinned, a.isHidden, a.hideMedia, a.sortIndex,
         COALESCE(st.cnt, 0) AS mediaCount,
         c.id AS coverMediaId, c.primaryUri AS coverUri, c.mediaType AS coverType,
-        c.dateModified AS coverDateModified, st.latest AS latestDate
+        c.dateModified AS coverDateModified, c.cloudItemId AS coverCloudItemId, c.cloudCTag AS coverCloudCTag,
+        st.latest AS latestDate
     FROM album a
     LEFT JOIN stats st ON st.albumId = a.id
     LEFT JOIN media c ON c.id = COALESCE(a.coverMediaId, st.latestId)
@@ -43,6 +45,10 @@ interface AlbumDao {
 
     @Query("$ALBUM_ROWS WHERE a.isHidden = 0 AND (a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0)")
     fun observeAlbumRows(): Flow<List<AlbumRow>>
+
+    /** Tous les albums non vides, masqués compris (écran « Masquer des albums »). */
+    @Query("$ALBUM_ROWS WHERE a.type = 'VIRTUAL' OR COALESCE(st.cnt, 0) > 0")
+    fun observeAllAlbumRows(): Flow<List<AlbumRow>>
 
     @Query("$ALBUM_ROWS WHERE a.id = :albumId")
     fun observeAlbumRow(albumId: Long): Flow<AlbumRow?>
@@ -71,6 +77,9 @@ interface AlbumDao {
     @Query("UPDATE album SET isPinned = :pinned, updatedAt = :now WHERE id = :id")
     suspend fun setPinned(id: Long, pinned: Boolean, now: Long)
 
+    @Query("UPDATE album SET isHidden = :hidden, hideMedia = :hideMedia, updatedAt = :now WHERE id = :id")
+    suspend fun setVisibility(id: Long, hidden: Boolean, hideMedia: Boolean, now: Long)
+
     @Query("UPDATE album SET coverMediaId = :mediaId, updatedAt = :now WHERE id = :id")
     suspend fun setCover(id: Long, mediaId: Long?, now: Long)
 
@@ -83,11 +92,22 @@ interface AlbumDao {
      */
     @Query(
         """
-        DELETE FROM album WHERE id IN (:ids) AND type = 'LOCAL_FOLDER'
+        DELETE FROM album WHERE id IN (:ids) AND type = :type
             AND customName IS NULL AND isPinned = 0 AND isHidden = 0 AND coverMediaId IS NULL
         """,
     )
-    suspend fun deleteUncustomizedFolders(ids: List<Long>)
+    suspend fun deleteUncustomizedFolders(ids: List<Long>, type: AlbumType)
+
+    /** Supprime tous les albums d'un type (ex. albums OneDrive lors de la déconnexion). */
+    @Query("DELETE FROM album WHERE type = :type")
+    suspend fun deleteByType(type: AlbumType)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM album WHERE type = :type)")
+    suspend fun existsByType(type: AlbumType): Boolean
+
+    /** coverMediaId n'a pas de clé étrangère : on retire les couvertures qui pointent vers un média disparu. */
+    @Query("UPDATE album SET coverMediaId = NULL WHERE coverMediaId IS NOT NULL AND coverMediaId NOT IN (SELECT id FROM media)")
+    suspend fun clearDanglingCovers()
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMembers(members: List<AlbumMediaEntity>)

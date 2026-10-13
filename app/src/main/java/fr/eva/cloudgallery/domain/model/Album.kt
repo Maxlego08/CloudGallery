@@ -15,6 +15,17 @@ enum class AlbumType {
 
 enum class AlbumSort { CUSTOM, NAME, RECENT, COUNT }
 
+/** Affichage d'un album choisi par l'utilisateur (« Masquer des albums »). */
+enum class AlbumVisibility {
+    SHOWN,
+
+    /** Absent de l'onglet Albums ; ses médias restent dans Photos, Vidéos, la recherche. */
+    HIDDEN_IN_ALBUMS,
+
+    /** Absent de l'onglet Albums, et ses médias absents de Photos et Vidéos. */
+    HIDDEN_EVERYWHERE,
+}
+
 data class AlbumSummary(
     val id: Long,
     val name: String,
@@ -28,4 +39,7 @@ data class AlbumSummary(
     val coverDateModified: Long,
     val latestDate: Long,
     val isPinned: Boolean,
+    /** Miniature OneDrive de la couverture, utilisée quand la couverture n'a pas de fichier local. */
+    val coverCloud: CloudThumbRef? = null,
+    val visibility: AlbumVisibility = AlbumVisibility.SHOWN,
 )

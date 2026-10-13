@@ -1,7 +1,19 @@
 package fr.eva.cloudgallery.ui.viewer
 
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
+import fr.eva.cloudgallery.domain.model.MediaSummary
+import fr.eva.cloudgallery.ui.image.ThumbnailImage
+import fr.eva.cloudgallery.ui.image.offlineThumbnail
+import kotlinx.coroutines.flow.first
+import kotlin.math.max
+import kotlin.math.roundToInt
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -36,6 +48,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.util.lerp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -71,12 +97,19 @@ import fr.eva.cloudgallery.ui.components.OneUiDialog
 import fr.eva.cloudgallery.ui.components.OneUiIconButton
 import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiOverflowMenu
+import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
 import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderDialogs
+import fr.eva.cloudgallery.ui.securefolder.secureFolderActionVisible
+import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
+import fr.eva.cloudgallery.ui.offline.offlineStatusText
+import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
 import fr.eva.cloudgallery.ui.theme.OneUiFavoriteRed
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.theme.ViewerColors
 import fr.eva.cloudgallery.ui.util.Formatters
 import fr.eva.cloudgallery.ui.util.openWithExternalApp
+import fr.eva.cloudgallery.ui.util.progressPercent
 import fr.eva.cloudgallery.ui.util.shareMedia
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -96,7 +129,11 @@ private val ScrimColor = Color(0x99000000)
  * Le ViewModel lit [fr.eva.cloudgallery.ui.navigation.ViewerRoute] via SavedStateHandle.
  */
 @Composable
-fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
+fun ViewerScreen(
+    onBack: () -> Unit,
+    onPlayVideo: (mediaId: Long) -> Unit,
+    transition: ViewerTransition = ViewerTransition.Static,
+) {
     val viewModel: ViewerViewModel = hiltViewModel()
     val ids by viewModel.ids.collectAsStateWithLifecycle()
     val media by viewModel.currentMedia.collectAsStateWithLifecycle()
@@ -105,6 +142,18 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
     val exif by viewModel.exif.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val folders by viewModel.localFolders.collectAsStateWithLifecycle()
+    val cloudOriginal by viewModel.cloudOriginal.collectAsStateWithLifecycle()
+    val costlyNetwork by viewModel.costlyNetwork.collectAsStateWithLifecycle()
+    val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
+    val offlineState by viewModel.offlineState.collectAsStateWithLifecycle()
+    val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
+    val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
+    val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
+    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    val withNotificationPermission = rememberNotificationPermissionGate(
+        alreadyAsked = settings.offlineNotificationsAsked,
+        onAsked = viewModel::markNotificationsAsked,
+    )
     val context = LocalContext.current
     val resources = LocalResources.current
     val currentId by viewModel.currentId.collectAsStateWithLifecycle()
@@ -129,7 +178,16 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     val text = if (event.arg != null) resources.getString(event.message, event.arg) else resources.getString(event.message)
                     Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
                 }
+                is ViewerEvent.PluralToast -> Toast.makeText(
+                    context,
+                    resources.getQuantityString(event.message, event.count, event.count),
+                    Toast.LENGTH_SHORT,
+                ).show()
                 ViewerEvent.CropSaved -> showCropEditor = false
+                is ViewerEvent.Share -> runCatching { shareMedia(context, event.uris, event.mimeTypes) }
+                    .onFailure { Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show() }
+                is ViewerEvent.OpenWith -> runCatching { openWithExternalApp(context, event.uri, event.mimeType) }
+                    .onFailure { Toast.makeText(context, R.string.common_error_generic, Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -142,16 +200,83 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
     val current = media
     val isLocal = current != null && current.hasLocal && current.uri != null
+    // Sans fichier local (OneDrive ou copie hors ligne) : les actions d'écriture (modifier,
+    // supprimer, rogner, pivoter, copier) restent réservées aux fichiers de l'appareil ; partager
+    // et « Ouvrir avec » utilisent la copie hors ligne ou téléchargent l'original (lecture seule).
+    val cloudOnly = current != null && !isLocal
+    val canRead = isLocal || current?.hasCloud == true || current?.hasOffline == true
     val isImage = current?.type == MediaType.IMAGE
     val chromeShown = chromeVisible && dismissProgress < 0.02f && !showCropEditor
     ImmersiveSystemBars(visible = chromeShown || showCropEditor)
 
+    // Transition grille ↔ visionneuse (ViewerTransition.kt) : la photo part de sa vignette et y
+    // revient quand la grille l'affiche ; sinon (ouverture depuis une autre appli, vignette hors
+    // écran) fondu et léger zoom.
+    val registry = LocalMediaBounds.current
+    var rootOffset by remember { mutableStateOf(Offset.Zero) }
+    var rootSize by remember { mutableStateOf(Size.Zero) }
+    val entry = registry?.entryOf(currentId)
+    val cell = entry?.rect?.translate(-rootOffset)
+    // Dimensions : détails chargés, sinon média de la grille (connu dès la première image).
+    val dims = current?.takeIf { it.id == currentId }?.let { Triple(it.width, it.height, it.orientation) }
+        ?: entry?.media?.let { Triple(it.width, it.height, it.orientation) }
+    val fitted = dims?.let { (w, h, orientation) ->
+        val swap = orientation % 180 != 0
+        ViewerZoomGeometry.fittedRect(rootSize, if (swap) h else w, if (swap) w else h)
+    }
+    /** Vignette et rectangle ajusté de la photo courante (repère de la visionneuse), si connus. */
+    val zoomRects: Pair<Rect, Rect>? = if (cell != null && fitted != null) cell to fitted else null
+    val shared = zoomRects != null
+    val closing = transition.closing
+    // Barres : masquées aussitôt au retour, affichées en fondu passée la moitié de l'ouverture.
+    val opening by remember(transition) { derivedStateOf { !transition.closing && transition.progress < 0.6f } }
+    val chromeOnScreen = chromeShown && !closing && !opening
+    SideEffect { registry?.hiddenId = if (closing && shared) currentId else null }
+    DisposableEffect(registry) { onDispose { registry?.hiddenId = null } }
+
+    // Miniature de la grille (déjà en cache mémoire) sous les pages : la photo est visible dès la
+    // première image de l'ouverture, sans attendre les identifiants ni l'image de la visionneuse.
+    // Retirée au premier geste (page suivante, zoom, glisser) et au retour.
+    val openedId = remember { currentId }
+    val openedEntry = remember { registry?.entryOf(currentId) }
+    var pagerMoved by remember { mutableStateOf(false) }
+    val showGridThumb = openedEntry != null && fitted != null && currentId == openedId &&
+        !closing && !pagerMoved && !currentZoomed && dismissProgress == 0f
+    // Pages (identifiants, images pleine taille) composées une fois l'ouverture terminée : leur
+    // construction pendant l'animation la faisait saccader. La miniature tient lieu de photo.
+    val openingDone by remember(transition) { derivedStateOf { transition.closing || transition.progress >= 1f } }
+    val pagerReady = openedEntry == null || openingDone
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(ViewerColors.background),
+            .onGloballyPositioned {
+                rootOffset = it.positionInWindow()
+                rootSize = it.size.toSize()
+            }
+            .graphicsLayer {
+                if (!shared) {
+                    val p = transition.progress
+                    alpha = p
+                    scaleX = lerp(0.92f, 1f, p)
+                    scaleY = scaleX
+                }
+            }
+            .drawBehind {
+                // Fond noir dès l'ouverture, transparent dès le retour : la grille est visible tout
+                // de suite (y compris la première image, avant que la grille ne donne ses positions).
+                if (!closing) drawRect(ViewerColors.background)
+            },
     ) {
-        if (!idList.isNullOrEmpty()) {
+        if (showGridThumb && openedEntry != null && fitted != null) {
+            GridThumbnailLayer(
+                media = openedEntry.media,
+                fitted = fitted,
+                requestSide = openedEntry.rect.width,
+                modifier = Modifier.fillMaxSize().zoomFromCell(zoomRects) { transition.progress },
+            )
+        }
+        if (!idList.isNullOrEmpty() && pagerReady) {
             val currentIds by rememberUpdatedState(idList)
             val pagerState = rememberPagerState(
                 initialPage = idList.indexOf(currentId).coerceAtLeast(0),
@@ -159,6 +284,10 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             val scope = rememberCoroutineScope()
             val velocityThreshold = with(LocalDensity.current) { 400.dp.toPx() }
 
+            LaunchedEffect(pagerState) {
+                snapshotFlow { abs(pagerState.currentPageOffsetFraction) > 0.001f }.first { it }
+                pagerMoved = true
+            }
             LaunchedEffect(pagerState) {
                 snapshotFlow { currentIds.getOrNull(pagerState.currentPage) }
                     .filterNotNull()
@@ -168,7 +297,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zoomFromCell(zoomRects) { transition.progress },
                 beyondViewportPageCount = 1,
                 pageSpacing = 12.dp,
                 userScrollEnabled = !currentZoomed,
@@ -194,6 +325,11 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     callbacks = callbacks,
                     onZoomChanged = { zoomed -> if (page == pagerState.settledPage) currentZoomed = zoomed },
                     onPlayVideo = onPlayVideo,
+                    cloudOriginal = cloudOriginal,
+                    costlyNetwork = costlyNetwork,
+                    onHiResWanted = viewModel::onHiResWanted,
+                    onLoadOriginal = viewModel::loadOriginal,
+                    onCancelOriginal = viewModel::cancelOriginal,
                 )
             }
 
@@ -205,9 +341,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             }
 
             AnimatedVisibility(
-                visible = chromeShown,
+                visible = chromeOnScreen,
                 enter = fadeIn(),
-                exit = fadeOut(),
+                exit = if (closing) ExitTransition.None else fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 Column(
@@ -235,13 +371,12 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                     ViewerActionBar(
                         media = current,
                         isLocal = isLocal,
+                        cloudOnly = cloudOnly,
+                        canShare = canRead && sharePreparation == null,
                         isImage = isImage,
                         onFavorite = viewModel::toggleFavorite,
                         onEdit = { showCropEditor = true },
-                        onShare = {
-                            val m = current
-                            if (m?.uri != null && isLocal) shareMedia(context, listOf(m.uri), listOf(m.mimeType))
-                        },
+                        onShare = viewModel::shareCurrent,
                         onDelete = {
                             if (settings.confirmBeforeDelete) showDeleteConfirm = true else viewModel.requestDelete()
                         },
@@ -251,9 +386,9 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
         }
 
         AnimatedVisibility(
-            visible = chromeShown,
+            visible = chromeOnScreen,
             enter = fadeIn(),
-            exit = fadeOut(),
+            exit = if (closing) ExitTransition.None else fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             ViewerTopBar(
@@ -263,7 +398,7 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                 onMenuExpandedChange = { menuExpanded = it },
                 menuItems = buildList {
                     add(OneUiMenuItem(stringResource(R.string.common_details)) { showDetails = true })
-                    if (isImage) {
+                    if (isImage && !cloudOnly) {
                         // Rotation sans perte : seulement pour les formats dont l'orientation EXIF est modifiable.
                         if (viewModel.canRotate(current)) {
                             add(OneUiMenuItem(stringResource(R.string.viewer_rotate_left), enabled = isLocal && !busy) { viewModel.requestRotate(270) })
@@ -272,13 +407,46 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
                         add(OneUiMenuItem(stringResource(R.string.viewer_crop), enabled = isLocal) { showCropEditor = true })
                     }
                     add(OneUiMenuItem(stringResource(R.string.common_add_to_album), enabled = current != null) { showAlbumPicker = true })
-                    add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
+                    if (!cloudOnly) {
+                        add(OneUiMenuItem(stringResource(R.string.common_copy_to_album), enabled = isLocal && !busy) { showFolderPicker = true })
+                    }
+                    // Fichier du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                    if (secureFolderActionVisible(secureFolderAvailable, if (isLocal) 1 else 0)) {
+                        add(
+                            OneUiMenuItem(stringResource(R.string.secure_folder_move), enabled = !busy) {
+                                viewModel.moveCurrentToSecureFolder()
+                            },
+                        )
+                    }
                     add(
-                        OneUiMenuItem(stringResource(R.string.common_open_with), enabled = isLocal) {
-                            val m = current
-                            if (m?.uri != null) openWithExternalApp(context, m.uri, m.mimeType)
+                        OneUiMenuItem(stringResource(R.string.common_open_with), enabled = canRead && sharePreparation == null) {
+                            viewModel.openCurrentWith()
                         },
                     )
+                    // Copie hors ligne (éléments OneDrive, ou copie conservée d'un élément supprimé de OneDrive).
+                    if (current != null && (current.hasCloud || current.hasOffline)) {
+                        when {
+                            offlineState.active -> add(
+                                OneUiMenuItem(stringResource(R.string.offline_cancel_download)) { viewModel.cancelOfflineDownload() },
+                            )
+                            offlineState.stopped -> {
+                                add(
+                                    OneUiMenuItem(stringResource(R.string.offline_resume_download)) {
+                                        withNotificationPermission { viewModel.keepOffline() }
+                                    },
+                                )
+                                add(OneUiMenuItem(stringResource(R.string.offline_cancel_download)) { viewModel.cancelOfflineDownload() })
+                            }
+                            current.hasCloud && !current.hasOffline -> add(
+                                OneUiMenuItem(stringResource(R.string.offline_keep)) {
+                                    withNotificationPermission { viewModel.keepOffline() }
+                                },
+                            )
+                        }
+                        if (current.hasOffline) {
+                            add(OneUiMenuItem(stringResource(R.string.offline_release)) { viewModel.releaseOffline() })
+                        }
+                    }
                 },
             )
         }
@@ -311,7 +479,16 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
 
     if (showDetails && current != null) {
         LaunchedEffect(current.id, current.dateModified) { viewModel.loadExif(current) }
-        DetailsSheet(media = current, exif = exif, onDismiss = { showDetails = false })
+        DetailsSheet(
+            media = current,
+            exif = exif,
+            onDismiss = { showDetails = false },
+            offlineStatus = offlineStatusText(
+                state = offlineState,
+                deletedOnOneDrive = current.hasOffline && !current.hasCloud,
+                offlineBytes = current.offlineCopy?.sizeBytes ?: current.offlineSource?.sizeBytes ?: 0L,
+            ),
+        )
     }
 
     if (showAlbumPicker) {
@@ -335,6 +512,29 @@ fun ViewerScreen(onBack: () -> Unit, onPlayVideo: (mediaId: Long) -> Unit) {
             },
         )
     }
+
+    sharePreparation?.let { preparation ->
+        SharePreparationDialog(preparation = preparation, onCancel = viewModel::cancelSharePreparation)
+    }
+
+    offlinePrompt?.let { prompt ->
+        OfflinePromptDialog(
+            prompt = prompt,
+            onConfirmLargeBatch = viewModel::confirmLargeBatch,
+            onDownloadNow = viewModel::downloadOfflineNow,
+            onConfirmRelease = viewModel::confirmRelease,
+            onDismiss = viewModel::dismissOfflinePrompt,
+        )
+    }
+
+    SecureFolderDialogs(
+        prompt = secureFolderPrompt,
+        onShareLaunched = viewModel::onSecureFolderShareLaunched,
+        onShareReturned = viewModel::onSecureFolderShareReturned,
+        onTrash = viewModel::trashAfterSecureFolder,
+        onCancel = viewModel::dismissSecureFolder,
+        onKeep = viewModel::dismissSecureFolder,
+    )
 
     if (showDeleteConfirm) {
         OneUiDialog(
@@ -453,11 +653,17 @@ private fun ViewerTopBar(
     }
 }
 
-/** Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager, Supprimer. */
+/**
+ * Barre d'actions de la visionneuse (icônes seules, comme One UI) : Favori, Modifier, Partager,
+ * Supprimer. Elément uniquement sur OneDrive ([cloudOnly]) : Favori et Partager (original
+ * téléchargé) ; modifier et supprimer restent réservés aux fichiers de l'appareil.
+ */
 @Composable
 private fun ViewerActionBar(
     media: MediaDetails?,
     isLocal: Boolean,
+    cloudOnly: Boolean,
+    canShare: Boolean,
     isImage: Boolean,
     onFavorite: () -> Unit,
     onEdit: () -> Unit,
@@ -484,6 +690,18 @@ private fun ViewerActionBar(
                 tint = if (favorite) OneUiFavoriteRed else ViewerColors.content,
             )
         }
+        if (cloudOnly) {
+            ActionSlot {
+                OneUiIconButton(
+                    icon = Icons.Outlined.Share,
+                    contentDescription = stringResource(R.string.common_share),
+                    onClick = onShare,
+                    enabled = canShare,
+                    tint = ViewerColors.content,
+                )
+            }
+            return@Row
+        }
         ActionSlot {
             OneUiIconButton(
                 icon = Icons.Outlined.Edit,
@@ -499,7 +717,7 @@ private fun ViewerActionBar(
                 icon = Icons.Outlined.Share,
                 contentDescription = stringResource(R.string.common_share),
                 onClick = onShare,
-                enabled = isLocal,
+                enabled = isLocal && canShare,
                 tint = ViewerColors.content,
             )
         }
@@ -518,4 +736,87 @@ private fun ViewerActionBar(
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ActionSlot(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
+}
+
+/**
+ * Téléchargement d'un original OneDrive avant un partage ou un « Ouvrir avec » : progression et
+ * annulation (aussi par retour ou toucher hors de la boîte).
+ */
+@Composable
+private fun SharePreparationDialog(preparation: SharePreparation, onCancel: () -> Unit) {
+    val context = LocalContext.current
+    val percent = progressPercent(preparation.done, preparation.total)
+    OneUiProgressDialog(
+        title = stringResource(R.string.share_preparing),
+        message = if (preparation.total > 0) {
+            stringResource(
+                R.string.share_preparing_progress,
+                Formatter.formatShortFileSize(context, preparation.done),
+                Formatter.formatShortFileSize(context, preparation.total),
+            )
+        } else {
+            null
+        },
+        progress = if (percent >= 0) percent / 100f else null,
+        cancelLabel = stringResource(R.string.common_cancel),
+        onCancel = onCancel,
+    )
+}
+
+/**
+ * Pendant la transition grille ↔ visionneuse : contenu agrandi depuis la vignette (repère du
+ * conteneur, centre de [rects].second pour pivot) et découpé de la vignette au rectangle ajusté.
+ */
+private fun Modifier.zoomFromCell(rects: Pair<Rect, Rect>?, progress: () -> Float): Modifier {
+    val (cellRect, fittedRect) = rects ?: return this
+    return this
+        .drawWithContent {
+            val p = progress()
+            if (p >= 1f) {
+                drawContent()
+            } else {
+                val clip = ViewerZoomGeometry.frame(cellRect, fittedRect, p).clip
+                clipRect(clip.left, clip.top, clip.right, clip.bottom) { this@drawWithContent.drawContent() }
+            }
+        }
+        .graphicsLayer {
+            val frame = ViewerZoomGeometry.frame(cellRect, fittedRect, progress())
+            scaleX = frame.scale
+            scaleY = frame.scale
+            translationX = frame.translation.x
+            translationY = frame.translation.y
+        }
+}
+
+/**
+ * Miniature de la grille dans le rectangle ajusté [fitted] : demandée à la taille des vignettes
+ * ([requestSide] px pour le grand côté, même palier de cache Coil que la grille) puis agrandie.
+ */
+@Composable
+private fun GridThumbnailLayer(media: MediaSummary, fitted: Rect, requestSide: Float, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val k = (requestSide / max(fitted.width, fitted.height)).coerceAtMost(1f)
+    Box(modifier) {
+        Box(
+            Modifier
+                .offset { IntOffset(fitted.left.roundToInt(), fitted.top.roundToInt()) }
+                .size(with(density) { (fitted.width * k).toDp() }, with(density) { (fitted.height * k).toDp() })
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = 1f / k
+                    scaleY = 1f / k
+                },
+        ) {
+            ThumbnailImage(
+                uri = media.uri,
+                isVideo = media.type == MediaType.VIDEO,
+                version = media.dateModified,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+                cloud = media.cloudThumb,
+                offline = remember(media) { media.offlineThumbnail() },
+                placeholder = false,
+            )
+        }
+    }
 }

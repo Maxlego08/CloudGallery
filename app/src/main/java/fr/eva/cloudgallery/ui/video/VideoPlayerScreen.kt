@@ -52,7 +52,7 @@ internal data class SeekFeedback(val side: Int, val seconds: Int, val key: Int)
  * superposées masquées automatiquement après 3 s de lecture, double appui gauche/droite = -/+10 s.
  */
 @Composable
-fun VideoPlayerScreen(onBack: () -> Unit) {
+fun VideoPlayerScreen(onBack: () -> Unit, onOpenAccount: () -> Unit) {
     val viewModel: VideoPlayerViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -90,6 +90,11 @@ fun VideoPlayerScreen(onBack: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         viewModel.pause()
         controlsVisible = true
+    }
+
+    // Retour de l'écran Compte après « Se connecter » : nouvel essai si la connexion était demandée.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.retryIfSignInPending()
     }
 
     // Pause non demandée depuis les commandes (perte du focus audio, fin de la vidéo, arrière-plan) :
@@ -248,6 +253,10 @@ fun VideoPlayerScreen(onBack: () -> Unit) {
                     state.uri?.let { uri -> openWithExternalApp(context, uri, state.mimeType) }
                 },
                 onRetry = viewModel::retry,
+                onSignIn = {
+                    viewModel.pause()
+                    onOpenAccount()
+                },
                 modifier = Modifier.align(Alignment.Center),
             )
         }

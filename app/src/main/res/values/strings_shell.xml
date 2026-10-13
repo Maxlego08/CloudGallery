@@ -18,6 +18,16 @@
     <string name="perm_allow">Autoriser l\'accès</string>
     <string name="perm_partial_banner">Accès limité à certaines photos</string>
     <string name="perm_partial_manage">Gérer</string>
+    <!-- Usage « OneDrive seul » (aucun accès aux photos du téléphone) -->
+    <string name="perm_use_onedrive_only">Utiliser OneDrive seulement</string>
+    <string name="perm_no_local_banner">Photos du téléphone non autorisées</string>
+    <string name="perm_no_local_allow">Autoriser</string>
+    <string name="perm_onedrive_only_empty_title">Aucune photo à afficher</string>
+    <string name="perm_onedrive_only_empty_message">Connectez-vous à OneDrive pour parcourir vos photos et vidéos, ou autorisez l\'accès aux photos du téléphone.</string>
+    <string name="perm_onedrive_only_sign_in">Se connecter à OneDrive</string>
+    <string name="perm_onedrive_only_allow_photos">Autoriser les photos du téléphone</string>
+    <string name="perm_onedrive_only_synced_empty_title">Aucun élément OneDrive</string>
+    <string name="perm_onedrive_only_synced_empty_message">Les photos et vidéos de OneDrive apparaissent ici après la synchronisation.</string>
 
     <!-- Menu -->
     <string name="menu_title">Menu</string>
@@ -51,7 +61,19 @@
     <string name="settings_reindex_title">Réindexer la bibliothèque ?</string>
     <string name="settings_reindex_message">Tous les fichiers de l\'appareil seront relus. Cela peut prendre quelques minutes ; vos favoris et albums sont conservés.</string>
     <string name="settings_reindex_confirm">Réindexer</string>
+    <string name="settings_section_account">Compte</string>
+    <string name="settings_cloud_sync_state">Synchronisation OneDrive</string>
+    <string name="settings_background_sync">Synchroniser en arrière-plan</string>
+    <string name="settings_background_sync_off">Désactivée : seulement à l\'ouverture de l\'appli</string>
+    <string name="settings_background_sync_hourly">Toutes les heures</string>
+    <string name="settings_background_sync_6h">Toutes les 6 heures</string>
+    <string name="settings_background_sync_daily">Une fois par jour</string>
+    <string name="settings_background_sync_wifi_title">Synchroniser en Wi-Fi uniquement</string>
+    <string name="settings_background_sync_wifi_summary">La synchronisation en arrière-plan attend un réseau Wi-Fi non facturé. À l\'ouverture de l\'appli, OneDrive est toujours synchronisé.</string>
+    <string name="settings_show_cloud_in_photos">Afficher les éléments OneDrive dans Photos</string>
+    <string name="settings_originals_mobile_title">Charger les originaux sur réseau mobile</string>
+    <string name="settings_originals_mobile_summary">Au zoom, télécharge l\'original OneDrive sans demander, même sur données mobiles ou avec l\'économiseur de données. Désactivé, il vous est proposé avec sa taille. En Wi-Fi, il est toujours chargé automatiquement.</string>
+    <string name="settings_show_cloud_in_photos_summary">Désactivé : les éléments présents uniquement sur OneDrive n\'apparaissent que dans leurs albums OneDrive, les Favoris et vos albums ; ceux conservés hors ligne apparaissent toujours dans Photos. Activé : une photo présente sur le téléphone et sur OneDrive n\'apparaît qu\'une fois, après le calcul de son empreinte (fait pendant la charge).</string>
     <string name="settings_section_about">À propos</string>
     <string name="settings_version">Version %1$s</string>
-    <string name="settings_onedrive_soon">Disponible dans une prochaine version</string>
 </resources>

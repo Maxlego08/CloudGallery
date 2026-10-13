@@ -19,6 +19,16 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // MSAL -> common -> display-mask (Surface Duo), publié uniquement sur le flux Duo SDK.
+        // Contenu exclusif : ce dépôt ne sert que ce groupe et n'est jamais interrogé pour le reste.
+        exclusiveContent {
+            forRepository {
+                maven("https://pkgs.dev.azure.com/MicrosoftDeviceSDK/DuoSDK-Public/_packaging/Duo-SDK-Feed/maven/v1") {
+                    name = "DuoSdkFeed"
+                }
+            }
+            filter { includeGroup("com.microsoft.device.display") }
+        }
     }
 }
 

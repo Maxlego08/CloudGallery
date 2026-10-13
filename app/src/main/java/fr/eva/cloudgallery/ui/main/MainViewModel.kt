@@ -9,16 +9,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import fr.eva.cloudgallery.data.local.MediaAccessState
 import fr.eva.cloudgallery.di.IoDispatcher
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.domain.model.MediaAccess
+import fr.eva.cloudgallery.domain.repository.CloudAccountRepository
 import fr.eva.cloudgallery.domain.repository.MediaRepository
 import fr.eva.cloudgallery.domain.repository.SettingsRepository
-import fr.eva.cloudgallery.ui.permissions.MediaAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -53,25 +58,61 @@ sealed interface MainEvent {
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     private val mediaRepository: MediaRepository,
     private val syncCoordinator: MediaSyncCoordinator,
+    private val mediaAccess: MediaAccessState,
+    cloudAccounts: CloudAccountRepository,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
+    /** OneDrive existe dans ce build : « Utiliser OneDrive seulement » est alors proposé. */
+    val cloudAvailable: Boolean = cloudAccounts.isAvailable
+
+    /** Choix « OneDrive seul » enregistré, null tant que les réglages ne sont pas lus. */
+    val oneDriveOnlyChosen: StateFlow<Boolean?> = settingsRepository.settings
+        .map { it.oneDriveOnlyChosen }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Compte OneDrive connecté (ou à reconnecter) : sinon l'onglet Photos invite à se connecter. */
+    val cloudSignedIn: StateFlow<Boolean> = cloudAccounts.state
+        .map { it is CloudAccountState.SignedIn || it is CloudAccountState.NeedsReauth }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _events = Channel<MainEvent>(Channel.BUFFERED)
     val events: Flow<MainEvent> = _events.receiveAsFlow()
 
     private var lastAccess: MediaAccess? = null
 
+    init {
+        // Etat du compte lu au démarrage (Photos en « OneDrive seul » en dépend).
+        val current = cloudAccounts.state.value
+        if (cloudAvailable && (current is CloudAccountState.Loading || current is CloudAccountState.Error)) {
+            viewModelScope.launch { cloudAccounts.refresh() }
+        }
+    }
+
     /** Appelé à chaque changement d'accès détecté par l'UI (y compris au premier affichage). */
     fun onMediaAccessChanged(access: MediaAccess) {
+        mediaAccess.update(access)
         if (access == lastAccess) return
         lastAccess = access
-        if (access != MediaAccess.NONE) syncCoordinator.onAccessChanged()
+        if (access != MediaAccess.NONE) {
+            syncCoordinator.onAccessChanged()
+            // Accès accordé : le choix « OneDrive seul » est oublié (un retrait ultérieur redemande).
+            viewModelScope.launch {
+                if (settingsRepository.settings.first().oneDriveOnlyChosen) settingsRepository.setOneDriveOnlyChosen(false)
+            }
+        }
+    }
+
+    /** « Utiliser OneDrive seulement » sur l'écran d'autorisation. */
+    fun chooseOneDriveOnly() {
+        if (!cloudAvailable) return
+        viewModelScope.launch { settingsRepository.setOneDriveOnlyChosen(true) }
     }
 
     /** Retour de la demande d'autorisation avec un accès accordé (ex. nouvelle sélection partielle). */

@@ -54,6 +54,7 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 /**
  * Boîte de dialogue One UI : carte arrondie flottant en bas de l'écran, boutons texte séparés
  * par un trait vertical. [destructive] colore le bouton de confirmation en rouge.
+ * [confirmEnabled] faux : confirmation impossible pour l'instant (information en cours de lecture).
  */
 @Composable
 fun OneUiDialog(
@@ -64,6 +65,7 @@ fun OneUiDialog(
     dismissLabel: String? = null,
     message: String? = null,
     destructive: Boolean = false,
+    confirmEnabled: Boolean = true,
     content: (@Composable () -> Unit)? = null,
 ) {
     OneUiDialogImpl(
@@ -74,7 +76,7 @@ fun OneUiDialog(
         dismissLabel = dismissLabel,
         message = message,
         destructive = destructive,
-        confirmEnabled = true,
+        confirmEnabled = confirmEnabled,
         content = content,
     )
 }
@@ -210,6 +212,7 @@ private fun DialogTextButton(
 /**
  * Boîte de saisie de texte One UI (création / renommage d'album…). Le texte initial est
  * entièrement sélectionné ; la confirmation est désactivée tant que la saisie est vide.
+ * [message] : texte facultatif affiché au-dessus du champ.
  */
 @Composable
 fun OneUiTextInputDialog(
@@ -219,6 +222,7 @@ fun OneUiTextInputDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     placeholder: String? = null,
+    message: String? = null,
 ) {
     val colors = OneUiTheme.colors
     var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -234,7 +238,7 @@ fun OneUiTextInputDialog(
         confirmLabel = confirmLabel,
         onConfirm = confirm,
         dismissLabel = stringResource(R.string.common_cancel),
-        message = null,
+        message = message,
         destructive = false,
         confirmEnabled = canConfirm,
         content = {

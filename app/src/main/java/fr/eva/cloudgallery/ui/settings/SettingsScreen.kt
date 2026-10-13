@@ -41,8 +41,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.eva.cloudgallery.BuildConfig
 import fr.eva.cloudgallery.R
 import fr.eva.cloudgallery.domain.model.AppSettings
+import fr.eva.cloudgallery.domain.model.BackgroundSyncInterval
+import fr.eva.cloudgallery.domain.model.CloudAccountState
+import fr.eva.cloudgallery.domain.model.CloudSyncState
 import fr.eva.cloudgallery.domain.model.IndexState
 import fr.eva.cloudgallery.domain.model.ThemeMode
+import fr.eva.cloudgallery.ui.account.cloudAccountSummary
+import fr.eva.cloudgallery.ui.account.cloudSyncStatusText
 import fr.eva.cloudgallery.ui.components.OneUiBackButton
 import fr.eva.cloudgallery.ui.components.OneUiCard
 import fr.eva.cloudgallery.ui.components.OneUiCategoryHeader
@@ -59,11 +64,15 @@ import fr.eva.cloudgallery.ui.theme.OneUiTheme
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAccount: () -> Unit,
+    onOpenStorage: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val indexState by viewModel.indexState.collectAsStateWithLifecycle()
+    val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val cloudSyncState by viewModel.cloudSyncState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val titleAlpha by rememberCollapsedTitleAlpha(listState)
     val colors = OneUiTheme.colors
@@ -73,6 +82,7 @@ fun SettingsScreen(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    var showSyncIntervalDialog by rememberSaveable { mutableStateOf(false) }
     var showReindexDialog by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -104,6 +114,15 @@ fun SettingsScreen(
                     SettingsContent(
                         settings = current,
                         indexState = indexState,
+                        cloudState = if (viewModel.cloudAvailable) cloudState else null,
+                        cloudSyncState = cloudSyncState,
+                        onOpenAccount = onOpenAccount,
+                        onOpenStorage = onOpenStorage,
+                        onSyncIntervalClick = { showSyncIntervalDialog = true },
+                        onBackgroundSyncWifiOnly = viewModel::setBackgroundSyncWifiOnly,
+                        onShowCloudInPhotos = viewModel::setShowCloudInPhotos,
+                        onLoadOriginalsOnMobileData = viewModel::setLoadOriginalsOnMobileData,
+                        onOfflineWifiOnly = viewModel::setOfflineWifiOnly,
                         onThemeClick = { showThemeDialog = true },
                         onShowVideoDuration = viewModel::setShowVideoDuration,
                         onAutoPlay = viewModel::setAutoPlayVideos,
@@ -127,6 +146,16 @@ fun SettingsScreen(
             onDismiss = { showThemeDialog = false },
         )
     }
+    if (showSyncIntervalDialog && current != null) {
+        SyncIntervalDialog(
+            selected = current.backgroundSyncInterval,
+            onSelect = {
+                viewModel.setBackgroundSyncInterval(it)
+                showSyncIntervalDialog = false
+            },
+            onDismiss = { showSyncIntervalDialog = false },
+        )
+    }
     if (showReindexDialog) {
         OneUiDialog(
             title = stringResource(R.string.settings_reindex_title),
@@ -146,6 +175,15 @@ fun SettingsScreen(
 private fun SettingsContent(
     settings: AppSettings,
     indexState: IndexState,
+    cloudState: CloudAccountState?,
+    cloudSyncState: CloudSyncState,
+    onOpenAccount: () -> Unit,
+    onOpenStorage: () -> Unit,
+    onSyncIntervalClick: () -> Unit,
+    onBackgroundSyncWifiOnly: (Boolean) -> Unit,
+    onShowCloudInPhotos: (Boolean) -> Unit,
+    onLoadOriginalsOnMobileData: (Boolean) -> Unit,
+    onOfflineWifiOnly: (Boolean) -> Unit,
     onThemeClick: () -> Unit,
     onShowVideoDuration: (Boolean) -> Unit,
     onAutoPlay: (Boolean) -> Unit,
@@ -155,6 +193,73 @@ private fun SettingsContent(
 ) {
     val indent = OneUiTheme.dimens.cardPadding
     Column(Modifier.fillMaxWidth()) {
+        // Compte OneDrive : absent des builds sans configuration MSAL (cloudState null).
+        if (cloudState != null) {
+            OneUiCategoryHeader(stringResource(R.string.settings_section_account))
+            OneUiCard {
+                OneUiListItem(
+                    title = stringResource(R.string.common_onedrive),
+                    subtitle = cloudAccountSummary(cloudState),
+                    onClick = onOpenAccount,
+                )
+                // Etat de la synchronisation (information) : compte connecté ou session à renouveler.
+                if (cloudState is CloudAccountState.SignedIn || cloudState is CloudAccountState.NeedsReauth) {
+                    OneUiDivider(startIndent = indent)
+                    OneUiListItem(
+                        title = stringResource(R.string.settings_cloud_sync_state),
+                        subtitle = cloudSyncStatusText(cloudSyncState),
+                        trailing = if (cloudSyncState.running) RunningTrailing else null,
+                    )
+                }
+                OneUiDivider(startIndent = indent)
+                OneUiListItem(
+                    title = stringResource(R.string.settings_background_sync),
+                    subtitle = syncIntervalLabel(settings.backgroundSyncInterval),
+                    onClick = onSyncIntervalClick,
+                )
+                if (settings.backgroundSyncInterval != BackgroundSyncInterval.OFF) {
+                    OneUiDivider(startIndent = indent)
+                    OneUiSwitchItem(
+                        title = stringResource(R.string.settings_background_sync_wifi_title),
+                        subtitle = stringResource(R.string.settings_background_sync_wifi_summary),
+                        checked = settings.backgroundSyncWifiOnly,
+                        onCheckedChange = onBackgroundSyncWifiOnly,
+                    )
+                }
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_show_cloud_in_photos),
+                    subtitle = stringResource(R.string.settings_show_cloud_in_photos_summary),
+                    checked = settings.showCloudInPhotos,
+                    onCheckedChange = onShowCloudInPhotos,
+                )
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_originals_mobile_title),
+                    subtitle = stringResource(R.string.settings_originals_mobile_summary),
+                    checked = settings.loadOriginalsOnMobileData,
+                    onCheckedChange = onLoadOriginalsOnMobileData,
+                )
+                OneUiDivider(startIndent = indent)
+                OneUiSwitchItem(
+                    title = stringResource(R.string.settings_offline_wifi_only_title),
+                    subtitle = stringResource(R.string.settings_offline_wifi_only_summary),
+                    checked = settings.offlineWifiOnly,
+                    onCheckedChange = onOfflineWifiOnly,
+                )
+            }
+
+            // Stockage : caches et copies OneDrive (rien à y voir sans OneDrive).
+            OneUiCategoryHeader(stringResource(R.string.storage_title))
+            OneUiCard {
+                OneUiListItem(
+                    title = stringResource(R.string.storage_title),
+                    subtitle = stringResource(R.string.storage_settings_summary),
+                    onClick = onOpenStorage,
+                )
+            }
+        }
+
         OneUiCategoryHeader(stringResource(R.string.settings_section_appearance))
         OneUiCard {
             OneUiListItem(
@@ -217,12 +322,6 @@ private fun SettingsContent(
                 title = stringResource(R.string.app_name),
                 subtitle = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             )
-            OneUiDivider(startIndent = indent)
-            // Information uniquement : la connexion OneDrive n'existe pas encore (phase 3).
-            OneUiListItem(
-                title = stringResource(R.string.common_onedrive),
-                subtitle = stringResource(R.string.settings_onedrive_soon),
-            )
         }
     }
 }
@@ -236,6 +335,31 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
 }
 
+@Composable
+private fun syncIntervalLabel(interval: BackgroundSyncInterval): String = when (interval) {
+    BackgroundSyncInterval.OFF -> stringResource(R.string.settings_background_sync_off)
+    BackgroundSyncInterval.HOURLY -> stringResource(R.string.settings_background_sync_hourly)
+    BackgroundSyncInterval.EVERY_6_HOURS -> stringResource(R.string.settings_background_sync_6h)
+    BackgroundSyncInterval.DAILY -> stringResource(R.string.settings_background_sync_daily)
+}
+
+/** Fréquence de la synchro en arrière-plan : un toucher sur une option l'applique et ferme la boîte. */
+@Composable
+private fun SyncIntervalDialog(
+    selected: BackgroundSyncInterval,
+    onSelect: (BackgroundSyncInterval) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ChoiceDialog(
+        title = stringResource(R.string.settings_background_sync),
+        options = BackgroundSyncInterval.entries,
+        selected = selected,
+        label = { syncIntervalLabel(it) },
+        onSelect = onSelect,
+        onDismiss = onDismiss,
+    )
+}
+
 /** Choix du thème : un toucher sur une option l'applique et ferme la boîte. */
 @Composable
 private fun ThemeDialog(
@@ -243,25 +367,45 @@ private fun ThemeDialog(
     onSelect: (ThemeMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    ChoiceDialog(
+        title = stringResource(R.string.settings_theme),
+        options = ThemeMode.entries,
+        selected = selected,
+        label = { themeLabel(it) },
+        onSelect = onSelect,
+        onDismiss = onDismiss,
+    )
+}
+
+/** Liste d'options à boutons radio dans une boîte One UI (« Annuler » seul bouton). */
+@Composable
+private fun <T> ChoiceDialog(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val colors = OneUiTheme.colors
     OneUiDialog(
-        title = stringResource(R.string.settings_theme),
+        title = title,
         onDismiss = onDismiss,
         confirmLabel = stringResource(R.string.common_cancel),
         onConfirm = onDismiss,
     ) {
         Column(Modifier.selectableGroup()) {
-            ThemeMode.entries.forEach { mode ->
+            options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
-                        .selectable(selected = mode == selected, role = Role.RadioButton, onClick = { onSelect(mode) })
+                        .selectable(selected = option == selected, role = Role.RadioButton, onClick = { onSelect(option) })
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
-                        selected = mode == selected,
+                        selected = option == selected,
                         onClick = null,
                         colors = RadioButtonDefaults.colors(
                             selectedColor = colors.accent,
@@ -269,7 +413,7 @@ private fun ThemeDialog(
                         ),
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text(themeLabel(mode), style = OneUiTheme.typography.listTitle, color = colors.textPrimary)
+                    Text(label(option), style = OneUiTheme.typography.listTitle, color = colors.textPrimary)
                 }
             }
         }

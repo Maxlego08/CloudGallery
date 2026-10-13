@@ -103,7 +103,7 @@ internal fun CropEditor(
     val maxSide = remember(configuration.screenWidthDp, configuration.screenHeightDp, density.density) {
         (max(configuration.screenWidthDp, configuration.screenHeightDp) * density.density).toInt().coerceAtLeast(512)
     }
-    val request = remember(uri, media.dateModified, maxSide) { fullImageRequest(context, uri, media.dateModified, maxSide) }
+    val request = remember(uri, media.dateModified, maxSide) { fullImageRequest(context, uri, media.dateModified.toString(), maxSide) }
 
     val size = imageSize
     val rotatedW = if (size == null) 0f else if (rotation % 180 == 0) size.width else size.height

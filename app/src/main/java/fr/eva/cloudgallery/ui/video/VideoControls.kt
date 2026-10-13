@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -542,13 +543,17 @@ internal fun BoxScope.SeekFeedbackIndicator(feedback: SeekFeedback?) {
     }
 }
 
-/** Message d'erreur en français avec actions « Ouvrir avec une autre application » / « Réessayer ». */
+/**
+ * Message d'erreur avec, selon le cas, les actions « Ouvrir avec une autre application »,
+ * « Se connecter » (compte OneDrive) et « Réessayer ».
+ */
 @Composable
 internal fun PlaybackErrorPanel(
     error: PlaybackErrorKind,
     canOpenExternally: Boolean,
     onOpenWith: () -> Unit,
     onRetry: () -> Unit,
+    onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val message = stringResource(
@@ -557,6 +562,11 @@ internal fun PlaybackErrorPanel(
             PlaybackErrorKind.CORRUPTED_FILE -> R.string.video_error_corrupted
             PlaybackErrorKind.FILE_NOT_ACCESSIBLE -> R.string.video_error_not_accessible
             PlaybackErrorKind.IO -> R.string.video_error_io
+            PlaybackErrorKind.NETWORK -> R.string.video_error_network
+            PlaybackErrorKind.SERVER_OR_LINK -> R.string.video_error_server_link
+            PlaybackErrorKind.AUTH_REQUIRED -> R.string.video_error_auth_required
+            PlaybackErrorKind.CLOUD_THROTTLED -> R.string.video_error_cloud_throttled
+            PlaybackErrorKind.CLOUD_NOT_FOUND -> R.string.video_error_cloud_not_found
             PlaybackErrorKind.MEDIA_NOT_FOUND -> R.string.video_error_not_found
             PlaybackErrorKind.CLOUD_ONLY -> R.string.video_error_cloud_only
             PlaybackErrorKind.OTHER -> R.string.video_error_other
@@ -570,7 +580,11 @@ internal fun PlaybackErrorPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(
-            imageVector = if (error == PlaybackErrorKind.CLOUD_ONLY) Icons.Rounded.CloudOff else Icons.Rounded.ErrorOutline,
+            imageVector = when {
+                error == PlaybackErrorKind.NETWORK -> Icons.Rounded.WifiOff
+                VideoPlayerLogic.isCloudError(error) -> Icons.Rounded.CloudOff
+                else -> Icons.Rounded.ErrorOutline
+            },
             contentDescription = null,
             tint = ViewerColors.contentSecondary,
             modifier = Modifier.size(48.dp),
@@ -583,6 +597,9 @@ internal fun PlaybackErrorPanel(
         )
         if (canOpenExternally) {
             PillButton(text = stringResource(R.string.video_open_with_other_app), onClick = onOpenWith)
+        }
+        if (VideoPlayerLogic.needsSignIn(error)) {
+            PillButton(text = stringResource(R.string.video_action_sign_in), onClick = onSignIn)
         }
         if (VideoPlayerLogic.canRetry(error)) {
             PillButton(text = stringResource(R.string.common_retry), onClick = onRetry)

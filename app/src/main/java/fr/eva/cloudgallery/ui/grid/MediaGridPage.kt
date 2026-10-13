@@ -2,12 +2,14 @@ package fr.eva.cloudgallery.ui.grid
 
 import android.content.Context
 import android.content.res.Configuration
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,18 +63,28 @@ import fr.eva.cloudgallery.ui.components.OneUiIconButton
 import fr.eva.cloudgallery.ui.components.OneUiLargeTitleHeader
 import fr.eva.cloudgallery.ui.components.OneUiMenuItem
 import fr.eva.cloudgallery.ui.components.OneUiOverflowMenu
+import fr.eva.cloudgallery.ui.components.OneUiProgressDialog
 import fr.eva.cloudgallery.ui.components.OneUiSelectionTopBar
 import fr.eva.cloudgallery.ui.components.OneUiTextInputDialog
 import fr.eva.cloudgallery.ui.components.OneUiTopBar
 import fr.eva.cloudgallery.ui.components.rememberCollapsedTitleAlpha
 import fr.eva.cloudgallery.ui.components.rememberIntentSenderLauncher
+import fr.eva.cloudgallery.ui.offline.OfflineMenuState
+import fr.eva.cloudgallery.ui.offline.OfflinePromptDialog
+import fr.eva.cloudgallery.ui.offline.rememberNotificationPermissionGate
+import fr.eva.cloudgallery.ui.securefolder.SecureFolderDialogs
+import fr.eva.cloudgallery.ui.securefolder.secureFolderActionVisible
 import fr.eva.cloudgallery.ui.theme.OneUiTheme
 import fr.eva.cloudgallery.ui.util.shareMedia
+import fr.eva.cloudgallery.ui.util.progressPercent
 
 /** Action de sélection propre à un écran (remplace une action par défaut de la barre inférieure). */
 data class GridExtraAction(val icon: ImageVector, val label: String, val onClick: () -> Unit)
 
 private const val LARGE_TITLE_KEY = "large_title"
+
+/** Éléments de la grille avant les éléments paginés : la ligne de titre ([largeTitleItem] ou [compactCountItem]). */
+private const val GRID_LEADING_ITEMS = 1
 
 /**
  * Ecran de grille complet partagé par Photos et les collections : grand titre, barre supérieure
@@ -80,6 +94,11 @@ private const val LARGE_TITLE_KEY = "large_title"
  * @param bottomPadding espace réservé en bas hors mode sélection (barre d'onglets ou barre système).
  * @param albumActionOverride remplace « Ajouter à l'album » dans la barre (l'action passe dans « Plus »).
  * @param favoriteActionOverride remplace l'action Favori par défaut.
+ * @param emptyAction boutons de l'état vide (hors indexation en cours).
+ * @param topBarActions icônes ajoutées à la barre supérieure, avant le menu « Plus ».
+ * @param topBar remplace la barre supérieure hors mode sélection (ex. champ de recherche) ; elle
+ *   reçoit le modificateur qui la place en haut et applique elle-même l'inset de la barre d'état.
+ * @param largeTitle faux : pas de grand titre, une ligne discrète avec le nombre d'éléments.
  */
 @Composable
 fun MediaGridPage(
@@ -97,6 +116,10 @@ fun MediaGridPage(
     albumActionOverride: GridExtraAction? = null,
     favoriteActionOverride: GridExtraAction? = null,
     isIndexing: Boolean = false,
+    emptyAction: (@Composable () -> Unit)? = null,
+    topBarActions: @Composable RowScope.() -> Unit = {},
+    topBar: (@Composable (Modifier) -> Unit)? = null,
+    largeTitle: Boolean = true,
 ) {
     val colors = OneUiTheme.colors
     val dimens = OneUiTheme.dimens
@@ -105,10 +128,22 @@ fun MediaGridPage(
     val zoomLevel by viewModel.zoomLevel.collectAsStateWithLifecycle()
     val count by viewModel.count.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val selectionTargets by viewModel.selectionTargets.collectAsStateWithLifecycle()
     val selectionMode by viewModel.selectionMode.collectAsStateWithLifecycle()
     val allSelected by viewModel.allSelected.collectAsStateWithLifecycle()
     val dayIds by viewModel.dayIds.collectAsStateWithLifecycle()
+    val sharePreparation by viewModel.sharePreparation.collectAsStateWithLifecycle()
+    val offlinePrompt by viewModel.offlinePrompt.collectAsStateWithLifecycle()
+    val secureFolderAvailable by viewModel.secureFolderAvailable.collectAsStateWithLifecycle()
+    val secureFolderPrompt by viewModel.secureFolderPrompt.collectAsStateWithLifecycle()
     val items = viewModel.gridItems.collectAsLazyPagingItems()
+    val fastScrollIndex by viewModel.fastScrollIndex.collectAsStateWithLifecycle()
+    val gridGrouping by viewModel.gridGrouping.collectAsStateWithLifecycle()
+    // Autorisation des notifications demandée au premier « Conserver hors ligne » (facultative).
+    val withNotificationPermission = rememberNotificationPermissionGate(
+        alreadyAsked = settings?.offlineNotificationsAsked ?: true,
+        onAsked = viewModel::markNotificationsAsked,
+    )
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -152,7 +187,9 @@ fun MediaGridPage(
     val onZoomChange = remember(viewModel) { { delta: Int -> viewModel.onZoomChange(delta) } }
 
     val subtitle = count?.let { pluralStringResource(R.plurals.common_items_count, it, it) }
-    val header = remember(title, subtitle) { largeTitleItem(title, subtitle) }
+    val header = remember(title, subtitle, largeTitle) {
+        if (largeTitle) largeTitleItem(title, subtitle) else compactCountItem(subtitle)
+    }
 
     // Le petit titre apparaît quand le grand titre quitte l'écran.
     val titleAlpha by rememberCollapsedTitleAlpha(gridState)
@@ -165,7 +202,7 @@ fun MediaGridPage(
             if (isEmpty) {
                 Column(Modifier.fillMaxSize()) {
                     Spacer(Modifier.height(gridTop))
-                    OneUiLargeTitleHeader(title = title, subtitle = null)
+                    if (largeTitle) OneUiLargeTitleHeader(title = title, subtitle = null)
                     EmptyState(
                         icon = emptyIcon,
                         title = if (isIndexing) stringResource(R.string.common_loading) else emptyTitle,
@@ -173,6 +210,7 @@ fun MediaGridPage(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
+                        action = if (isIndexing) null else emptyAction,
                     )
                     Spacer(Modifier.height(gridBottom))
                 }
@@ -195,6 +233,20 @@ fun MediaGridPage(
                     header = header,
                     modifier = Modifier.fillMaxSize(),
                 )
+                val scrollIndex = fastScrollIndex
+                val scrollGrouping = gridGrouping
+                if (scrollIndex != null && scrollGrouping != null && scrollIndex.size >= FAST_SCROLL_MIN_ITEMS) {
+                    FastScroller(
+                        state = gridState,
+                        items = items,
+                        index = scrollIndex,
+                        grouping = scrollGrouping,
+                        leadingItems = GRID_LEADING_ITEMS,
+                        topPadding = gridTop,
+                        bottomPadding = gridBottom,
+                        onJump = viewModel::jumpTo,
+                    )
+                }
             }
         }
 
@@ -205,6 +257,8 @@ fun MediaGridPage(
                 onToggleAll = viewModel::toggleAll,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
+        } else if (topBar != null) {
+            topBar(Modifier.align(Alignment.TopCenter))
         } else {
             OneUiTopBar(
                 title = title,
@@ -212,6 +266,7 @@ fun MediaGridPage(
                 navigationIcon = navigationIcon,
                 modifier = Modifier.align(Alignment.TopCenter),
                 actions = {
+                    topBarActions()
                     if (menuItems.isNotEmpty()) {
                         Box {
                             OneUiIconButton(
@@ -237,6 +292,10 @@ fun MediaGridPage(
 
         if (selectionMode) {
             val enabled = selection.isNotEmpty()
+            // Supprimer / Copier : seulement si la sélection contient un fichier local. Partager :
+            // aussi pour les éléments OneDrive (original téléchargé au moment du partage).
+            val localEnabled = localActionsEnabled(selection, selectionTargets)
+            val canShare = shareEnabled(selection, selectionTargets) && sharePreparation == null
             val shareLabel = stringResource(R.string.common_share)
             val addToAlbumLabel = stringResource(R.string.common_add_to_album)
             val favoriteLabel = stringResource(R.string.grid_action_favorite)
@@ -246,7 +305,7 @@ fun MediaGridPage(
             val confirmDelete = loadedSettings?.confirmBeforeDelete ?: true
 
             val actions = buildList {
-                add(OneUiAction(Icons.Outlined.Share, shareLabel, enabled) { viewModel.share() })
+                add(OneUiAction(Icons.Outlined.Share, shareLabel, canShare) { viewModel.share() })
                 if (albumActionOverride != null) {
                     add(OneUiAction(albumActionOverride.icon, albumActionOverride.label, enabled, albumActionOverride.onClick))
                 } else {
@@ -258,17 +317,38 @@ fun MediaGridPage(
                     add(OneUiAction(Icons.Outlined.FavoriteBorder, favoriteLabel, enabled) { viewModel.toggleFavorite() })
                 }
                 add(
-                    OneUiAction(Icons.Outlined.Delete, deleteLabel, enabled) {
+                    OneUiAction(Icons.Outlined.Delete, deleteLabel, localEnabled) {
                         if (confirmDelete) showDeleteDialog = true else viewModel.requestDelete()
                     },
                 )
                 add(OneUiAction(Icons.Filled.MoreVert, moreLabel, enabled) { moreOpen = true })
             }
+            val offlineMenu = selectionOfflineMenu(selection, selectionTargets)
+            val secureFolderLabel = stringResource(R.string.secure_folder_move)
+            val showSecureFolder = secureFolderActionVisible(secureFolderAvailable, actionCounts(selection, selectionTargets).local)
+            val keepOfflineLabel = stringResource(R.string.offline_keep)
+            val releaseOfflineLabel = stringResource(R.string.offline_release)
             val moreItems = buildList {
                 if (albumActionOverride != null) {
                     add(OneUiMenuItem(addToAlbumLabel) { moreOpen = false; showAlbumPicker = true })
                 }
-                add(OneUiMenuItem(copyLabel) { moreOpen = false; showCopyDialog = true })
+                add(OneUiMenuItem(copyLabel, enabled = localEnabled) { moreOpen = false; showCopyDialog = true })
+                // Fichiers du téléphone seulement, appli Dossier sécurisé Samsung installée.
+                if (showSecureFolder) {
+                    add(OneUiMenuItem(secureFolderLabel) { moreOpen = false; viewModel.moveToSecureFolder() })
+                }
+                // Copies hors ligne : éléments OneDrive à conserver, copies à libérer.
+                if (offlineMenu == OfflineMenuState.KEEP || offlineMenu == OfflineMenuState.BOTH) {
+                    add(
+                        OneUiMenuItem(keepOfflineLabel) {
+                            moreOpen = false
+                            withNotificationPermission { viewModel.keepOffline() }
+                        },
+                    )
+                }
+                if (offlineMenu == OfflineMenuState.RELEASE || offlineMenu == OfflineMenuState.BOTH) {
+                    add(OneUiMenuItem(releaseOfflineLabel) { moreOpen = false; viewModel.releaseOffline() })
+                }
             }
 
             Box(
@@ -284,8 +364,21 @@ fun MediaGridPage(
         }
     }
 
+    // Nombres exacts : seuls les fichiers locaux sont supprimés ou copiés.
+    val counts = actionCounts(selection, selectionTargets)
+    val skippedNotice = if (counts.skippedCloud > 0) {
+        pluralStringResource(R.plurals.grid_cloud_items_skipped, counts.skippedCloud, counts.skippedCloud)
+    } else {
+        null
+    }
+
     if (showDeleteDialog) {
-        val n = selection.size
+        val n = counts.local
+        val info = if (settings?.useTrash != false) {
+            stringResource(R.string.common_trash_info)
+        } else {
+            stringResource(R.string.grid_delete_permanent_message)
+        }
         OneUiDialog(
             title = pluralStringResource(R.plurals.common_delete_confirm, n, n),
             onDismiss = { showDeleteDialog = false },
@@ -295,11 +388,7 @@ fun MediaGridPage(
                 viewModel.requestDelete()
             },
             dismissLabel = stringResource(R.string.common_cancel),
-            message = if (settings?.useTrash != false) {
-                stringResource(R.string.common_trash_info)
-            } else {
-                stringResource(R.string.grid_delete_permanent_message)
-            },
+            message = if (skippedNotice != null) "$info\n\n$skippedNotice" else info,
             destructive = true,
         )
     }
@@ -315,8 +404,48 @@ fun MediaGridPage(
             },
             onDismiss = { showCopyDialog = false },
             placeholder = stringResource(R.string.grid_copy_folder_hint),
+            message = skippedNotice,
         )
     }
+
+    sharePreparation?.let { preparation ->
+        val context = LocalContext.current
+        val percent = progressPercent(preparation.done, preparation.total)
+        OneUiProgressDialog(
+            title = pluralStringResource(R.plurals.share_preparing_count, preparation.count, preparation.count),
+            message = if (preparation.total > 0) {
+                stringResource(
+                    R.string.share_preparing_progress,
+                    Formatter.formatShortFileSize(context, preparation.done),
+                    Formatter.formatShortFileSize(context, preparation.total),
+                )
+            } else {
+                null
+            },
+            progress = if (percent >= 0) percent / 100f else null,
+            cancelLabel = stringResource(R.string.common_cancel),
+            onCancel = viewModel::cancelSharePreparation,
+        )
+    }
+
+    offlinePrompt?.let { prompt ->
+        OfflinePromptDialog(
+            prompt = prompt,
+            onConfirmLargeBatch = viewModel::confirmLargeBatch,
+            onDownloadNow = viewModel::downloadOfflineNow,
+            onConfirmRelease = viewModel::confirmRelease,
+            onDismiss = viewModel::dismissOfflinePrompt,
+        )
+    }
+
+    SecureFolderDialogs(
+        prompt = secureFolderPrompt,
+        onShareLaunched = viewModel::onSecureFolderShareLaunched,
+        onShareReturned = viewModel::onSecureFolderShareReturned,
+        onTrash = viewModel::trashAfterSecureFolder,
+        onCancel = viewModel::cancelSecureFolder,
+        onKeep = viewModel::keepOriginalsAfterSecureFolder,
+    )
 
     if (showAlbumPicker) {
         AlbumPickerSheet(
@@ -333,6 +462,18 @@ fun MediaGridPage(
 private fun largeTitleItem(title: String, subtitle: String?): LazyGridScope.() -> Unit = {
     item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
         OneUiLargeTitleHeader(title = title, subtitle = subtitle)
+    }
+}
+
+/** Ligne discrète en tête de grille (sans grand titre) : nombre d'éléments. */
+private fun compactCountItem(subtitle: String?): LazyGridScope.() -> Unit = {
+    item(key = LARGE_TITLE_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = LARGE_TITLE_KEY) {
+        Text(
+            text = subtitle.orEmpty(),
+            style = OneUiTheme.typography.listSubtitle,
+            color = OneUiTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = OneUiTheme.dimens.screenPadding, vertical = 8.dp),
+        )
     }
 }
 

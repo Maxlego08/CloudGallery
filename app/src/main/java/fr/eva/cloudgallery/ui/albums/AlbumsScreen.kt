@@ -105,6 +105,7 @@ fun AlbumsScreen(
     onOpenAlbum: (Long) -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenVideos: () -> Unit,
+    onOpenAlbumVisibility: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -194,6 +195,10 @@ fun AlbumsScreen(
                                         menuExpanded = false
                                         viewModel.startSelection()
                                     },
+                                    OneUiMenuItem(label = stringResource(R.string.albums_visibility_menu)) {
+                                        menuExpanded = false
+                                        onOpenAlbumVisibility()
+                                    },
                                 ),
                             )
                         }
@@ -239,6 +244,7 @@ fun AlbumsScreen(
                             name = album.name,
                             countText = pluralStringResource(R.plurals.common_items_count, album.mediaCount, album.mediaCount),
                             coverUri = album.coverUri,
+                            coverCloud = album.coverCloud,
                             coverIsVideo = album.coverType == MediaType.VIDEO,
                             coverVersion = album.coverDateModified,
                             emptyIcon = if (album.type == AlbumType.VIRTUAL) Icons.Outlined.Collections else Icons.Outlined.PhotoLibrary,
@@ -382,6 +388,7 @@ private fun QuickAccessCell(
         name = name,
         countText = pluralStringResource(R.plurals.common_items_count, quick.count, quick.count),
         coverUri = cover?.uri,
+        coverCloud = cover?.cloudThumb,
         coverIsVideo = cover?.type == MediaType.VIDEO,
         coverVersion = cover?.dateModified ?: 0L,
         emptyIcon = emptyIcon,

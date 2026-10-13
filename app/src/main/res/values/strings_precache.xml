@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mise en cache de tout OneDrive : page Stockage et notification (préfixe precache_). -->
+<resources>
+    <string name="precache_section">Navigation hors connexion</string>
+    <string name="precache_action">Mettre en cache tout OneDrive</string>
+    <string name="precache_idle_summary">Vignettes et aperçus de tous les éléments OneDrive, pour parcourir la galerie sans attente</string>
+    <string name="precache_size_summary">%1$s en cache · %2$s</string>
+    <string name="precache_waiting">En attente du Wi-Fi, d\'une batterie suffisante ou d\'une reprise…</string>
+    <string name="precache_preparing">Préparation…</string>
+    <string name="precache_progress">%1$d / %2$d · %3$s téléchargés</string>
+    <string name="precache_tap_to_cancel">Toucher pour arrêter</string>
+    <string name="precache_done">À jour : %1$s</string>
+    <string name="precache_low_space">Arrêtée pour garder de l\'espace libre sur l\'appareil</string>
+    <string name="precache_signed_out">Arrêtée : compte OneDrive déconnecté ou à reconnecter</string>
+    <string name="precache_keep_updated">Garder à jour</string>
+    <string name="precache_keep_updated_summary">Après chaque synchronisation, met en cache les nouveaux éléments en arrière-plan</string>
+
+    <!-- Boîtes -->
+    <string name="precache_estimating">Calcul de l\'espace nécessaire…</string>
+    <string name="precache_confirm_title">Mettre en cache tout OneDrive ?</string>
+    <string name="precache_confirm_message">%1$s à télécharger (sur %2$s), environ %3$s (espace libre : %4$s).\n\nVignettes de la grille et aperçus de la visionneuse sont enregistrés sur l\'appareil, hors du plafond des miniatures. Les vidéos et les originaux restent en ligne. Le téléchargement se fait en arrière-plan %5$s et reprend après une interruption.</string>
+    <string name="precache_network_wifi">en Wi-Fi</string>
+    <string name="precache_network_any">sur tout réseau</string>
+    <string name="precache_confirm_low_space">\n\nL\'espace libre risque de ne pas suffire : la mise en cache s\'arrêtera avant de remplir l\'appareil.</string>
+    <string name="precache_confirm">Mettre en cache</string>
+    <string name="precache_nothing_title">Tout est déjà en cache</string>
+    <string name="precache_nothing_message">Tous les éléments OneDrive (%1$s) ont déjà leur vignette et leur aperçu sur l\'appareil.</string>
+    <string name="precache_cancel_title">Arrêter la mise en cache ?</string>
+    <string name="precache_cancel_message">Ce qui est déjà en cache est conservé ; la mise en cache reprendra là où elle s\'est arrêtée.</string>
+    <string name="precache_cancel_confirm">Arrêter</string>
+    <string name="precache_estimate_failed">Estimation impossible</string>
+
+    <!-- Notification -->
+    <string name="precache_notification_channel">Mise en cache de OneDrive</string>
+    <string name="precache_notification_channel_description">Progression de la mise en cache de tout OneDrive</string>
+    <string name="precache_notification_title">Mise en cache de OneDrive</string>
+</resources>
